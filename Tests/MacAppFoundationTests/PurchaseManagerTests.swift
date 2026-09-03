@@ -118,6 +118,46 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertEqual(manager.preferredProduct?.id, Self.yearly.id)
     }
 
+    func testActiveProductMatchesVerifiedEntitlement() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly, Self.yearly]
+        service.entitlements = [EntitlementRecord(productID: Self.yearly.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id, Self.yearly.id]
+            ),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertEqual(manager.activeProduct?.id, Self.yearly.id)
+    }
+
+    func testFeaturesExposeConfiguredCatalog() {
+        let features = [
+            PurchaseFeature(
+                id: "export",
+                systemImage: "square.and.arrow.up",
+                title: "Export",
+                message: "Unlimited exports",
+                freeValue: "Limited",
+                proValue: "Unlimited"
+            )
+        ]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                features: features
+            ),
+            service: MockPurchaseService()
+        )
+
+        XCTAssertEqual(manager.features, features)
+    }
+
     private static let monthly = StoreProduct(
         id: "pro.monthly",
         displayName: "Monthly",
