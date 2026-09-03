@@ -8,7 +8,7 @@ Build a focused macOS foundation package around three areas only:
 2. Paywall / Pro gating / upsells
 3. Settings + developer tools
 
-The primary implementation rule for v1.0.0 is **reuse before invention**. Port or adapt proven implementation from `hoangbkit/AppFoundation` (`develop`), `hoangbkit/PaywallKit` (`master`), Spokio's embedded `Packages/PaywallKit`, and `hoangbkit/Onlink` (`master`) wherever possible. New abstractions should only be introduced when the existing implementations cannot cleanly support macOS reuse.
+The primary implementation rule for v1.0.0 is **reuse before invention**. Port or adapt proven implementation from `hoangbkit/AppFoundation` (`develop`), `hoangbkit/PaywallKit` (`master`), Spokio's embedded `Packages/PaywallKit`, and selected production integration patterns where useful. New abstractions should only be introduced when the existing implementations cannot cleanly support macOS reuse.
 
 For pillar 3, the intended macOS product shape is explicit:
 
@@ -23,7 +23,7 @@ Use the existing repositories in this order:
 1. **AppFoundation / develop** — source of truth for current commerce architecture, StoreKit entitlement semantics, purchase simulation, developer tools, introductory offers, and reusable configuration models.
 2. **PaywallKit / master** and **Spokio embedded PaywallKit** — source of truth for proven macOS paywall presentation, Pro gates, badges, lock popovers, upsell UI, and desktop purchase interaction patterns.
 3. **Spokio / develop** — source of truth for the desired macOS Settings scene/layout, the Plan tab implementation, and menu-driven developer-window presentation.
-4. **Onlink / master** — source of truth for real-world macOS integration and app-facing wrappers, including paywall presentation and legacy paid-app entitlement migration.
+4. **Onlink / master** — optional reference for app-facing macOS paywall integration patterns only. Legacy paid-app entitlement migration is explicitly out of scope.
 
 Do not preserve older behavior merely for source compatibility when AppFoundation already has a safer/newer implementation. In particular, verified StoreKit transactions remain the source of truth for authorization; do not use a persisted `UserDefaults.hasPro` flag as the entitlement authority.
 
@@ -116,31 +116,7 @@ Include the introductory-offer simulation work already present in AppFoundation 
 
 ---
 
-## Phase 3 — Legacy paid-app entitlement policy
-
-Extract the proven legacy-paid migration behavior from Onlink into a small reusable commerce policy instead of copying Onlink-specific entitlement-store code wholesale.
-
-### Reuse
-
-Adapt Onlink's verified `AppTransaction` / `originalAppVersion` migration logic.
-
-### Requirements
-
-- Optional policy; apps that do not need migration pay no configuration cost.
-- App-configurable business-model transition version.
-- Verified AppTransaction only.
-- Bundle identity validation where applicable.
-- Existing paid customers before the configured transition can receive the appropriate Pro entitlement.
-- Keep migration state separate from normal StoreKit subscription/non-consumable authorization.
-- Avoid Onlink names and domain-specific assumptions in the public API.
-
-### Exit criteria
-
-- Onlink's legacy-paid use case can be expressed through MacAppFoundation configuration without a custom entitlement-store implementation.
-
----
-
-## Phase 4 — macOS Pro paywall
+## Phase 3 — macOS Pro paywall
 
 Combine AppFoundation's current commerce/paywall model with PaywallKit's already-proven `PaywallView_macOS` presentation rather than designing a new paywall from scratch.
 
@@ -148,7 +124,7 @@ Combine AppFoundation's current commerce/paywall model with PaywallKit's already
 
 - Start from PaywallKit/Spokio `PaywallView_macOS` structure and desktop interaction patterns.
 - Port AppFoundation's current canonical paywall semantics, plan configuration, trial/introductory-offer presentation, purchase states, and simulator compatibility.
-- Use Onlink's `OnlinkProPaywallView` as the reference for keeping app-specific copy, features, legal links, and post-purchase actions outside the framework.
+- Use production app wrappers only as reference for keeping app-specific copy, features, legal links, and post-purchase actions outside the framework.
 
 ### Requirements
 
@@ -169,7 +145,7 @@ Combine AppFoundation's current commerce/paywall model with PaywallKit's already
 
 ---
 
-## Phase 5 — Pro gating and upsells
+## Phase 4 — Pro gating and upsells
 
 Port the small reusable premium UI primitives from PaywallKit and reconcile them with AppFoundation's newer gating APIs.
 
@@ -200,7 +176,7 @@ Prefer adapting existing implementations of:
 
 ---
 
-## Phase 6 — Spokio-style macOS Settings + Plan tab
+## Phase 5 — Spokio-style macOS Settings + Plan tab
 
 Port Spokio's current macOS Settings structure and **copy/adapt its `PlanPane` implementation directly** rather than designing a new Plan settings experience.
 
@@ -254,7 +230,7 @@ Do **not** redesign the Plan tab into a generic form/list or a new visual system
 
 ---
 
-## Phase 7 — Developer Tools window + menu command
+## Phase 6 — Developer Tools window + menu command
 
 Port AppFoundation's `FoundationDeveloperView` capability to macOS, but present it as a dedicated debug-only window opened from the macOS menu bar instead of embedding it in Settings.
 
@@ -295,7 +271,7 @@ Port AppFoundation's `FoundationDeveloperView` capability to macOS, but present 
 
 ---
 
-## Phase 8 — Integration hardening and v1.0.0 API cleanup
+## Phase 7 — Integration hardening and v1.0.0 API cleanup
 
 Treat the reference apps as compatibility scenarios, remove accidental duplication introduced during porting, and freeze a small public API suitable for v1.0.0.
 
@@ -304,19 +280,18 @@ Treat the reference apps as compatibility scenarios, remove accidental duplicati
 - Validate the API against the PaywallKit/Spokio use case: standard subscription/lifetime paywall and Pro gating.
 - Validate the Settings composition and generalized Plan tab against Spokio's current `SettingsView` + `PlanPane` behavior.
 - Validate the dedicated Developer Tools window/menu integration against Spokio's existing debug window + `CommandMenu("Developer")` pattern.
-- Validate against Onlink: macOS paywall plus optional legacy-paid entitlement migration.
 - Ensure simulator and live StoreKit paths expose consistent app-facing state.
 - Remove copied compatibility layers that are unnecessary in a greenfield package.
 - Minimize `public` surface area.
 - Normalize naming around `PurchaseManager` rather than carrying old controller/manager duplication unless compatibility is genuinely needed.
-- Add focused tests around entitlement derivation, product configuration, simulation outcomes, introductory offers, and legacy migration policy.
-- Write README integration examples for standard commerce, paywall presentation, Spokio-style Settings/Plan composition, Developer Tools window/menu wiring, simulation, and legacy-paid migration.
+- Add focused tests around entitlement derivation, product configuration, simulation outcomes, introductory offers, paywall behavior, gating, Settings/Plan behavior, and developer tools.
+- Write README integration examples for standard commerce, paywall presentation, Spokio-style Settings/Plan composition, Developer Tools window/menu wiring, and simulation.
 - Prepare `1.0.0` release notes/tag checklist.
 
 ### Exit criteria
 
 - The three v1.0.0 pillars are cohesive and reusable.
-- Spokio/PaywallKit-style and Onlink-style commerce flows can migrate without rebuilding framework functionality.
+- Spokio/PaywallKit-style commerce flows can migrate without rebuilding framework functionality.
 - Settings and Developer Tools have clearly separate macOS presentation responsibilities.
 - No unrelated framework scope has leaked into v1.0.0.
 
@@ -324,8 +299,9 @@ Treat the reference apps as compatibility scenarios, remove accidental duplicati
 
 ## Explicitly out of scope for v1.0.0
 
-Do not add these merely because they exist in AppFoundation or Onlink:
+Do not add these merely because they exist in AppFoundation, Onlink, or other apps:
 
+- legacy paid-app entitlement migration / `AppTransaction.originalAppVersion` policy
 - startup resilience/recovery
 - general app/window lifecycle framework
 - launch at login
