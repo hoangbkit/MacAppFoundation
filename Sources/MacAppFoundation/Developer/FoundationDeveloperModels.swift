@@ -21,7 +21,7 @@ public struct FoundationDeveloperReplay: Identifiable {
         self.makeContent = { dismiss in AnyView(content(dismiss)) }
     }
 
-    fileprivate func content(dismiss: @escaping () -> Void) -> AnyView {
+    func content(dismiss: @escaping () -> Void) -> AnyView {
         makeContent(dismiss)
     }
 }
@@ -45,7 +45,7 @@ public struct FoundationDeveloperDestination: Identifiable {
         self.makeContent = { AnyView(content()) }
     }
 
-    fileprivate func content() -> AnyView {
+    func content() -> AnyView {
         makeContent()
     }
 }
@@ -77,7 +77,7 @@ public struct FoundationDeveloperAction: Identifiable {
         self.performAction = action
     }
 
-    fileprivate func perform() async throws {
+    func perform() async throws {
         try await performAction()
     }
 }
@@ -101,8 +101,8 @@ public struct FoundationDeveloperToggle: Identifiable {
         self.writeValue = setValue
     }
 
-    fileprivate var value: Bool { readValue() }
-    fileprivate func set(_ value: Bool) { writeValue(value) }
+    var value: Bool { readValue() }
+    func set(_ value: Bool) { writeValue(value) }
 }
 
 @MainActor
@@ -121,7 +121,7 @@ public struct FoundationDeveloperValue: Identifiable {
         self.readValue = value
     }
 
-    fileprivate var value: String { readValue() }
+    var value: String { readValue() }
 }
 
 public enum FoundationDeveloperItem: Identifiable {
