@@ -10,13 +10,19 @@ Build a focused macOS foundation package around three areas only:
 
 The primary implementation rule for v1.0.0 is **reuse before invention**. Port or adapt proven implementation from `hoangbkit/AppFoundation` (`develop`), `hoangbkit/PaywallKit` (`master`), Spokio's embedded `Packages/PaywallKit`, and `hoangbkit/Onlink` (`master`) wherever possible. New abstractions should only be introduced when the existing implementations cannot cleanly support macOS reuse.
 
+For pillar 3, the intended macOS product shape is explicit:
+
+- **Settings** should follow Spokio's macOS Settings design: a native `Settings` scene using a compact tabbed `SettingsView` with app-owned tabs such as General, Plan, and About, composed from reusable MacAppFoundation sections where useful.
+- **Developer Tools** must **not** live inside Settings. They should be presented in a dedicated debug-only window opened from a `Developer` menu in the macOS menu bar, following the same `Window(id:)` + `openWindow(id:)` pattern already used by Spokio for developer windows.
+
 ## Source priority
 
 Use the existing repositories in this order:
 
 1. **AppFoundation / develop** — source of truth for current commerce architecture, StoreKit entitlement semantics, purchase simulation, developer tools, introductory offers, and reusable configuration models.
 2. **PaywallKit / master** and **Spokio embedded PaywallKit** — source of truth for proven macOS paywall presentation, Pro gates, badges, lock popovers, upsell UI, and desktop purchase interaction patterns.
-3. **Onlink / master** — source of truth for real-world macOS integration and app-facing wrappers, including paywall presentation and legacy paid-app entitlement migration.
+3. **Spokio / develop** — source of truth for the desired macOS Settings scene/layout and menu-driven developer-window presentation.
+4. **Onlink / master** — source of truth for real-world macOS integration and app-facing wrappers, including paywall presentation and legacy paid-app entitlement migration.
 
 Do not preserve older behavior merely for source compatibility when AppFoundation already has a safer/newer implementation. In particular, verified StoreKit transactions remain the source of truth for authorization; do not use a persisted `UserDefaults.hasPro` flag as the entitlement authority.
 
@@ -192,38 +198,62 @@ Prefer adapting existing implementations of:
 
 ---
 
-## Phase 6 — Foundation settings components
+## Phase 6 — Spokio-style macOS Settings
 
-Port only reusable macOS settings pieces needed by commerce and developer tooling; do not turn MacAppFoundation into an app-specific settings framework.
+Provide reusable settings building blocks designed specifically to fit the macOS `Settings` scene pattern used by Spokio, while keeping the app in control of its tabs and app-specific preferences.
 
 ### Reuse
 
-Use AppFoundation's settings/developer-section patterns and Onlink's real macOS Settings integration as references.
+Use Spokio `Spokio/Views/Settings/SettingsView.swift` as the primary UI reference:
+
+- native `Settings { ... }` scene owned by the app
+- compact `TabView`
+- toolbar-style tab items with labels/icons
+- roughly fixed compact settings width
+- grouped native controls using `GroupBox`, rows, dividers, pickers, toggles, and buttons
+- distinct app-owned tabs such as General, Plan, and About
+
+Reuse the existing Spokio `PlanPane`/PaywallKit concepts for the Plan tab and pull reusable metadata/commerce pieces from AppFoundation where possible.
 
 ### Requirements
 
-- Reusable Pro/subscription status settings section.
-- Purchase/restore entry points appropriate for Settings.
-- Reusable developer-section entry point.
-- Small settings section/container helpers only where they remove repeated app code.
-- Native macOS presentation and controls.
-- App owns its Settings scene, navigation, unrelated preferences, and visual identity.
+- A reusable `Plan` settings view/section suitable for dropping directly into a Spokio-style Settings `TabView`.
+- Pro/subscription status.
+- Current plan and entitlement presentation.
+- Purchase/upgrade entry point.
+- Restore purchases.
+- Trial/introductory-offer aware plan details where relevant.
+- Reusable About helpers only where genuinely generic, such as app version/build metadata; app URLs, credits, copy, and branding remain app-owned.
+- Native macOS `GroupBox`/row presentation; avoid introducing a custom visual design system.
+- MacAppFoundation does **not** own the app's complete Settings scene, tab enum, General preferences, About content, or navigation state.
+- **No Developer Tools section or developer entry point inside Settings.**
 
 ### Exit criteria
 
-- An app can compose MacAppFoundation's commerce/developer sections into its own Settings UI without adopting a framework-owned settings architecture.
+- A consuming app can build a Settings scene structurally like Spokio's and drop MacAppFoundation's Plan/commerce components into it with minimal glue.
 
 ---
 
-## Phase 7 — Developer tools
+## Phase 7 — Developer Tools window + menu command
 
-Port AppFoundation's `FoundationDeveloperView` capability to macOS and connect it directly to the commerce simulator from Phase 2.
+Port AppFoundation's `FoundationDeveloperView` capability to macOS, but present it as a dedicated debug-only window opened from the macOS menu bar instead of embedding it in Settings.
 
 ### Reuse
 
-Copy/adapt AppFoundation's existing developer-tool implementation and replay registration model rather than inventing a new debug console.
+- Copy/adapt AppFoundation's existing `FoundationDeveloperView`, commerce simulator controls, diagnostics, and replay registration model rather than inventing a new debug console.
+- Follow Spokio's `App.swift` developer-window pattern: declare a debug-only `Window(..., id:)`, then expose a `CommandMenu("Developer")` command that calls `openWindow(id:)`.
+- Generalize only the tiny amount needed so consuming apps can wire the provided view/window into their own `App` scene cleanly.
 
-### Requirements
+### Window/presentation requirements
+
+- Developer Tools is a **separate window**, not a Settings tab, sheet, or embedded settings section.
+- Intended scene shape is an app-owned debug-only `Window("Developer Tools", id: ...)` containing MacAppFoundation's developer view.
+- Intended menu shape is an app-owned debug-only `CommandMenu("Developer")` with a `Developer Tools…` action that opens that window using `openWindow(id:)`.
+- Provide small reusable constants/helpers if useful, but do not hide normal SwiftUI scene composition behind a heavy window manager.
+- The window should have a sensible minimum/default desktop size and support the richer controls needed by the developer console.
+- Debug/developer-only use should be obvious and easy to wrap in `#if DEBUG`.
+
+### Developer tools requirements
 
 - Live StoreKit vs simulated purchase switching.
 - Current entitlement state.
@@ -238,11 +268,10 @@ Copy/adapt AppFoundation's existing developer-tool implementation and replay reg
 - Copyable commerce diagnostics.
 - Replay hooks for app-owned paywall and upsell presentations.
 - Extensible developer sections so apps can register their own debug controls.
-- Debug/developer-only behavior must remain straightforward to exclude from production UI.
 
 ### Exit criteria
 
-- A consuming macOS app can inspect and exercise its complete commerce/paywall behavior from one reusable developer surface.
+- A consuming app can add one dedicated Developer Tools window and one Developer menu command, and use the full AppFoundation-derived commerce simulator/debug UI without putting any developer controls in Settings.
 
 ---
 
@@ -253,19 +282,22 @@ Treat the reference apps as compatibility scenarios, remove accidental duplicati
 ### Work
 
 - Validate the API against the PaywallKit/Spokio use case: standard subscription/lifetime paywall and Pro gating.
+- Validate the settings composition against Spokio's macOS Settings scene and Plan tab structure.
+- Validate the dedicated Developer Tools window/menu integration against Spokio's existing debug window + `CommandMenu("Developer")` pattern.
 - Validate against Onlink: macOS paywall plus optional legacy-paid entitlement migration.
 - Ensure simulator and live StoreKit paths expose consistent app-facing state.
 - Remove copied compatibility layers that are unnecessary in a greenfield package.
 - Minimize `public` surface area.
 - Normalize naming around `PurchaseManager` rather than carrying old controller/manager duplication unless compatibility is genuinely needed.
 - Add focused tests around entitlement derivation, product configuration, simulation outcomes, introductory offers, and legacy migration policy.
-- Write README integration examples for standard commerce, paywall presentation, simulation, developer tools, and legacy-paid migration.
+- Write README integration examples for standard commerce, paywall presentation, Spokio-style Settings composition, Developer Tools window/menu wiring, simulation, and legacy-paid migration.
 - Prepare `1.0.0` release notes/tag checklist.
 
 ### Exit criteria
 
 - The three v1.0.0 pillars are cohesive and reusable.
 - Spokio/PaywallKit-style and Onlink-style commerce flows can migrate without rebuilding framework functionality.
+- Settings and Developer Tools have clearly separate macOS presentation responsibilities.
 - No unrelated framework scope has leaked into v1.0.0.
 
 ---
@@ -275,9 +307,9 @@ Treat the reference apps as compatibility scenarios, remove accidental duplicati
 Do not add these merely because they exist in AppFoundation or Onlink:
 
 - startup resilience/recovery
-- app/window lifecycle helpers
+- general app/window lifecycle framework
 - launch at login
-- menu bar management
+- general menu bar management beyond the minimal Developer Tools integration pattern
 - notification management
 - themes/design systems
 - BackupKit
@@ -293,4 +325,4 @@ These can be evaluated after v1.0.0 based on actual reuse needs.
 
 ## v1.0.0 completion definition
 
-MacAppFoundation 1.0.0 is complete when a macOS app can adopt one package to configure StoreKit products, determine verified Pro entitlement, purchase/restore, simulate the full commerce flow, present a native trial-aware Pro paywall, gate/upsell premium features, expose commerce settings, and use a reusable developer console — while retaining ownership of app navigation, product copy, branding, and domain behavior.
+MacAppFoundation 1.0.0 is complete when a macOS app can adopt one package to configure StoreKit products, determine verified Pro entitlement, purchase/restore, simulate the full commerce flow, present a native trial-aware Pro paywall, gate/upsell premium features, compose a Spokio-style native Settings scene with reusable Plan/commerce UI, and expose a full developer console in a separate debug-only window opened from the macOS Developer menu — while retaining ownership of app navigation, product copy, branding, general settings, and domain behavior.
