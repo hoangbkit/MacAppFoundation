@@ -52,6 +52,34 @@ public enum PurchasePlanKind: Sendable, Equatable {
     }
 }
 
+public extension StoreProduct.IntroductoryOffer {
+    var isFreeTrial: Bool { paymentMode == .freeTrial }
+
+    var durationDescription: String {
+        let totalPeriods = period.value * periodCount
+        return StoreProduct.SubscriptionPeriod(
+            value: totalPeriods,
+            unit: period.unit
+        ).shortLabel
+    }
+
+    var headline: String {
+        switch paymentMode {
+        case .freeTrial:
+            return "\(durationDescription) free"
+        case .payAsYouGo:
+            let cadence = period.value == 1
+                ? "\(displayPrice)/\(period.shortLabel)"
+                : "\(displayPrice) every \(period.shortLabel)"
+            return periodCount == 1 ? cadence : "\(cadence) for \(durationDescription)"
+        case .payUpFront:
+            return "\(displayPrice) for \(durationDescription)"
+        case .unknown:
+            return "Introductory offer available"
+        }
+    }
+}
+
 public extension StoreProduct {
     var planKind: PurchasePlanKind {
         subscriptionPeriod.map(PurchasePlanKind.recurring) ?? .lifetime
@@ -61,6 +89,60 @@ public extension StoreProduct {
     var isLifetime: Bool { planKind.isLifetime }
     var planLabel: String { planKind.label }
     var billingDescription: String { planKind.billingDescription }
+
+    /// Returns the configured introductory offer only when StoreKit says the
+    /// current customer is eligible to redeem it.
+    var eligibleIntroductoryOffer: IntroductoryOffer? {
+        guard isRecurring, let introductoryOffer, introductoryOffer.isEligible else { return nil }
+        return introductoryOffer
+    }
+
+    /// The eligible introductory offer when it is specifically a free trial.
+    var eligibleFreeTrial: IntroductoryOffer? {
+        guard let offer = eligibleIntroductoryOffer, offer.isFreeTrial else { return nil }
+        return offer
+    }
+
+    /// Localized recurring price plus a compact billing cadence, such as
+    /// "$39.99/year" or "$5.99 every 3 months".
+    var recurringPriceDescription: String? {
+        guard let period = subscriptionPeriod else { return nil }
+        if period.value == 1 {
+            return "\(displayPrice)/\(period.shortLabel)"
+        }
+        return "\(displayPrice) every \(period.shortLabel)"
+    }
+
+    /// Highlighted introductory-offer copy suitable for a plan option.
+    var introductoryOfferHeadline: String? {
+        eligibleIntroductoryOffer?.headline
+    }
+
+    /// Regular billing copy shown immediately after an introductory offer.
+    var postIntroductoryOfferBillingDescription: String? {
+        guard eligibleIntroductoryOffer != nil,
+              let recurringPriceDescription
+        else { return nil }
+        return "Then \(recurringPriceDescription)"
+    }
+
+    /// Trial-aware primary action title while preserving the app's configured
+    /// CTA for products without an eligible free trial.
+    func purchaseActionTitle(defaultTitle: String) -> String {
+        if eligibleFreeTrial != nil {
+            return "Start Free Trial"
+        }
+        return "\(defaultTitle) with \(planLabel)"
+    }
+
+    /// Selected-plan disclosure for eligible introductory offers. The generic
+    /// catalog disclosure remains responsible for lifetime and renewal policy.
+    var introductoryOfferDisclosure: String? {
+        guard let offer = eligibleIntroductoryOffer,
+              let recurringPriceDescription
+        else { return nil }
+        return "\(offer.headline), then \(recurringPriceDescription). Renews automatically until cancelled."
+    }
 }
 
 /// Produces accurate legal copy for recurring, lifetime, or mixed catalogs.
