@@ -16,7 +16,7 @@ The rule for every later phase is:
 | `hoangbkit/AppFoundation` | `develop` | Current commerce architecture, simulator, canonical Pro APIs, developer tools |
 | `hoangbkit/PaywallKit` | `master` | Existing macOS paywall and premium UI primitives |
 | `hoangbkit/Spokio` | `develop` | Production macOS Settings/Plan presentation and embedded PaywallKit usage |
-| `hoangbkit/Onlink` | `master` | Legacy paid-app migration and another production macOS commerce integration |
+| `hoangbkit/Onlink` | `master` | Optional reference for app-facing macOS paywall wrapping only; legacy entitlement migration is excluded |
 
 Re-fetch these branches before implementing the phase that consumes them; this inventory records the intended source ownership, not frozen vendor copies.
 
@@ -48,13 +48,9 @@ Source directory: `Sources/AppFoundation/Purchases/`
 
 Spokio's embedded copy under `Packages/PaywallKit/Sources/PaywallKit/` should be checked alongside standalone PaywallKit when a phase begins; where files are identical, standalone PaywallKit remains the source reference.
 
-### Onlink — legacy paid migration only
+### Explicit commerce exclusion
 
-| Source | Intended destination | Reuse mode | Notes |
-| --- | --- | --- | --- |
-| `Sources/Onlink/OnlinkEntitlementStore.swift` | `Sources/MacAppFoundation/Commerce/LegacyPurchasePolicy.swift` | extract/adapt | Extract only the verified `AppTransaction`, bundle identity, `originalAppVersion`, and transition-version migration behavior. Do not copy the whole Onlink store. |
-
-Explicit exclusion: Onlink-specific entitlement source names, app configuration, network/domain state, and unrelated persistence.
+Do not port Onlink's `OnlinkLegacyEntitlementPolicy`, `AppTransaction.originalAppVersion` migration logic, legacy-paid caching, or legacy entitlement source states. v1.0.0 supports current StoreKit products only.
 
 ---
 
@@ -66,7 +62,7 @@ Explicit exclusion: Onlink-specific entitlement source names, app configuration,
 | --- | --- | --- | --- |
 | `Sources/PaywallKit/PaywallView_macOS.swift` | `Sources/MacAppFoundation/Premium/ProPaywallView.swift` | copy + merge | Preserve the proven desktop layout and interactions; merge in AppFoundation's newer trial/introductory-offer and purchase-state semantics. |
 | `Sources/PaywallKit/PaywallGate.swift` | `Sources/MacAppFoundation/Premium/ProGate.swift` | copy/adapt | Keep lightweight gating behavior but bind it to the shared verified commerce state. |
-| `Sources/PaywallKit/ProBadge.swift` | `Sources/MacAppFoundation/Premium/ProBadge.swift` | copy/adapt | Remove Spokio/app-specific visual assumptions if any. |
+| `Sources/PaywallKit/ProBadge.swift` | `Sources/MacAppFoundation/Premium/ProBadge.swift` | copy/adapt | Remove app-specific visual assumptions if any. |
 | `Sources/PaywallKit/ProGateButton.swift` | `Sources/MacAppFoundation/Premium/ProGateButton.swift` | copy/adapt | App continues to own paywall presentation/navigation. |
 | `Sources/PaywallKit/ProLockInfoProvider.swift` | `Sources/MacAppFoundation/Premium/ProLockInfoProvider.swift` | copy if still useful | Keep only if it remains simpler than AppFoundation's newer access-policy approach. |
 | `Sources/PaywallKit/ProLockPopover.swift` | `Sources/MacAppFoundation/Premium/ProLockPopover.swift` | copy/adapt | Preserve native macOS popover behavior. |
@@ -83,11 +79,9 @@ Explicit exclusion: Onlink-specific entitlement source names, app configuration,
 
 Do not port AppFoundation's theme system just to support these views. MacAppFoundation v1 uses native macOS styling with small app-supplied branding hooks.
 
-### Onlink — wrapper pattern only
+### Production wrapper pattern
 
-| Source | Reuse mode | Notes |
-| --- | --- | --- |
-| `Sources/Onlink/OnlinkProPaywallView.swift` | pattern/reference | Keep the separation where the framework owns reusable paywall mechanics while the app owns copy, features, legal URLs, dismissal, and post-purchase refresh. |
+Onlink's `Sources/Onlink/OnlinkProPaywallView.swift` may be consulted only as an integration-pattern reference for keeping framework mechanics separate from app-owned copy, features, legal URLs, dismissal, and post-purchase refresh. Do not pull in its entitlement store or legacy migration behavior.
 
 ---
 
@@ -185,6 +179,9 @@ Do not copy these while implementing the three selected pillars:
 
 ### Onlink
 
+- legacy paid-app entitlement migration
+- `AppTransaction.originalAppVersion` policy
+- legacy entitlement caching/source models
 - connectivity/network monitoring
 - speed tests
 - diagnostics/history/reports
@@ -209,11 +206,10 @@ Do not copy these while implementing the three selected pillars:
 | --- | --- | --- |
 | Phase 1 Commerce core | AppFoundation | PaywallKit macOS behavior where needed |
 | Phase 2 Purchase simulation | AppFoundation | — |
-| Phase 3 Legacy paid policy | Onlink | AppFoundation entitlement architecture |
-| Phase 4 macOS Pro paywall | PaywallKit/Spokio embedded PaywallKit | AppFoundation canonical paywall semantics, Onlink wrapper pattern |
-| Phase 5 Pro gating/upsells | PaywallKit | AppFoundation newer Pro APIs |
-| Phase 6 Settings/Plan | **Spokio SettingsView + PlanPane** | AppFoundation commerce/settings behavior |
-| Phase 7 Developer Tools | AppFoundation FoundationDeveloperView | Spokio window/menu presentation |
-| Phase 8 hardening | MacAppFoundation result | all reference integrations |
+| Phase 3 macOS Pro paywall | PaywallKit/Spokio embedded PaywallKit | AppFoundation canonical paywall semantics |
+| Phase 4 Pro gating/upsells | PaywallKit | AppFoundation newer Pro APIs |
+| Phase 5 Settings/Plan | **Spokio SettingsView + PlanPane** | AppFoundation commerce/settings behavior |
+| Phase 6 Developer Tools | AppFoundation FoundationDeveloperView | Spokio window/menu presentation |
+| Phase 7 hardening | MacAppFoundation result | reference integrations |
 
 This mapping is the guardrail for v1.0.0: if a later phase starts implementing a feature from scratch, first verify that the relevant source above cannot be copied or adapted.
