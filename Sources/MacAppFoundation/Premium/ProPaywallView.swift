@@ -294,7 +294,7 @@ public struct ProPaywallView: View {
                     return
                 }
 
-                if case .success = outcome {
+                if let outcome, case .success = outcome {
                     onPurchased?(product)
                 }
             }
