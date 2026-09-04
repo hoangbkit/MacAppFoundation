@@ -126,10 +126,16 @@ final class PurchaseSimulationTests: XCTestCase {
 
         let outcome = await manager.purchase(Self.monthly)
 
+        guard let outcome else {
+            return XCTFail("Expected successful simulated purchase")
+        }
         guard case .success = outcome else {
             return XCTFail("Expected successful simulated purchase")
         }
-        XCTAssertEqual(manager.simulatedPurchasedProductIDs, [Self.monthly.id, lifetime.id])
+        XCTAssertEqual(
+            manager.simulatedPurchasedProductIDs,
+            Set([Self.monthly.id, lifetime.id])
+        )
         XCTAssertTrue(manager.hasPro)
         XCTAssertEqual(manager.activeProduct?.id, lifetime.id)
     }
@@ -139,13 +145,15 @@ final class PurchaseSimulationTests: XCTestCase {
         await manager.prepare()
 
         manager.setSimulatedPurchaseResult(.pending, for: Self.monthly.id)
-        XCTAssertEqual(await manager.purchase(Self.monthly), .pending)
+        let pendingOutcome = await manager.purchase(Self.monthly)
+        XCTAssertEqual(pendingOutcome, .pending)
         XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
         XCTAssertFalse(manager.hasPro)
 
         manager.clearActivity()
         manager.setSimulatedPurchaseResult(.userCancelled, for: Self.monthly.id)
-        XCTAssertEqual(await manager.purchase(Self.monthly), .userCancelled)
+        let cancelledOutcome = await manager.purchase(Self.monthly)
+        XCTAssertEqual(cancelledOutcome, .userCancelled)
         XCTAssertEqual(manager.activity, .idle)
         XCTAssertFalse(manager.hasPro)
 
@@ -154,7 +162,8 @@ final class PurchaseSimulationTests: XCTestCase {
             message: "Simulated network failure."
         )
         manager.setSimulatedPurchaseResult(.failure(failure), for: Self.monthly.id)
-        XCTAssertNil(await manager.purchase(Self.monthly))
+        let failedOutcome = await manager.purchase(Self.monthly)
+        XCTAssertNil(failedOutcome)
         XCTAssertEqual(manager.activity, .failed(failure))
         XCTAssertFalse(manager.hasPro)
     }
