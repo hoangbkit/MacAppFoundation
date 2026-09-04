@@ -22,17 +22,18 @@ settings:
     CODE_SIGN_STYLE: Automatic
     COMBINE_HIDPI_IMAGES: YES
     CURRENT_PROJECT_VERSION: 1
+    DEVELOPMENT_TEAM: J458WW3452
     ENABLE_APP_SANDBOX: YES
     ENABLE_HARDENED_RUNTIME: YES
     ENABLE_PREVIEWS: YES
     GENERATE_INFOPLIST_FILE: YES
-    INFOPLIST_KEY_CFBundleDisplayName: MacAppFoundation Demo
+    INFOPLIST_KEY_CFBundleDisplayName: MAF
     INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
     INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     MARKETING_VERSION: "1.0"
-    PRODUCT_BUNDLE_IDENTIFIER: com.hoangbkit.macappfoundation.demo
-    PRODUCT_NAME: MacAppFoundation Demo
+    PRODUCT_BUNDLE_IDENTIFIER: com.hoangbkit.maf
+    PRODUCT_NAME: MAF
     SDKROOT: macosx
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
