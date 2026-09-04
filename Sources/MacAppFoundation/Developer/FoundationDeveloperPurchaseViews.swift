@@ -26,7 +26,7 @@ struct FoundationDeveloperProductCatalogView: View {
                         Text(product.id)
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)
-                        Text(product.subscriptionPeriod?.shortLabel ?? "lifetime")
+                        Text(product.planLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         if let offer = product.introductoryOffer {
@@ -250,10 +250,8 @@ struct FoundationDeveloperPlansView: View {
     }
 
     private func restoreAppDefaults() {
-        let configuration = purchaseManager.configuration
-        let sourceProducts = purchaseManager.products.isEmpty
-            ? purchaseManager.simulatedCatalogProducts
-            : purchaseManager.products
+        let configuration = purchaseManager.simulatedDefaultConfigurationSnapshot
+        let sourceProducts = purchaseManager.simulatedDefaultCatalogProducts
         plans = sourceProducts.map {
             DeveloperPlanDraft(
                 product: $0,
@@ -273,16 +271,20 @@ struct FoundationDeveloperPlansView: View {
             return
         }
 
-        let normalizedIDs = enabled.map {
+        let normalizedCatalogIDs = plans.map {
             $0.productID.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard normalizedIDs.allSatisfy({ !$0.isEmpty }) else {
-            validationMessage = "Every enabled plan needs a product identifier."
+        guard normalizedCatalogIDs.allSatisfy({ !$0.isEmpty }) else {
+            validationMessage = "Every simulated plan needs a product identifier."
             return
         }
-        guard Set(normalizedIDs).count == normalizedIDs.count else {
-            validationMessage = "Enabled plans must use unique product identifiers."
+        guard Set(normalizedCatalogIDs).count == normalizedCatalogIDs.count else {
+            validationMessage = "All simulated plans must use unique product identifiers."
             return
+        }
+
+        let normalizedIDs = enabled.map {
+            $0.productID.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         guard plans.allSatisfy({ $0.price >= 0 }) else {
             validationMessage = "Plan prices cannot be negative."
