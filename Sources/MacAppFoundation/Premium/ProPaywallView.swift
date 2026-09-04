@@ -283,6 +283,8 @@ public struct ProPaywallView: View {
     private var purchaseButton: some View {
         Button {
             guard let product = selectedProduct, !purchaseManager.isBusy else { return }
+            let hadProBeforePurchase = purchaseManager.hasPro
+
             Task {
                 await purchaseManager.purchase(product)
 
@@ -292,7 +294,7 @@ public struct ProPaywallView: View {
                     return
                 }
 
-                if purchaseManager.hasPro {
+                if !hadProBeforePurchase, purchaseManager.hasPro {
                     onPurchased?(product)
                 }
             }
