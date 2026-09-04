@@ -190,14 +190,15 @@ public struct ProPaywallView: View {
             .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
 
         case .loaded:
-            if purchaseManager.products.isEmpty {
-                Text(PurchaseFailure.noProductsAvailable.message)
+            if paywallProducts.isEmpty {
+                Text("No Pro purchase options are available right now.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
             } else {
                 VStack(spacing: 12) {
-                    ForEach(purchaseManager.products) { product in
+                    ForEach(paywallProducts) { product in
                         planCard(product)
                     }
                 }
@@ -283,10 +284,9 @@ public struct ProPaywallView: View {
     private var purchaseButton: some View {
         Button {
             guard let product = selectedProduct, !purchaseManager.isBusy else { return }
-            let hadProBeforePurchase = purchaseManager.hasPro
 
             Task {
-                await purchaseManager.purchase(product)
+                let outcome = await purchaseManager.purchase(product)
 
                 if case .failed(let failure) = purchaseManager.activity {
                     alertMessage = failure.message
@@ -294,7 +294,7 @@ public struct ProPaywallView: View {
                     return
                 }
 
-                if !hadProBeforePurchase, purchaseManager.hasPro {
+                if case .success = outcome {
                     onPurchased?(product)
                 }
             }
@@ -375,7 +375,7 @@ public struct ProPaywallView: View {
 
     private var legalFooter: some View {
         VStack(spacing: 9) {
-            Text(PurchasePlanDisclosure.text(for: purchaseManager.products))
+            Text(PurchasePlanDisclosure.text(for: paywallProducts))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -426,9 +426,13 @@ public struct ProPaywallView: View {
         return purchaseManager.configuration.features.map(ProPaywallFeature.init)
     }
 
+    private var paywallProducts: [StoreProduct] {
+        purchaseManager.entitlementProducts
+    }
+
     private var selectedProduct: StoreProduct? {
         guard let selectedProductID else { return nil }
-        return purchaseManager.product(withID: selectedProductID)
+        return paywallProducts.first(where: { $0.id == selectedProductID })
     }
 
     private var purchaseButtonTitle: String {
@@ -445,18 +449,18 @@ public struct ProPaywallView: View {
 
     private func selectDefaultPlanIfNeeded() {
         if let selectedProductID,
-           purchaseManager.product(withID: selectedProductID) != nil {
+           paywallProducts.contains(where: { $0.id == selectedProductID }) {
             return
         }
 
         if let highlightedProductID = configuration.highlightedProductID,
-           purchaseManager.product(withID: highlightedProductID) != nil {
+           paywallProducts.contains(where: { $0.id == highlightedProductID }) {
             selectedProductID = highlightedProductID
             return
         }
 
-        selectedProductID = purchaseManager.preferredProduct?.id
-            ?? purchaseManager.products.first?.id
+        selectedProductID = purchaseManager.preferredEntitlementProduct?.id
+            ?? paywallProducts.first?.id
     }
 
     private func restorePurchases() {
@@ -486,16 +490,16 @@ public struct ProPaywallView: View {
     }
 
     private func badge(for product: StoreProduct) -> String? {
-        let configuredBadge = configuration.highlightedProductID == product.id
-            ? configuration.highlightedProductBadge
-            : nil
-
-        if let configuredBadge, isSavingsPercentageBadge(configuredBadge) {
-            return configuredBadge
+        if configuration.highlightedProductID == product.id {
+            let configuredBadge = configuration.highlightedProductBadge
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !configuredBadge.isEmpty {
+                return configuredBadge
+            }
         }
 
         if isYearlyPlan(product),
-           let monthlyProduct = purchaseManager.products.first(where: isMonthlyPlan),
+           let monthlyProduct = paywallProducts.first(where: isMonthlyPlan),
            let savingsPercentage = yearlySavingsPercentage(
                monthlyPrice: monthlyProduct.price,
                yearlyPrice: product.price
@@ -503,7 +507,7 @@ public struct ProPaywallView: View {
             return "SAVE \(savingsPercentage)%"
         }
 
-        return configuredBadge
+        return nil
     }
 
     private func isMonthlyPlan(_ product: StoreProduct) -> Bool {
@@ -530,11 +534,6 @@ public struct ProPaywallView: View {
         let percentage = ((annualizedMonthlyPrice - yearlyPrice) / annualizedMonthlyPrice) * 100
         let rounded = Int(percentage.rounded())
         return rounded > 0 ? rounded : nil
-    }
-
-    private func isSavingsPercentageBadge(_ value: String) -> Bool {
-        let uppercased = value.uppercased()
-        return uppercased.contains("SAVE") && uppercased.contains("%")
     }
 
     private var alertBinding: Binding<Bool> {
