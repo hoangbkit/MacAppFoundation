@@ -4,6 +4,8 @@
 
 MacAppFoundation 1.0.0 packages the reusable macOS monetization pieces proven across AppFoundation, PaywallKit, and Spokio into one focused Swift package.
 
+Minimum deployment target: **macOS 15.0**.
+
 The release has three pillars:
 
 ### Commerce + simulation
@@ -41,6 +43,17 @@ The release has three pillars:
 - editable simulated plans, prices, ordering, entitlement mapping, preferred plan, and introductory offers
 - failure/latency controls, diagnostics, replays, and app-specific developer sections
 
+### Demo app
+
+- macOS 15 XcodeGen project under `Examples/Demo`
+- local-package dependency on MacAppFoundation
+- StoreKit Testing configuration with Monthly, Yearly + 7-day trial, and Lifetime products
+- Debug simulator enabled by default
+- showcase navigation for commerce, paywall, gating, upsells, Settings/Plan, and Developer Tools
+- real app-owned paywall and upsell windows
+- app-owned General / Plan / About Settings scene
+- dedicated Debug Developer Tools window and `CommandMenu("Developer")`
+
 ## v1 public API direction
 
 The canonical app-facing names are:
@@ -71,6 +84,7 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Confirm `ProPlanPane` is the single package-owned Plan settings surface.
 - [ ] Confirm Developer Tools are wrapped in `#if DEBUG` and remain outside Settings.
 - [ ] Confirm no UIKit or iOS-only view modifiers remain in the macOS package.
+- [ ] Confirm public package deployment target is macOS 15.0.
 
 ### Commerce
 
@@ -107,7 +121,7 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Validate highlighted plan and computed yearly savings badge.
 - [ ] Validate successful purchase callback only fires when the purchase newly unlocks Pro.
 - [ ] Validate restore feedback and callback.
-- [ ] Validate Redeem Code flow and entitlement refresh.
+- [ ] Validate Redeem Code flow and entitlement refresh on macOS 15+.
 - [ ] Validate Terms and Privacy links.
 - [ ] Validate `ProGate`, `ProGateButton`, locked overlay, and upsell presentation.
 - [ ] Validate existing-content access policy behavior after entitlement expiry.
@@ -131,6 +145,17 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Validate diagnostics copy to the macOS pasteboard.
 - [ ] Confirm Developer Tools are not exposed from Settings.
 
+### Demo app
+
+- [ ] From `Examples/Demo`, generate with XcodeGen 2.45.4+.
+- [ ] Confirm the generated target deployment target is macOS 15.0.
+- [ ] Confirm the demo resolves the local `../..` MacAppFoundation package.
+- [ ] Validate simulated purchases at launch.
+- [ ] Switch to StoreKit Testing and validate the included `.storekit` catalog.
+- [ ] Open every showcase section and every app-owned window.
+- [ ] Open General / Plan / About Settings.
+- [ ] Open Developer Tools from the Developer menu and exercise replay/custom sections.
+
 ### Privacy / release packaging
 
 - [ ] Confirm the package does not collect user data or contact tracking domains.
@@ -143,6 +168,7 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Review `README.md` examples against the final public API.
 - [ ] Review `Documentation/Settings.md`.
 - [ ] Review `Documentation/DeveloperTools.md`.
+- [ ] Review `Examples/Demo/README.md` and `project.yml`.
 - [ ] Review this release note/checklist.
 - [ ] Create tag `1.0.0` only after the final source/API review.
 - [ ] Use the Release summary above as the GitHub release body, trimming checklist details.
