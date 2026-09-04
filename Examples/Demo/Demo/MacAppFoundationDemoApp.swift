@@ -3,6 +3,7 @@ import SwiftUI
 
 enum DemoWindowID {
     static let main = "demo.main"
+    static let onboarding = "demo.onboarding"
     static let paywall = "demo.paywall"
     static let upsell = "demo.upsell"
 }
@@ -12,6 +13,10 @@ enum DemoWindowID {
 struct MacAppFoundationDemoApp: App {
     @Environment(\.openWindow) private var openWindow
     @State private var demoState = DemoState()
+    @State private var onboarding = OnboardingState(
+        id: "demo",
+        stepCount: 3
+    )
 
     private let purchases = DemoCommerce.manager
 
@@ -22,6 +27,7 @@ struct MacAppFoundationDemoApp: App {
                 .managesPurchases(purchases)
         }
         .defaultSize(width: 1080, height: 700)
+        .defaultLaunchBehavior(onboarding.mainWindowLaunchBehavior)
         .commands {
             CommandMenu("Demo") {
                 Button("Show Pro Paywall") {
@@ -41,6 +47,11 @@ struct MacAppFoundationDemoApp: App {
                     openWindow(id: MacAppFoundationDeveloperTools.windowID)
                 }
                 .keyboardShortcut("d", modifiers: [.command, .option])
+
+                Button("Replay Onboarding") {
+                    replayOnboarding()
+                }
+                .keyboardShortcut("o", modifiers: [.command, .option])
 
                 Divider()
 
@@ -64,6 +75,16 @@ struct MacAppFoundationDemoApp: App {
                 }
             }
             #endif
+        }
+
+        OnboardingWindow(
+            "Welcome to MAF",
+            id: DemoWindowID.onboarding,
+            state: onboarding,
+            defaultWidth: 620,
+            defaultHeight: 500
+        ) {
+            DemoOnboardingView(onboarding: onboarding)
         }
 
         Window("Demo Pro", id: DemoWindowID.paywall) {
@@ -161,6 +182,14 @@ struct MacAppFoundationDemoApp: App {
                         ),
                         .action(
                             FoundationDeveloperAction(
+                                title: "Replay Onboarding",
+                                systemImage: "arrow.counterclockwise.circle"
+                            ) {
+                                replayOnboarding()
+                            }
+                        ),
+                        .action(
+                            FoundationDeveloperAction(
                                 title: "Record Demo Action",
                                 systemImage: "plus.circle"
                             ) {
@@ -189,6 +218,11 @@ struct MacAppFoundationDemoApp: App {
                 )
             ]
         )
+    }
+
+    private func replayOnboarding() {
+        onboarding.restart()
+        openWindow(id: DemoWindowID.onboarding)
     }
     #endif
 }
