@@ -3,16 +3,16 @@ import OSLog
 import StoreKit
 
 @MainActor
-public protocol PurchaseServing: AnyObject {
+protocol PurchaseServing: AnyObject {
     func products(for identifiers: [String]) async throws -> [StoreProduct]
     func purchase(productID: String) async throws -> PurchaseOutcome
     func currentEntitlements() async -> [EntitlementRecord]
-    func entitlementUpdates() -> AsyncStream<Void>
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void>
     func sync() async throws
 }
 
 @MainActor
-public final class LiveStoreKitService: PurchaseServing {
+final class LiveStoreKitService: PurchaseServing {
     private static let logger = Logger(
         subsystem: "com.macappfoundation.purchases",
         category: "storekit"
@@ -20,9 +20,9 @@ public final class LiveStoreKitService: PurchaseServing {
 
     private var productsByID: [String: Product] = [:]
 
-    public init() {}
+    init() {}
 
-    public func products(for identifiers: [String]) async throws -> [StoreProduct] {
+    func products(for identifiers: [String]) async throws -> [StoreProduct] {
         let products = try await Product.products(for: identifiers)
         productsByID = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
 
@@ -34,7 +34,7 @@ public final class LiveStoreKitService: PurchaseServing {
         return storeProducts
     }
 
-    public func purchase(productID: String) async throws -> PurchaseOutcome {
+    func purchase(productID: String) async throws -> PurchaseOutcome {
         let product: Product
         if let cachedProduct = productsByID[productID] {
             product = cachedProduct
@@ -61,7 +61,7 @@ public final class LiveStoreKitService: PurchaseServing {
         }
     }
 
-    public func currentEntitlements() async -> [EntitlementRecord] {
+    func currentEntitlements() async -> [EntitlementRecord] {
         var records: [EntitlementRecord] = []
 
         for await verification in Transaction.currentEntitlements {
@@ -78,7 +78,10 @@ public final class LiveStoreKitService: PurchaseServing {
         return records
     }
 
-    public func entitlementUpdates() -> AsyncStream<Void> {
+    /// Observes only transactions owned by this purchase manager.
+    /// Unknown transactions are deliberately left unfinished so another StoreKit
+    /// subsystem can deliver its content and finish them itself.
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void> {
         AsyncStream { continuation in
             let task = Task {
                 for await verification in Transaction.updates {
@@ -86,7 +89,9 @@ public final class LiveStoreKitService: PurchaseServing {
                         break
                     }
 
-                    guard case .verified(let transaction) = verification else {
+                    guard case .verified(let transaction) = verification,
+                          productIDs.contains(transaction.productID)
+                    else {
                         continue
                     }
 
@@ -102,7 +107,7 @@ public final class LiveStoreKitService: PurchaseServing {
         }
     }
 
-    public func sync() async throws {
+    func sync() async throws {
         try await AppStore.sync()
     }
 
@@ -135,6 +140,7 @@ public final class LiveStoreKitService: PurchaseServing {
             description: product.description,
             displayPrice: product.displayPrice,
             price: NSDecimalNumber(decimal: product.price).doubleValue,
+            type: makeProductType(product.type),
             subscriptionPeriod: subscription.map { subscription in
                 makeSubscriptionPeriod(subscription.subscriptionPeriod)
             },
@@ -167,6 +173,14 @@ public final class LiveStoreKitService: PurchaseServing {
             value: period.value,
             unit: makePeriodUnit(period.unit)
         )
+    }
+
+    private static func makeProductType(_ type: Product.ProductType) -> StoreProduct.ProductType {
+        if type == .autoRenewable { return .autoRenewable }
+        if type == .nonConsumable { return .nonConsumable }
+        if type == .consumable { return .consumable }
+        if type == .nonRenewable { return .nonRenewable }
+        return .unknown
     }
 
     private static func makePaymentMode(
