@@ -14,8 +14,8 @@ public enum SimulatedPurchaseResult: Sendable, Equatable {
 /// This service never contacts App Store Connect and never creates StoreKit transactions.
 /// It is excluded from Release builds.
 @MainActor
-public final class SimulatedPurchaseService: PurchaseServing {
-    public private(set) var purchasedProductIDs: Set<String>
+final class SimulatedPurchaseService: PurchaseServing {
+    private(set) var purchasedProductIDs: Set<String>
 
     private var products: [StoreProduct]
     private var productsByID: [String: StoreProduct]
@@ -29,7 +29,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
     private var purchaseDates: [String: Date] = [:]
     private var updateContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
 
-    public init(
+    init(
         products: [StoreProduct],
         initiallyPurchasedProductIDs: Set<String> = [],
         purchaseResults: [String: SimulatedPurchaseResult] = [:],
@@ -54,7 +54,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
         self.purchasedProductIDs = startingProductIDs.intersection(Set(products.map(\.id)))
     }
 
-    public func products(for identifiers: [String]) async throws -> [StoreProduct] {
+    func products(for identifiers: [String]) async throws -> [StoreProduct] {
         await waitForSimulationDelay()
         if let productLoadingFailure {
             throw productLoadingFailure
@@ -64,7 +64,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
         return products.filter { requestedIDs.contains($0.id) }
     }
 
-    public func purchase(productID: String) async throws -> PurchaseOutcome {
+    func purchase(productID: String) async throws -> PurchaseOutcome {
         await waitForSimulationDelay()
         guard let product = productsByID[productID] else {
             throw PurchaseFailure.productUnavailable
@@ -72,7 +72,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
 
         switch purchaseResults[productID] ?? .success {
         case .success:
-            purchasedProductIDs = [productID]
+            purchasedProductIDs.insert(productID)
             let purchaseDate = Date.now
             purchaseDates[productID] = purchaseDate
             persistPurchasedProductIDs()
@@ -92,7 +92,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
         }
     }
 
-    public func currentEntitlements() async -> [EntitlementRecord] {
+    func currentEntitlements() async -> [EntitlementRecord] {
         await waitForSimulationDelay()
         return purchasedProductIDs.sorted().map { productID in
             EntitlementRecord(
@@ -102,7 +102,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
         }
     }
 
-    public func entitlementUpdates() -> AsyncStream<Void> {
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void> {
         let identifier = UUID()
         return AsyncStream { continuation in
             updateContinuations[identifier] = continuation
@@ -114,7 +114,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
         }
     }
 
-    public func sync() async throws {
+    func sync() async throws {
         await waitForSimulationDelay()
         if let syncFailure {
             throw syncFailure
@@ -123,7 +123,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
 
     /// Replaces the simulated product catalog while retaining current failure injection,
     /// latency, and any entitlement that still exists in the new catalog.
-    public func replaceProducts(_ products: [StoreProduct]) {
+    func replaceProducts(_ products: [StoreProduct]) {
         self.products = products
         self.productsByID = Self.indexProducts(products)
 
@@ -135,7 +135,7 @@ public final class SimulatedPurchaseService: PurchaseServing {
     }
 
     /// Changes the behavior for future purchases of a product.
-    public func setPurchaseResult(
+    func setPurchaseResult(
         _ result: SimulatedPurchaseResult,
         for productID: String
     ) {
@@ -143,17 +143,17 @@ public final class SimulatedPurchaseService: PurchaseServing {
     }
 
     /// Simulates a catalog-loading failure. Pass `nil` to resume loading products.
-    public func setProductLoadingFailure(_ failure: PurchaseFailure?) {
+    func setProductLoadingFailure(_ failure: PurchaseFailure?) {
         productLoadingFailure = failure
     }
 
     /// Simulates a restore failure. Pass `nil` to resume successful restores.
-    public func setSyncFailure(_ failure: PurchaseFailure?) {
+    func setSyncFailure(_ failure: PurchaseFailure?) {
         syncFailure = failure
     }
 
     /// Replaces the active simulated entitlements with known catalog products.
-    public func setPurchasedProductIDs(_ productIDs: Set<String>) {
+    func setPurchasedProductIDs(_ productIDs: Set<String>) {
         purchasedProductIDs = productIDs.intersection(Set(productsByID.keys))
         let now = Date.now
         purchaseDates = Dictionary(
@@ -164,19 +164,19 @@ public final class SimulatedPurchaseService: PurchaseServing {
     }
 
     /// Updates artificial latency for subsequent simulated StoreKit operations.
-    public func setOperationDelay(_ delay: Duration) {
+    func setOperationDelay(_ delay: Duration) {
         operationDelay = delay
     }
 
     /// Clears injected failures while preserving the simulated entitlement.
-    public func resetFailures() {
+    func resetFailures() {
         purchaseResults = [:]
         productLoadingFailure = nil
         syncFailure = nil
     }
 
     /// Clears all simulated transactions and entitlements.
-    public func reset() {
+    func reset() {
         purchasedProductIDs = []
         purchaseDates = [:]
         resetFailures()
