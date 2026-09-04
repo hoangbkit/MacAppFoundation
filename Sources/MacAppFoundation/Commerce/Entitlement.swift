@@ -36,6 +36,9 @@ public struct EntitlementRecord: Sendable, Equatable {
 
 public struct EntitlementSnapshot: Sendable, Equatable {
     public let activeProductIDs: Set<String>
+
+    /// Latest known expiry for an entirely time-limited entitlement set.
+    /// `nil` also means at least one active entitlement is permanent.
     public let latestExpirationDate: Date?
 
     public init(activeProductIDs: Set<String>, latestExpirationDate: Date?) {
@@ -71,9 +74,12 @@ public enum EntitlementEvaluator {
             return .inactive
         }
 
+        let hasPermanentEntitlement = activeRecords.contains { $0.expirationDate == nil }
         let snapshot = EntitlementSnapshot(
             activeProductIDs: Set(activeRecords.map(\.productID)),
-            latestExpirationDate: activeRecords.compactMap(\.expirationDate).max()
+            latestExpirationDate: hasPermanentEntitlement
+                ? nil
+                : activeRecords.compactMap(\.expirationDate).max()
         )
         return .active(snapshot)
     }
