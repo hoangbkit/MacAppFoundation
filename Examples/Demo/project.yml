@@ -1,0 +1,68 @@
+name: MacAppFoundationDemo
+
+options:
+  minimumXcodeGenVersion: 2.45.4
+  createIntermediateGroups: true
+  defaultConfig: Debug
+  developmentLanguage: en
+  deploymentTarget:
+    macOS: "15.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+packages:
+  MacAppFoundation:
+    path: ../..
+
+settings:
+  base:
+    ARCHS: "$(ARCHS_STANDARD)"
+    CODE_SIGN_STYLE: Automatic
+    COMBINE_HIDPI_IMAGES: YES
+    CURRENT_PROJECT_VERSION: 1
+    ENABLE_APP_SANDBOX: YES
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_PREVIEWS: YES
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: MacAppFoundation Demo
+    INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+    INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    MARKETING_VERSION: "1.0"
+    PRODUCT_BUNDLE_IDENTIFIER: com.hoangbkit.macappfoundation.demo
+    PRODUCT_NAME: MacAppFoundation Demo
+    SDKROOT: macosx
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_EMIT_LOC_STRINGS: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_VERSION: 6.0
+
+fileGroups:
+  - README.md
+  - Makefile
+  - project.yml
+
+schemes:
+  MacAppFoundationDemo:
+    build:
+      targets:
+        MacAppFoundationDemo: all
+    run:
+      config: Debug
+      storeKitConfiguration: Demo/Configuration.storekit
+    archive:
+      config: Release
+
+targets:
+  MacAppFoundationDemo:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Demo
+    dependencies:
+      - package: MacAppFoundation
+        product: MacAppFoundation
