@@ -14,8 +14,11 @@ public final class PurchaseManager {
     public let configuration: PurchaseConfiguration
 
     @ObservationIgnored private var service: any PurchaseServing
+    @ObservationIgnored private var serviceGeneration = 0
     @ObservationIgnored private var simulatedConfiguration: PurchaseConfiguration
     @ObservationIgnored private var simulatedProducts: [StoreProduct]
+    @ObservationIgnored private let defaultSimulatedConfiguration: PurchaseConfiguration
+    @ObservationIgnored private let defaultSimulatedProducts: [StoreProduct]
     @ObservationIgnored private let simulatedPersistenceKey: String?
     @ObservationIgnored private var simulatedOperationDelay: Duration
     @ObservationIgnored private var updateTask: Task<Void, Never>?
@@ -42,6 +45,8 @@ public final class PurchaseManager {
         self.configuration = configuration
         self.simulatedConfiguration = configuration
         self.simulatedProducts = simulatedProducts
+        self.defaultSimulatedConfiguration = configuration
+        self.defaultSimulatedProducts = simulatedProducts
         self.simulatedPersistenceKey = simulatedPersistenceKey
         self.simulatedOperationDelay = simulatedOperationDelay
         self.service = PurchaseServiceFactory.make(
@@ -52,14 +57,16 @@ public final class PurchaseManager {
         )
     }
 
-    /// Creates a purchase manager with an injected service, primarily for deterministic testing.
-    public init(
+    /// Internal service injection used by deterministic package tests.
+    init(
         configuration: PurchaseConfiguration,
         service: any PurchaseServing
     ) {
         self.configuration = configuration
         self.simulatedConfiguration = configuration
         self.simulatedProducts = []
+        self.defaultSimulatedConfiguration = configuration
+        self.defaultSimulatedProducts = []
         self.simulatedPersistenceKey = nil
         self.simulatedOperationDelay = .milliseconds(250)
         self.service = service
@@ -67,14 +74,11 @@ public final class PurchaseManager {
 
     deinit {
         updateTask?.cancel()
+        restoreTask?.cancel()
     }
 
     /// The simple entitlement property apps should use for normal feature gating.
     public var hasPro: Bool {
-        entitlementState.isActive
-    }
-
-    public var isEntitled: Bool {
         entitlementState.isActive
     }
 
@@ -96,12 +100,33 @@ public final class PurchaseManager {
         return false
     }
 
+    /// Product identifiers that currently grant Pro, including Debug simulator edits.
+    public var entitledProductIDs: Set<String> {
+        activeConfiguration.entitledProductIDs
+    }
+
+    /// Loaded products that both grant Pro and use a supported entitlement product type.
+    public var entitlementProducts: [StoreProduct] {
+        products.filter {
+            entitledProductIDs.contains($0.id) && $0.isSupportedProProduct
+        }
+    }
+
     public var preferredProduct: StoreProduct? {
         if let preferredProductID = activeConfiguration.preferredProductID,
            let preferredProduct = products.first(where: { $0.id == preferredProductID }) {
             return preferredProduct
         }
         return products.first
+    }
+
+    /// Preferred product restricted to the products that can actually unlock Pro.
+    public var preferredEntitlementProduct: StoreProduct? {
+        if let preferredProductID = activeConfiguration.preferredProductID,
+           let preferredProduct = entitlementProducts.first(where: { $0.id == preferredProductID }) {
+            return preferredProduct
+        }
+        return entitlementProducts.first
     }
 
     #if DEBUG
@@ -115,9 +140,19 @@ public final class PurchaseManager {
         simulatedConfiguration
     }
 
+    /// The app-supplied simulator configuration before Developer Tools edits.
+    public var simulatedDefaultConfigurationSnapshot: PurchaseConfiguration {
+        defaultSimulatedConfiguration
+    }
+
     /// All products retained for the Debug simulator, including products disabled by its configuration.
     public var simulatedCatalogProducts: [StoreProduct] {
         simulatedProducts
+    }
+
+    /// The app-supplied simulator catalog before Developer Tools edits.
+    public var simulatedDefaultCatalogProducts: [StoreProduct] {
+        defaultSimulatedProducts
     }
 
     /// The currently active simulated entitlement product identifiers.
@@ -152,6 +187,8 @@ public final class PurchaseManager {
             return
         }
 
+        let generation = serviceGeneration
+        let service = service
         let configuration = activeConfiguration
         guard !configuration.productIDs.isEmpty else {
             products = []
@@ -165,6 +202,8 @@ public final class PurchaseManager {
         for attempt in 1...configuration.productLoadAttempts {
             do {
                 let loadedProducts = try await service.products(for: configuration.productIDs)
+                guard generation == serviceGeneration else { return }
+
                 let orderedProducts = ProductCatalog.ordered(
                     loadedProducts,
                     using: configuration.productIDs
@@ -178,6 +217,7 @@ public final class PurchaseManager {
                 productLoadingState = .loaded
                 return
             } catch {
+                guard generation == serviceGeneration else { return }
                 lastFailure = Self.mapFailure(error)
                 guard attempt < configuration.productLoadAttempts else {
                     break
@@ -185,9 +225,11 @@ public final class PurchaseManager {
 
                 let delay = UInt64(attempt) * 350_000_000
                 try? await Task.sleep(nanoseconds: delay)
+                guard generation == serviceGeneration else { return }
             }
         }
 
+        guard generation == serviceGeneration else { return }
         productLoadingState = .failed(lastFailure)
     }
 
@@ -197,57 +239,84 @@ public final class PurchaseManager {
 
     @discardableResult
     private func refreshEntitlementsWithRecords() async -> [EntitlementRecord] {
+        let generation = serviceGeneration
+        let service = service
+        let entitledProductIDs = activeConfiguration.entitledProductIDs
         let records = await service.currentEntitlements()
+        guard generation == serviceGeneration else { return [] }
+
         entitlementState = EntitlementEvaluator.evaluate(
             records,
-            entitledProductIDs: activeConfiguration.entitledProductIDs
+            entitledProductIDs: entitledProductIDs
         )
         return records
     }
 
-    public func purchase(_ product: StoreProduct) async {
+    /// Attempts a purchase and returns the actual StoreKit/simulator outcome.
+    /// Failures are exposed through ``activity`` and return `nil`.
+    @discardableResult
+    public func purchase(_ product: StoreProduct) async -> PurchaseOutcome? {
         guard !isBusy else {
-            return
+            return nil
         }
 
-        guard activeConfiguration.productIDs.contains(product.id) else {
+        guard activeConfiguration.productIDs.contains(product.id),
+              (product(withID: product.id) ?? product).isSupportedProProduct
+        else {
             activity = .failed(.productUnavailable)
-            return
+            return nil
         }
 
+        let generation = serviceGeneration
+        let service = service
         activity = .purchasing(productID: product.id)
 
         do {
             let outcome = try await service.purchase(productID: product.id)
+            guard generation == serviceGeneration else { return nil }
+
             switch outcome {
             case .success:
                 await refreshEntitlements()
+                guard generation == serviceGeneration else { return nil }
                 activity = .idle
             case .pending:
                 activity = .pending(productID: product.id)
             case .userCancelled:
                 activity = .idle
             }
+            return outcome
         } catch {
+            guard generation == serviceGeneration else { return nil }
             activity = .failed(Self.mapFailure(error))
+            return nil
         }
     }
 
     /// Restores purchases by syncing with the App Store and re-evaluating entitlements.
-    /// Concurrent calls coalesce into the in-flight attempt.
+    /// Concurrent restore calls coalesce into the in-flight attempt. A restore never starts
+    /// while a purchase is already running.
     @discardableResult
     public func restorePurchases(timeout: Duration? = nil) async -> RestoreOutcome {
         if let restoreTask {
             return await restoreTask.value
         }
+        guard !isPurchasing else {
+            return .failed(.operationInProgress)
+        }
 
         restoreGeneration += 1
         let generation = restoreGeneration
+        let serviceGeneration = serviceGeneration
         activity = .restoring
 
         let task = Task { [weak self] () -> RestoreOutcome in
             guard let self else { return .nothingToRestore }
-            return await self.performRestore(timeout: timeout, generation: generation)
+            return await self.performRestore(
+                timeout: timeout,
+                generation: generation,
+                serviceGeneration: serviceGeneration
+            )
         }
         restoreTask = task
 
@@ -259,36 +328,49 @@ public final class PurchaseManager {
         return await task.value
     }
 
-    /// Stops waiting on the in-flight restore and resets purchase activity.
+    /// Stops waiting on the in-flight restore without disturbing an unrelated purchase.
     public func cancelRestore() {
-        guard restoreTask != nil || isBusy else { return }
+        guard restoreTask != nil || isRestoring else { return }
 
         restoreGeneration += 1
         restoreTask?.cancel()
         restoreTask = nil
-        activity = .idle
+        if isRestoring {
+            activity = .idle
+        }
     }
 
-    private func performRestore(timeout: Duration?, generation: Int) async -> RestoreOutcome {
+    private func performRestore(
+        timeout: Duration?,
+        generation: Int,
+        serviceGeneration: Int
+    ) async -> RestoreOutcome {
         do {
             try await runSyncOperation(timeout: timeout)
-            guard restoreGeneration == generation else {
+            guard restoreGeneration == generation,
+                  self.serviceGeneration == serviceGeneration
+            else {
                 return .failed(.userCancelled)
             }
 
             let records = await refreshEntitlementsWithRecords()
+            guard restoreGeneration == generation,
+                  self.serviceGeneration == serviceGeneration
+            else {
+                return .failed(.userCancelled)
+            }
+
             Self.logRestoreDiagnostics(
                 records,
                 entitledProductIDs: activeConfiguration.entitledProductIDs
             )
-            guard restoreGeneration == generation else {
-                return .failed(.userCancelled)
-            }
 
             activity = .idle
-            return isEntitled ? .restored : .nothingToRestore
+            return hasPro ? .restored : .nothingToRestore
         } catch {
-            guard restoreGeneration == generation else {
+            guard restoreGeneration == generation,
+                  self.serviceGeneration == serviceGeneration
+            else {
                 return .failed(.userCancelled)
             }
 
@@ -299,6 +381,7 @@ public final class PurchaseManager {
     }
 
     private func runSyncOperation(timeout: Duration?) async throws {
+        let service = service
         guard let timeout else {
             try await service.sync()
             return
@@ -395,14 +478,13 @@ public final class PurchaseManager {
 
     #if DEBUG
     /// Switches this manager between live StoreKit and the in-process simulator.
-    /// The configured simulator products, persistence key, and delay are reused.
+    /// Switching is ignored while a purchase or restore is in progress.
     public func setSimulatedPurchasesEnabled(_ enabled: Bool) async {
-        guard isUsingSimulatedPurchases != enabled else {
+        guard !isBusy, isUsingSimulatedPurchases != enabled else {
             return
         }
 
-        updateTask?.cancel()
-        updateTask = nil
+        invalidateServiceOperations()
         service = PurchaseServiceFactory.make(
             mode: enabled ? .simulated : .live,
             simulatedProducts: simulatedProducts,
@@ -415,13 +497,15 @@ public final class PurchaseManager {
 
     /// Replaces the Debug simulator's catalog without changing the live StoreKit configuration.
     ///
-    /// Disabled products may remain in `products`; only `configuration.productIDs` are loaded by
-    /// simulated purchase surfaces. If the simulator is active, its current entitlement and failure
-    /// simulation are preserved for products that still exist in the replacement catalog.
+    /// Disabled products may remain in the simulator catalog; only `configuration.productIDs`
+    /// are loaded by simulated purchase surfaces. Active simulator edits preserve current
+    /// entitlement and failure injection for products that still exist.
     public func configureSimulatedCatalog(
         configuration: PurchaseConfiguration,
         products: [StoreProduct]
     ) async {
+        guard !isBusy else { return }
+
         simulatedConfiguration = configuration
         simulatedProducts = products
 
@@ -429,11 +513,18 @@ public final class PurchaseManager {
             return
         }
 
-        updateTask?.cancel()
-        updateTask = nil
+        invalidateServiceOperations()
         simulatedService.replaceProducts(products)
         resetObservableStateForServiceChange()
         await prepare()
+    }
+
+    /// Restores the app-supplied Debug simulator catalog and configuration.
+    public func restoreSimulatedCatalogDefaults() async {
+        await configureSimulatedCatalog(
+            configuration: defaultSimulatedConfiguration,
+            products: defaultSimulatedProducts
+        )
     }
 
     /// Sets the simulated outcome for a product's future purchase attempts.
@@ -446,7 +537,7 @@ public final class PurchaseManager {
 
     /// Sets the simulated entitlement directly and refreshes observable entitlement state.
     public func setSimulatedPurchasedProductIDs(_ productIDs: Set<String>) async {
-        guard let simulatedService = service as? SimulatedPurchaseService else {
+        guard !isBusy, let simulatedService = service as? SimulatedPurchaseService else {
             return
         }
         simulatedService.setPurchasedProductIDs(productIDs)
@@ -456,7 +547,7 @@ public final class PurchaseManager {
 
     /// Injects or clears product-catalog loading failure and immediately reloads the catalog.
     public func setSimulatedProductLoadingFailure(_ failure: PurchaseFailure?) async {
-        guard let simulatedService = service as? SimulatedPurchaseService else {
+        guard !isBusy, let simulatedService = service as? SimulatedPurchaseService else {
             return
         }
         simulatedService.setProductLoadingFailure(failure)
@@ -465,18 +556,20 @@ public final class PurchaseManager {
 
     /// Injects or clears restore failure for future simulated restore attempts.
     public func setSimulatedRestoreFailure(_ failure: PurchaseFailure?) {
+        guard !isBusy else { return }
         (service as? SimulatedPurchaseService)?.setSyncFailure(failure)
     }
 
     /// Updates artificial latency for subsequent simulated StoreKit operations.
     public func setSimulatedOperationDelay(_ delay: Duration) {
+        guard !isBusy else { return }
         simulatedOperationDelay = delay
         (service as? SimulatedPurchaseService)?.setOperationDelay(delay)
     }
 
     /// Clears purchase, catalog, and restore failure injection while keeping entitlement state.
     public func resetSimulatedFailures() async {
-        guard let simulatedService = service as? SimulatedPurchaseService else {
+        guard !isBusy, let simulatedService = service as? SimulatedPurchaseService else {
             return
         }
         simulatedService.resetFailures()
@@ -486,7 +579,7 @@ public final class PurchaseManager {
 
     /// Clears simulator state and refreshes the observable entitlement and product state.
     public func resetSimulatedPurchases() async {
-        guard let simulatedService = service as? SimulatedPurchaseService else {
+        guard !isBusy, let simulatedService = service as? SimulatedPurchaseService else {
             return
         }
 
@@ -506,6 +599,12 @@ public final class PurchaseManager {
         return configuration
     }
 
+    private func invalidateServiceOperations() {
+        serviceGeneration &+= 1
+        updateTask?.cancel()
+        updateTask = nil
+    }
+
     private func resetObservableStateForServiceChange() {
         hasPrepared = false
         products = []
@@ -516,15 +615,20 @@ public final class PurchaseManager {
 
     private func startObservingTransactions() {
         updateTask?.cancel()
+        let generation = serviceGeneration
+        let service = service
+        let managedProductIDs = Set(activeConfiguration.productIDs)
+
         updateTask = Task { [weak self, service] in
-            for await _ in service.entitlementUpdates() {
+            for await _ in service.entitlementUpdates(for: managedProductIDs) {
                 guard !Task.isCancelled else {
                     return
                 }
-                guard let self else {
+                guard let self, generation == self.serviceGeneration else {
                     return
                 }
                 await self.refreshEntitlements()
+                guard generation == self.serviceGeneration else { return }
                 if case .pending = self.activity {
                     self.activity = .idle
                 }
