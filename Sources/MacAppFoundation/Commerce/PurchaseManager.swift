@@ -261,7 +261,7 @@ public final class PurchaseManager {
         }
 
         guard activeConfiguration.productIDs.contains(product.id),
-              (product(withID: product.id) ?? product).isSupportedProProduct
+              (self.product(withID: product.id) ?? product).isSupportedProProduct
         else {
             activity = .failed(.productUnavailable)
             return nil
