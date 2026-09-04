@@ -1,13 +1,13 @@
 import Foundation
 
-/// Selects the purchase backend used by ``PurchaseServiceFactory``.
-public enum PurchaseServiceMode: String, Sendable, Equatable {
+/// Selects the internal purchase backend used by ``PurchaseServiceFactory``.
+enum PurchaseServiceMode: String, Sendable, Equatable {
     case live
     case simulated
 
     /// Reads `MACAPPFOUNDATION_PURCHASE_MODE` from the launched app's environment.
     /// Unknown or missing values use `fallback`.
-    public static func fromEnvironment(
+    static func fromEnvironment(
         fallback: PurchaseServiceMode = .live,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> PurchaseServiceMode {
@@ -29,13 +29,13 @@ public enum PurchaseServiceMode: String, Sendable, Equatable {
     }
 }
 
-/// Creates a live StoreKit service or, in Debug builds, an in-process simulator.
-public enum PurchaseServiceFactory {
-    public static let environmentKey = "MACAPPFOUNDATION_PURCHASE_MODE"
+/// Creates the package's live StoreKit service or, in Debug builds, its in-process simulator.
+enum PurchaseServiceFactory {
+    static let environmentKey = "MACAPPFOUNDATION_PURCHASE_MODE"
 
     /// Returns the mode that can actually run in the current build.
-    /// Release builds always resolve to ``PurchaseServiceMode/live``.
-    public static func effectiveMode(for requestedMode: PurchaseServiceMode) -> PurchaseServiceMode {
+    /// Release builds always resolve to live StoreKit.
+    static func effectiveMode(for requestedMode: PurchaseServiceMode) -> PurchaseServiceMode {
         #if DEBUG
         requestedMode
         #else
@@ -44,7 +44,7 @@ public enum PurchaseServiceFactory {
     }
 
     @MainActor
-    public static func make(
+    static func make(
         mode requestedMode: PurchaseServiceMode = .live,
         simulatedProducts: [StoreProduct] = [],
         simulatedPersistenceKey: String? = nil,
