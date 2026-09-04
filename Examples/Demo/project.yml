@@ -67,3 +67,6 @@ targets:
     dependencies:
       - package: MacAppFoundation
         product: MacAppFoundation
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
