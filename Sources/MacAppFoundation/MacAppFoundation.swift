@@ -1,3 +1,3 @@
 // MacAppFoundation
 //
-// Feature implementation is added phase-by-phase according to PLAN.md.
+// Focused macOS commerce, Pro experience, Settings Plan pane, and Debug developer tooling.
