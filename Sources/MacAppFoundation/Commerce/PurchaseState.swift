@@ -45,6 +45,7 @@ public struct PurchaseFailure: Error, LocalizedError, Sendable, Equatable, Hasha
         case verificationFailed
         case storefrontUnavailable
         case notEntitled
+        case operationInProgress
         case system
         case timeout
         case userCancelled
@@ -74,6 +75,11 @@ public struct PurchaseFailure: Error, LocalizedError, Sendable, Equatable, Hasha
     public static let verificationFailed = PurchaseFailure(
         code: .verificationFailed,
         message: "The App Store purchase could not be verified."
+    )
+
+    public static let operationInProgress = PurchaseFailure(
+        code: .operationInProgress,
+        message: "Another purchase operation is already in progress."
     )
 
     public static let unknown = PurchaseFailure(
