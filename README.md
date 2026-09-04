@@ -6,9 +6,20 @@ MacAppFoundation intentionally stays small. The app keeps ownership of navigatio
 
 ## Requirements
 
-- macOS 26+
+- macOS 15+
 - Swift 6.2+
 - Swift Package Manager
+
+## Demo app
+
+`Examples/Demo` contains a macOS 15 XcodeGen app wired against the local package checkout. It showcases the complete v1 surface: StoreKit + simulation, paywall, gating, upsells, Plan settings, and the separate Developer Tools window/menu.
+
+```sh
+cd Examples/Demo
+make open
+```
+
+The Debug build starts with in-process simulated purchases, while the included StoreKit configuration is available when simulation is turned off.
 
 ## v1.0.0 scope
 
