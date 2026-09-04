@@ -307,7 +307,7 @@ public final class PurchaseManager {
 
         restoreGeneration += 1
         let generation = restoreGeneration
-        let serviceGeneration = serviceGeneration
+        let capturedServiceGeneration = serviceGeneration
         activity = .restoring
 
         let task = Task { [weak self] () -> RestoreOutcome in
@@ -315,7 +315,7 @@ public final class PurchaseManager {
             return await self.performRestore(
                 timeout: timeout,
                 generation: generation,
-                serviceGeneration: serviceGeneration
+                serviceGeneration: capturedServiceGeneration
             )
         }
         restoreTask = task
