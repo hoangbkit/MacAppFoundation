@@ -59,10 +59,16 @@
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "DE1FD085-A143-4A05-8FC8-2759608CF6F9",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "displayPrice" : "0.99",
+            "internalID" : "A16C956E-22F9-4E4F-B169-C9D6DBD2C444",
+            "numberOfPeriods" : 3,
+            "paymentMode" : "payAsYouGo",
+            "subscriptionPeriod" : "P1M"
+          },
           "localizations" : [
             {
-              "description" : "Demo Pro, billed monthly.",
+              "description" : "Demo Pro, billed monthly after three introductory months.",
               "displayName" : "Demo Pro Monthly",
               "locale" : "en_US"
             }
