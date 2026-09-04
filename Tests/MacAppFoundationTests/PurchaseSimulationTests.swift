@@ -66,7 +66,7 @@ final class PurchaseSimulationTests: XCTestCase {
         await manager.purchase(editedMonthly)
 
         XCTAssertEqual(manager.activity, .failed(failure))
-        XCTAssertFalse(manager.isEntitled)
+        XCTAssertFalse(manager.hasPro)
     }
 
     func testCatalogEditPreservesCatalogAndRestoreFailureSimulation() async {
@@ -94,12 +94,44 @@ final class PurchaseSimulationTests: XCTestCase {
         await manager.prepare()
 
         await manager.setSimulatedPurchasedProductIDs([Self.monthly.id])
-        XCTAssertTrue(manager.isEntitled)
+        XCTAssertTrue(manager.hasPro)
         XCTAssertEqual(manager.simulatedPurchasedProductIDs, Set([Self.monthly.id]))
 
         await manager.setSimulatedPurchasedProductIDs([])
-        XCTAssertFalse(manager.isEntitled)
+        XCTAssertFalse(manager.hasPro)
         XCTAssertTrue(manager.simulatedPurchasedProductIDs.isEmpty)
+    }
+
+    func testSuccessfulPurchasePreservesExistingSimulatedPurchases() async {
+        let lifetime = StoreProduct(
+            id: "pro.lifetime",
+            displayName: "Lifetime",
+            description: "Lifetime Pro",
+            displayPrice: "$79.99",
+            price: 79.99
+        )
+        let configuration = PurchaseConfiguration(
+            productIDs: [Self.monthly.id, lifetime.id],
+            preferredProductID: Self.monthly.id,
+            productLoadAttempts: 1
+        )
+        let manager = PurchaseManager(
+            configuration: configuration,
+            simulated: true,
+            simulatedProducts: [Self.monthly, lifetime],
+            simulatedOperationDelay: .milliseconds(0)
+        )
+        await manager.prepare()
+        await manager.setSimulatedPurchasedProductIDs([lifetime.id])
+
+        let outcome = await manager.purchase(Self.monthly)
+
+        guard case .success = outcome else {
+            return XCTFail("Expected successful simulated purchase")
+        }
+        XCTAssertEqual(manager.simulatedPurchasedProductIDs, [Self.monthly.id, lifetime.id])
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertEqual(manager.activeProduct?.id, lifetime.id)
     }
 
     func testCanInjectPurchaseOutcomes() async {
@@ -107,24 +139,24 @@ final class PurchaseSimulationTests: XCTestCase {
         await manager.prepare()
 
         manager.setSimulatedPurchaseResult(.pending, for: Self.monthly.id)
-        await manager.purchase(Self.monthly)
+        XCTAssertEqual(await manager.purchase(Self.monthly), .pending)
         XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
-        XCTAssertFalse(manager.isEntitled)
+        XCTAssertFalse(manager.hasPro)
 
         manager.clearActivity()
         manager.setSimulatedPurchaseResult(.userCancelled, for: Self.monthly.id)
-        await manager.purchase(Self.monthly)
+        XCTAssertEqual(await manager.purchase(Self.monthly), .userCancelled)
         XCTAssertEqual(manager.activity, .idle)
-        XCTAssertFalse(manager.isEntitled)
+        XCTAssertFalse(manager.hasPro)
 
         let failure = PurchaseFailure(
             code: .networkUnavailable,
             message: "Simulated network failure."
         )
         manager.setSimulatedPurchaseResult(.failure(failure), for: Self.monthly.id)
-        await manager.purchase(Self.monthly)
+        XCTAssertNil(await manager.purchase(Self.monthly))
         XCTAssertEqual(manager.activity, .failed(failure))
-        XCTAssertFalse(manager.isEntitled)
+        XCTAssertFalse(manager.hasPro)
     }
 
     func testCanInjectAndResetCatalogFailure() async {
@@ -164,25 +196,69 @@ final class PurchaseSimulationTests: XCTestCase {
         await manager.resetSimulatedPurchases()
         await manager.purchase(Self.monthly)
 
-        XCTAssertTrue(manager.isEntitled)
+        XCTAssertTrue(manager.hasPro)
         XCTAssertEqual(manager.activity, .idle)
         XCTAssertEqual(manager.productLoadingState, .loaded)
     }
 
-    func testSimulationModeCanBeSelectedFromEnvironment() {
-        XCTAssertEqual(
-            PurchaseServiceMode.fromEnvironment(
-                environment: [PurchaseServiceFactory.environmentKey: "simulated"]
-            ),
-            .simulated
+    func testRestoreSimulatedCatalogDefaultsUsesOriginalAppCatalog() async {
+        let manager = makeManager()
+        await manager.prepare()
+        let yearly = StoreProduct(
+            id: "pro.yearly",
+            displayName: "Yearly",
+            description: "Yearly Pro",
+            displayPrice: "$39.99",
+            price: 39.99,
+            subscriptionPeriod: .init(value: 1, unit: .year)
         )
-        XCTAssertEqual(
-            PurchaseServiceMode.fromEnvironment(
-                fallback: .simulated,
-                environment: [PurchaseServiceFactory.environmentKey: "live"]
-            ),
-            .live
+        await manager.configureSimulatedCatalog(
+            configuration: PurchaseConfiguration(productIDs: [yearly.id]),
+            products: [yearly]
         )
+
+        XCTAssertEqual(manager.simulatedDefaultConfigurationSnapshot.productIDs, [Self.monthly.id])
+        XCTAssertEqual(manager.simulatedDefaultCatalogProducts, [Self.monthly])
+
+        await manager.restoreSimulatedCatalogDefaults()
+
+        XCTAssertEqual(manager.simulatedConfigurationSnapshot.productIDs, [Self.monthly.id])
+        XCTAssertEqual(manager.simulatedCatalogProducts, [Self.monthly])
+        XCTAssertEqual(manager.products, [Self.monthly])
+    }
+
+    func testCatalogChangeDiscardsStaleProductLoadResult() async {
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                productLoadAttempts: 1
+            ),
+            simulated: true,
+            simulatedProducts: [Self.monthly],
+            simulatedOperationDelay: .milliseconds(150)
+        )
+        let staleLoad = Task { await manager.loadProducts(force: true) }
+        try? await Task.sleep(for: .milliseconds(20))
+
+        let yearly = StoreProduct(
+            id: "pro.yearly",
+            displayName: "Yearly",
+            description: "Yearly Pro",
+            displayPrice: "$39.99",
+            price: 39.99,
+            subscriptionPeriod: .init(value: 1, unit: .year)
+        )
+        await manager.configureSimulatedCatalog(
+            configuration: PurchaseConfiguration(
+                productIDs: [yearly.id],
+                productLoadAttempts: 1
+            ),
+            products: [yearly]
+        )
+        _ = await staleLoad.value
+
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+        XCTAssertEqual(manager.products, [yearly])
     }
 
     private func makeManager() -> PurchaseManager {
