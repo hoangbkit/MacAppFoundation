@@ -8,6 +8,9 @@ public enum PurchasePlanKind: Sendable, Equatable {
     /// A one-time entitlement product, normally a StoreKit non-consumable.
     case lifetime
 
+    /// A StoreKit type MacAppFoundation doesn't manage as a Pro entitlement.
+    case unsupported
+
     public var isRecurring: Bool {
         if case .recurring = self { return true }
         return false
@@ -39,6 +42,8 @@ public enum PurchasePlanKind: Sendable, Equatable {
             case .unknown:
                 return "Recurring"
             }
+        case .unsupported:
+            return "Unsupported"
         }
     }
 
@@ -48,6 +53,8 @@ public enum PurchasePlanKind: Sendable, Equatable {
             return "Billed every \(period.shortLabel)"
         case .lifetime:
             return "One-time purchase, lifetime access"
+        case .unsupported:
+            return "Unsupported product type"
         }
     }
 }
@@ -81,8 +88,21 @@ public extension StoreProduct.IntroductoryOffer {
 }
 
 public extension StoreProduct {
+    /// Whether this StoreKit product type is supported by the package's Pro entitlement flow.
+    var isSupportedProProduct: Bool {
+        type == .autoRenewable || type == .nonConsumable
+    }
+
     var planKind: PurchasePlanKind {
-        subscriptionPeriod.map(PurchasePlanKind.recurring) ?? .lifetime
+        switch type {
+        case .autoRenewable:
+            guard let subscriptionPeriod else { return .unsupported }
+            return .recurring(subscriptionPeriod)
+        case .nonConsumable:
+            return .lifetime
+        case .consumable, .nonRenewable, .unknown:
+            return .unsupported
+        }
     }
 
     var isRecurring: Bool { planKind.isRecurring }
@@ -93,7 +113,10 @@ public extension StoreProduct {
     /// Returns the configured introductory offer only when StoreKit says the
     /// current customer is eligible to redeem it.
     var eligibleIntroductoryOffer: IntroductoryOffer? {
-        guard isRecurring, let introductoryOffer, introductoryOffer.isEligible else { return nil }
+        guard type == .autoRenewable,
+              let introductoryOffer,
+              introductoryOffer.isEligible
+        else { return nil }
         return introductoryOffer
     }
 
@@ -106,7 +129,7 @@ public extension StoreProduct {
     /// Localized recurring price plus a compact billing cadence, such as
     /// "$39.99/year" or "$5.99 every 3 months".
     var recurringPriceDescription: String? {
-        guard let period = subscriptionPeriod else { return nil }
+        guard type == .autoRenewable, let period = subscriptionPeriod else { return nil }
         if period.value == 1 {
             return "\(displayPrice)/\(period.shortLabel)"
         }
@@ -148,8 +171,9 @@ public extension StoreProduct {
 /// Produces accurate legal copy for recurring, lifetime, or mixed catalogs.
 public enum PurchasePlanDisclosure {
     public static func text(for products: [StoreProduct]) -> String {
-        let hasRecurring = products.contains(where: \.isRecurring)
-        let hasLifetime = products.contains(where: \.isLifetime)
+        let supportedProducts = products.filter(\.isSupportedProProduct)
+        let hasRecurring = supportedProducts.contains(where: \.isRecurring)
+        let hasLifetime = supportedProducts.contains(where: \.isLifetime)
 
         switch (hasRecurring, hasLifetime) {
         case (true, true):
