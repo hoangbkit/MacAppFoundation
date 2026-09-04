@@ -96,11 +96,8 @@ public struct StoreProduct: Identifiable, Sendable, Equatable {
     }
 }
 
-/// Preferred neutral name for a StoreKit product exposed by MacAppFoundation.
-public typealias PurchaseProduct = StoreProduct
-
-public enum ProductCatalog {
-    public static func ordered(
+enum ProductCatalog {
+    static func ordered(
         _ products: [StoreProduct],
         using productIDs: [String]
     ) -> [StoreProduct] {
