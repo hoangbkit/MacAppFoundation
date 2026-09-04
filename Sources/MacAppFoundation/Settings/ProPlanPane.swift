@@ -69,12 +69,14 @@ public struct ProPlanPane: View {
                         .foregroundStyle(.secondary)
 
                         if purchaseManager.hasPro {
-                            Link(
-                                configuration.manageSubscriptionTitle,
-                                destination: configuration.manageSubscriptionURL
-                            )
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.accentColor)
+                            if purchaseManager.activeProduct?.isRecurring == true {
+                                Link(
+                                    configuration.manageSubscriptionTitle,
+                                    destination: configuration.manageSubscriptionURL
+                                )
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.accentColor)
+                            }
                         } else {
                             Button(configuration.upgradeButtonTitle, action: onUpgrade)
                                 .buttonStyle(.plain)
