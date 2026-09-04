@@ -66,4 +66,25 @@ final class EntitlementEvaluatorTests: XCTestCase {
         XCTAssertEqual(snapshot.activeProductIDs, ["pro.monthly", "pro.yearly"])
         XCTAssertEqual(snapshot.latestExpirationDate, yearlyExpiration)
     }
+
+    func testPermanentEntitlementMakesSnapshotNonExpiring() throws {
+        let state = EntitlementEvaluator.evaluate(
+            [
+                EntitlementRecord(
+                    productID: "pro.monthly",
+                    expirationDate: now.addingTimeInterval(3_000)
+                ),
+                EntitlementRecord(productID: "pro.lifetime")
+            ],
+            entitledProductIDs: entitledIDs,
+            at: now
+        )
+
+        guard case .active(let snapshot) = state else {
+            return XCTFail("Expected an active entitlement")
+        }
+
+        XCTAssertEqual(snapshot.activeProductIDs, ["pro.monthly", "pro.lifetime"])
+        XCTAssertNil(snapshot.latestExpirationDate)
+    }
 }
