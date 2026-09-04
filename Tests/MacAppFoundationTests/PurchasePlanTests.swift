@@ -15,6 +15,7 @@ final class PurchasePlanTests: XCTestCase {
         XCTAssertEqual(product.planKind, .recurring(.init(value: 1, unit: .week)))
         XCTAssertTrue(product.isRecurring)
         XCTAssertFalse(product.isLifetime)
+        XCTAssertTrue(product.isSupportedProProduct)
         XCTAssertEqual(product.planLabel, "Weekly")
         XCTAssertEqual(product.billingDescription, "Billed every week")
     }
@@ -48,6 +49,32 @@ final class PurchasePlanTests: XCTestCase {
         XCTAssertEqual(yearly.planLabel, "Yearly")
         XCTAssertEqual(lifetime.planLabel, "Lifetime")
         XCTAssertTrue(lifetime.isLifetime)
+        XCTAssertTrue(lifetime.isSupportedProProduct)
+    }
+
+    func testUnsupportedProductTypesAreNotLifetimePlans() {
+        let consumable = StoreProduct(
+            id: "credits",
+            displayName: "Credits",
+            description: "",
+            displayPrice: "$0.99",
+            price: 0.99,
+            type: .consumable
+        )
+        let nonRenewing = StoreProduct(
+            id: "pass",
+            displayName: "Pass",
+            description: "",
+            displayPrice: "$9.99",
+            price: 9.99,
+            type: .nonRenewable
+        )
+
+        XCTAssertEqual(consumable.planKind, .unsupported)
+        XCTAssertFalse(consumable.isLifetime)
+        XCTAssertFalse(consumable.isSupportedProProduct)
+        XCTAssertEqual(nonRenewing.planKind, .unsupported)
+        XCTAssertFalse(nonRenewing.isSupportedProProduct)
     }
 
     func testEligibleFreeTrialProducesTrialAwarePaywallCopy() {
