@@ -19,8 +19,8 @@ XcodeGen 2.45.4+ is required.
 - one shared `PurchaseManager`
 - live StoreKit path using `Configuration.storekit`
 - Debug in-process purchase simulator
-- monthly, yearly + 7-day trial, and lifetime products
-- product loading, purchase, restore, entitlement refresh, and foreground lifecycle refresh
+- Monthly with three months of paid introductory pricing, Yearly + 7-day free trial, and Lifetime products
+- product loading, purchase outcomes, restore, entitlement refresh, and foreground lifecycle refresh
 - `ProPaywallView` including trial/intro copy, restore, legal links, and Redeem Code
 - `ProBadge`, `ProGate`, `ProLockedOverlay`, `ProGateButton`, and `ProLockPopover`
 - existing-content premium access policy
@@ -31,4 +31,4 @@ XcodeGen 2.45.4+ is required.
 - developer replays, actions, toggles, values, and custom destinations
 - full simulated-plan editor, entitlement forcing, failures, latency, trials, and introductory offers through Developer Tools
 
-The app launches in simulated purchase mode in Debug so every purchase flow works without an App Store account. Turn simulation off in Developer Tools or Commerce to exercise the StoreKit-testing configuration instead.
+The app launches in simulated purchase mode in Debug so every purchase flow works without an App Store account. Turn simulation off in Developer Tools or Commerce to exercise the matching StoreKit-testing catalog instead.
