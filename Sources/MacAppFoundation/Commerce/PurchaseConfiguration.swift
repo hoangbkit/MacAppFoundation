@@ -5,7 +5,7 @@ public struct PurchaseConfiguration: Sendable, Equatable {
     /// Product identifiers in the order they should be presented.
     public let productIDs: [String]
 
-    /// Product identifiers that unlock the app entitlement.
+    /// Managed product identifiers that unlock the app entitlement.
     public let entitledProductIDs: Set<String>
 
     /// Product selected by default when the catalog is loaded.
@@ -25,10 +25,11 @@ public struct PurchaseConfiguration: Sendable, Equatable {
         productLoadAttempts: Int = 3
     ) {
         let normalizedProductIDs = Self.uniqueNonEmptyValues(productIDs)
+        let managedProductIDs = Set(normalizedProductIDs)
         let normalizedEntitledIDs = Set(
-            (entitledProductIDs ?? Set(normalizedProductIDs))
+            (entitledProductIDs ?? managedProductIDs)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
+                .filter { !$0.isEmpty && managedProductIDs.contains($0) }
         )
 
         self.productIDs = normalizedProductIDs
