@@ -12,21 +12,23 @@ The release has three pillars:
 
 - StoreKit 2 product loading and ordering
 - verified entitlement evaluation
-- purchase and restore flows
-- transaction update observation
+- purchase and restore flows with explicit purchase outcomes
+- transaction update observation scoped to the manager's configured products
 - foreground entitlement refresh
-- recurring and lifetime products
-- normalized plan/billing metadata
+- auto-renewable subscriptions and non-consumable lifetime products for Pro entitlement surfaces
+- normalized StoreKit product type and plan/billing metadata
 - trial and introductory-offer eligibility/copy
+- mixed recurring + lifetime entitlement handling with lifetime precedence
 - Debug-only in-process purchase simulator
-- simulated catalog, ordering, preferred plan, entitlement mapping, outcomes, failures, latency, and reset controls
+- simulated catalog, ordering, preferred plan, entitlement mapping, outcomes, failures, latency, reset controls, and immutable app defaults
 
 ### Pro experience
 
 - native two-column macOS `ProPaywallView`
 - app-owned paywall copy/legal links/presentation
+- paywall restricted to configured products that actually grant Pro
 - trial-aware CTA and disclosure
-- automatic monthly-vs-yearly savings badge
+- app-supplied highlighted badges with automatic monthly-vs-yearly savings fallback
 - restore and Redeem Code support
 - `ProGate`, `ProGateButton`, `ProBadge`, `ProLockedOverlay`, and `ProUpsellView`
 - access policy that can keep existing user-created content accessible after entitlement expiry
@@ -35,6 +37,7 @@ The release has three pillars:
 
 - generalized direct adaptation of Spokio's Plan pane
 - Free/Pro status card and active-plan label
+- lifetime entitlement precedence over an overlapping recurring entitlement
 - recurring-subscription management action
 - registered Pro feature list
 - app-owned native `Settings` scene composition
@@ -47,7 +50,7 @@ The release has three pillars:
 
 - macOS 15 XcodeGen project under `Examples/Demo`
 - local-package dependency on MacAppFoundation
-- StoreKit Testing configuration with Monthly, Yearly + 7-day trial, and Lifetime products
+- StoreKit Testing configuration matching the simulator: Monthly paid introductory pricing, Yearly + 7-day free trial, and Lifetime
 - Debug simulator enabled by default
 - showcase navigation for commerce, paywall, gating, upsells, Settings/Plan, and Developer Tools
 - real app-owned paywall and upsell windows
@@ -61,7 +64,8 @@ The canonical app-facing names are:
 - `PurchaseConfiguration`
 - `PurchaseFeature`
 - `PurchaseManager`
-- `StoreProduct`
+- `PurchaseOutcome` / `RestoreOutcome`
+- `StoreProduct` including normalized StoreKit product type
 - `ProPaywallConfiguration`
 - `ProPaywallView`
 - `PremiumFeature` / `PremiumAccessPolicy`
@@ -72,7 +76,7 @@ The canonical app-facing names are:
 
 `PurchaseManager.hasPro` is the normal authorization check. Verified StoreKit transaction state remains the production source of truth.
 
-The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlement model, legacy paid-app migration, or an old `PurchaseController` compatibility alias.
+The v1 API intentionally does not expose the internal StoreKit service/factory layer, carry PaywallKit's persisted `hasPro` entitlement model, include legacy paid-app migration, or provide an old `PurchaseController` compatibility alias.
 
 ## Release checklist
 
@@ -80,7 +84,9 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 
 - [ ] Confirm `master` contains only the intended Commerce, Premium, Settings, and Developer source areas.
 - [ ] Confirm there is no `PurchaseController` public alias or duplicate manager implementation.
-- [ ] Confirm `StoreProduct` is the single public normalized product model.
+- [ ] Confirm `StoreProduct` is the single public normalized product model and preserves StoreKit product type.
+- [ ] Confirm StoreKit service/factory implementation types remain internal.
+- [ ] Confirm `PurchaseManager.hasPro` is the single normal Pro authorization property.
 - [ ] Confirm `ProPlanPane` is the single package-owned Plan settings surface.
 - [ ] Confirm Developer Tools are wrapped in `#if DEBUG` and remain outside Settings.
 - [ ] Confirm no UIKit or iOS-only view modifiers remain in the macOS package.
@@ -89,11 +95,18 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 ### Commerce
 
 - [ ] Validate monthly, yearly, and lifetime product catalogs.
+- [ ] Validate consumable/non-renewing products are not misclassified as lifetime Pro plans.
 - [ ] Validate verified purchase -> `hasPro` transition.
+- [ ] Validate `purchase(_:)` returns success, pending, or cancellation and exposes failures through activity.
 - [ ] Validate cancelled and pending purchases do not unlock Pro.
+- [ ] Validate purchase and restore cannot overlap.
+- [ ] Validate cancelling restore cannot clear an unrelated purchase state.
 - [ ] Validate restore: restored, nothing-to-restore, and failure cases.
 - [ ] Validate foreground entitlement refresh.
-- [ ] Validate active product and preferred product behavior.
+- [ ] Validate transaction observation handles configured manager products and leaves unrelated app transactions untouched.
+- [ ] Validate stale live/simulator product and entitlement requests cannot overwrite the currently active backend.
+- [ ] Validate mixed subscription + lifetime ownership resolves the active plan to Lifetime.
+- [ ] Validate permanent ownership produces no misleading subscription expiry date.
 
 ### Trial / introductory offers
 
@@ -110,16 +123,21 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Validate product-to-entitlement mapping.
 - [ ] Validate forced Free/Pro entitlement.
 - [ ] Validate success, pending, cancellation, and injected failure outcomes.
+- [ ] Validate a new simulated purchase does not erase earlier simulated purchases.
 - [ ] Validate product-load and restore failures.
 - [ ] Validate latency controls.
 - [ ] Validate simulator edits never mutate production `PurchaseConfiguration`.
+- [ ] Validate Restore app defaults returns to the immutable app-supplied simulator catalog/configuration.
+- [ ] Validate the plan editor rejects duplicate IDs across enabled and disabled catalog rows.
 - [ ] Validate Release builds always resolve to live StoreKit.
 
 ### Paywall / gating
 
 - [ ] Validate product loading/retry states.
-- [ ] Validate highlighted plan and computed yearly savings badge.
-- [ ] Validate successful purchase callback only fires when the purchase newly unlocks Pro.
+- [ ] Validate only supported products in `entitledProductIDs` appear as Pro plans.
+- [ ] Validate explicitly configured highlighted badges win; otherwise yearly savings can be computed.
+- [ ] Validate successful purchase callback fires for both first-time unlocks and successful plan changes.
+- [ ] Validate cancelled/pending/failed purchases do not fire the successful purchase callback.
 - [ ] Validate restore feedback and callback.
 - [ ] Validate Redeem Code flow and entitlement refresh on macOS 15+.
 - [ ] Validate Terms and Privacy links.
@@ -131,6 +149,7 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Validate compact Spokio-style `TabView` integration at the app level.
 - [ ] Validate Free and Pro status presentation.
 - [ ] Validate MONTHLY / YEARLY / LIFETIME / PRO label derivation.
+- [ ] Validate Lifetime wins when a recurring entitlement is also active.
 - [ ] Validate Manage Subscription only appears for an active recurring product.
 - [ ] Validate Upgrade to Pro remains an app-owned presentation action.
 - [ ] Validate manager-provided features and app-overridden features.
@@ -151,7 +170,7 @@ The v1 API intentionally does not carry PaywallKit's persisted `hasPro` entitlem
 - [ ] Confirm the generated target deployment target is macOS 15.0.
 - [ ] Confirm the demo resolves the local `../..` MacAppFoundation package.
 - [ ] Validate simulated purchases at launch.
-- [ ] Switch to StoreKit Testing and validate the included `.storekit` catalog.
+- [ ] Switch to StoreKit Testing and validate Monthly paid intro, Yearly trial, and Lifetime against the included `.storekit` catalog.
 - [ ] Open every showcase section and every app-owned window.
 - [ ] Open General / Plan / About Settings.
 - [ ] Open Developer Tools from the Developer menu and exercise replay/custom sections.
