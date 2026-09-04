@@ -2,6 +2,11 @@
 
 A focused macOS foundation package for StoreKit 2 commerce, Pro paywalls/gating, a Spokio-style Plan settings pane, and debug purchase tooling.
 
+> [!IMPORTANT]
+> **Public source, not a community-maintained OSS project.**
+>
+> This repository is published primarily for transparency, reuse, and reference. It is maintained for the author's own apps and priorities, not as a community project. Issues, pull requests, feature requests, support requests, and roadmap commitments should not be expected to receive a response or be accepted. Fork it and adapt it to your needs if the current API or direction does not fit your project.
+
 MacAppFoundation intentionally stays small. The app keeps ownership of navigation, branding, general settings, About content, product copy, and domain behavior.
 
 ## Requirements
@@ -343,6 +348,14 @@ MacAppFoundation v1.0.0 intentionally does **not** include:
 - AI features
 
 This keeps the package focused on reusable macOS monetization infrastructure.
+
+## Project policy
+
+MacAppFoundation is developed primarily as shared infrastructure for the author's own applications. The repository being public does not imply a community roadmap, guaranteed maintenance for third-party use cases, support SLA, or an obligation to review external contributions.
+
+External users should treat releases as useful snapshots, pin versions they depend on, and be prepared to maintain a fork when their requirements diverge.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution policy.
 
 ## Release
 
