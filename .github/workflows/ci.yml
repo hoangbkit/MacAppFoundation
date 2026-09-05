@@ -18,8 +18,10 @@ jobs:
         include:
           - arch: Apple Silicon
             runner: macos-15
+            xcode_arch: arm64
           - arch: Intel
             runner: macos-15-intel
+            xcode_arch: x86_64
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -46,6 +48,8 @@ jobs:
         working-directory: Examples/Demo
         run: xcodegen generate --spec project.yml
 
+      # Xcode 26's asset compiler crashes on Icon Composer .icon packages on macOS 15 CI.
+      # Exclude only the app icon; the package and all demo Swift sources still build normally.
       - name: Build demo app
         working-directory: Examples/Demo
         run: |
@@ -53,7 +57,9 @@ jobs:
             -project MacAppFoundationDemo.xcodeproj \
             -scheme MacAppFoundationDemo \
             -configuration Debug \
-            -destination 'platform=macOS' \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
             build
