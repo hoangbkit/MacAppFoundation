@@ -19,12 +19,14 @@ struct MacAppFoundationDemoApp: App {
     )
 
     private let purchases = DemoCommerce.manager
+    private let analytics = DemoAnalytics.client
 
     var body: some Scene {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
             ContentView(purchaseManager: purchases)
                 .environment(demoState)
                 .managesPurchases(purchases)
+                .managesAnalytics(analytics)
         }
         .defaultSize(width: 1080, height: 700)
         .defaultLaunchBehavior(onboarding.mainWindowLaunchBehavior)
@@ -212,6 +214,39 @@ struct MacAppFoundationDemoApp: App {
                                 role: .destructive
                             ) {
                                 demoState.reset()
+                            }
+                        )
+                    ]
+                ),
+                FoundationDeveloperSection(
+                    title: "Analytics",
+                    items: [
+                        .action(
+                            FoundationDeveloperAction(
+                                title: "Track Demo Event",
+                                systemImage: "chart.bar"
+                            ) {
+                                try await analytics.track(
+                                    "demo_action",
+                                    dimension: "developer_tools"
+                                )
+                            }
+                        ),
+                        .action(
+                            FoundationDeveloperAction(
+                                title: "Flush Analytics",
+                                systemImage: "arrow.up.circle"
+                            ) {
+                                try await analytics.flush()
+                            }
+                        ),
+                        .action(
+                            FoundationDeveloperAction(
+                                title: "Reset Analytics State",
+                                systemImage: "trash",
+                                role: .destructive
+                            ) {
+                                try await analytics.resetLocalState()
                             }
                         )
                     ]
