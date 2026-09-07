@@ -41,7 +41,9 @@ public struct OnboardingView<Content: View, LeadingActions: View, Message: View,
 /// The framework-owned footer used by ``OnboardingView``.
 ///
 /// The center message stays visually centered in the window independently of
-/// the width of the actions on either side.
+/// the width of the actions on either side. Leading actions use the secondary
+/// onboarding button style and trailing actions use the primary style by default.
+/// Apps can still apply a more specific button style to an individual action.
 public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActions: View>: View {
     private let leadingActions: LeadingActions
     private let message: Message
@@ -64,8 +66,12 @@ public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActi
 
             HStack(spacing: 8) {
                 leadingActions
+                    .buttonStyle(OnboardingButtonStyle(.secondary))
+
                 Spacer(minLength: 16)
+
                 trailingActions
+                    .buttonStyle(OnboardingButtonStyle(.primary))
             }
         }
         .frame(maxWidth: .infinity)
