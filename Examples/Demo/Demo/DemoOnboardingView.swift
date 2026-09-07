@@ -31,7 +31,6 @@ struct DemoOnboardingView: View {
             Button(onboarding.isLastStep ? "Get Started" : "Continue") {
                 continueFlow()
             }
-            .buttonStyle(.borderedProminent)
         }
         .frame(width: 620, height: 500)
     }
