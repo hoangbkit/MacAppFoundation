@@ -20,10 +20,6 @@ struct MacAppFoundationDemoApp: App {
     private let purchases: PurchaseManager
 
     init() {
-        #if DEBUG
-        DemoUITestLaunchConfiguration.apply()
-        #endif
-
         _demoState = State(initialValue: DemoState())
         _themeStore = State(initialValue: MacAppThemeStore(configuration: DemoTheme.configuration))
         _settingsRouter = State(initialValue: MacAppSettingsRouter())
@@ -128,7 +124,7 @@ struct MacAppFoundationDemoApp: App {
             .macAppTheme(themeStore)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 860, height: paywallDefaultHeight)
+        .defaultSize(width: 860, height: 600)
         .windowResizability(.contentSize)
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
@@ -167,14 +163,6 @@ struct MacAppFoundationDemoApp: App {
             .macAppTheme(themeStore)
         }
         .windowStyle(.hiddenTitleBar)
-    }
-
-    private var paywallDefaultHeight: CGFloat {
-        #if DEBUG
-        DemoUITestLaunchConfiguration.paywallDefaultHeight
-        #else
-        600
-        #endif
     }
 
     #if DEBUG
