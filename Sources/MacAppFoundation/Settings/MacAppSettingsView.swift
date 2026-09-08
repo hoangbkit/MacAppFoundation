@@ -193,10 +193,13 @@ public struct MacAppSettingsView: View {
     }
 
     private func consumeRouterRequest() {
-        guard let requestedPaneID = router?.requestedPaneID,
+        guard let router,
+              let requestedPaneID = router.requestedPaneID,
               paneIDs.contains(requestedPaneID)
         else { return }
+
         selectionID = requestedPaneID
+        router.clear()
     }
 }
 
