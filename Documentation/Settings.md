@@ -59,6 +59,23 @@ ACCOUNT
 
 `MacAppPlanSettingsPane` embeds `ProPlanPane`. MAF owns the pane layout, while the host app owns paywall presentation through `onUpgrade`.
 
+## Theme picker
+
+Appearance uses the reusable `MacAppThemePicker` and `MacAppThemePreviewCard` components. Cards preview each candidate theme using its own canvas, surface, text, selection, separator, and accent roles rather than the currently active theme.
+
+The picker displays the theme's preferred appearance as `System`, `Light`, or `Dark`, supports app-defined custom themes, preserves the host app's configured order, and exposes selection through a callback rather than owning persistence.
+
+```swift
+MacAppThemePicker(
+    themes: themeStore.configuration.themes,
+    selectedThemeID: themeStore.selectedThemeID
+) { id in
+    themeStore.select(id)
+}
+```
+
+Theme cards support pointer hover, pressed feedback, keyboard focus, accessibility labels/values, and macOS Reduce Motion. The same Reduce Motion rule is also applied to MAF's shared button style, onboarding/paywall buttons, and compact Pro plan control.
+
 ## Apps without commerce
 
 Apps that only need Appearance can use the lighter convenience initializer:
