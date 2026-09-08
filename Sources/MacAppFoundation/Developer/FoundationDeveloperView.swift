@@ -10,6 +10,8 @@ import SwiftUI
 /// controls in Settings.
 @MainActor
 public struct FoundationDeveloperView: View {
+    @Environment(\.macAppTheme) private var theme
+
     private let purchaseManager: PurchaseManager
     private let configuration: FoundationDeveloperConfiguration
 
@@ -40,8 +42,13 @@ public struct FoundationDeveloperView: View {
                 additionalSections
             }
             .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .background(theme.canvas)
             .navigationTitle(MacAppFoundationDeveloperTools.windowTitle)
         }
+        .foregroundStyle(theme.textPrimary)
+        .tint(theme.accent)
+        .background(theme.canvas)
         .frame(
             minWidth: 620,
             idealWidth: MacAppFoundationDeveloperTools.defaultWidth,
@@ -221,7 +228,7 @@ public struct FoundationDeveloperView: View {
             if let diagnosticsStatus {
                 Text(diagnosticsStatus)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
             }
         }
     }
