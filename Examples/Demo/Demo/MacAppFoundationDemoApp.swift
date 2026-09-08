@@ -90,8 +90,13 @@ struct MacAppFoundationDemoApp: App {
             defaultWidth: 620,
             defaultHeight: 500
         ) {
-            DemoOnboardingView(onboarding: onboarding)
-                .macAppTheme(themeStore)
+            VStack(spacing: 0) {
+                MacAppWindowDragRegion()
+
+                DemoOnboardingView(onboarding: onboarding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .macAppTheme(themeStore)
         }
 
         Window("Demo Pro", id: DemoWindowID.paywall) {
