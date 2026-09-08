@@ -20,7 +20,8 @@ XcodeGen 2.45.4+ is required.
 - one shared `MacAppThemeStore` injected into every Demo scene root
 - a host-selected theme catalog containing built-ins plus the app-defined **Demo Violet** theme
 - live theme switching through the reusable `MacAppThemePicker`
-- BYOKchat-style `MacAppSettingsView` with app-defined General/About panes and built-in Appearance/Plan panes
+- flat `MacAppSettingsView` with app-defined General/About panes and built-in Appearance/Plan panes
+- optional grouped Settings remains available for larger apps
 - `MacAppSettingsRouter` routing the compact Pro control directly to the Plan pane
 - live StoreKit path using `Configuration.storekit`
 - Debug in-process purchase simulator
@@ -37,18 +38,15 @@ XcodeGen 2.45.4+ is required.
 
 The Demo deliberately applies the same `MacAppThemeStore` to the main window, onboarding, paywall, upsell, Developer Tools, and Settings roots. This demonstrates the required multi-scene integration pattern: SwiftUI scene environments do not automatically cross scene boundaries, but all scenes stay synchronized when they share the same observable store.
 
-Settings demonstrates exact interleaving of MAF and app-owned content:
+With only four Settings destinations, the Demo uses the recommended flat layout:
 
 ```text
-APPLICATION
-  General      (Demo)
-  Appearance   (MAF)
-
-ACCOUNT
-  Plan         (MAF)
-
-ABOUT
-  About        (Demo)
+General      (Demo)
+Appearance   (MAF)
+Plan         (MAF)
+About        (Demo)
 ```
+
+Apps with larger Settings surfaces can opt into `MacAppSettingsSection` and the `sections:` initializer to add labeled groups.
 
 The app launches in simulated purchase mode in Debug so every purchase flow works without an App Store account. Turn simulation off in Developer Tools or Commerce to exercise the matching StoreKit-testing catalog instead.
