@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// The scene is presented on launch until ``OnboardingState/isCompleted`` is true,
 /// opts out of window restoration, and can still be reopened explicitly with
-/// `openWindow(id:)` for replay.
+/// `openWindow(id:)` for replay. It uses the same full-size transparent title-bar
+/// treatment as BYOKchat's main macOS window while retaining native traffic lights.
 @MainActor
 public struct OnboardingWindow<Content: View>: Scene {
     private let title: String
@@ -32,8 +33,14 @@ public struct OnboardingWindow<Content: View>: Scene {
 
     public var body: some Scene {
         Window(title, id: id) {
-            content
+            VStack(spacing: 0) {
+                MacAppWindowDragRegion()
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .macAppFullSizeWindowChrome()
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: defaultWidth, height: defaultHeight)
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
