@@ -1,3 +1,4 @@
+import SwiftUI
 import Testing
 @testable import MacAppFoundation
 
@@ -41,8 +42,10 @@ struct MacAppSettingsTests {
         )
 
         let expectedIDs: [MacAppSettingsPaneID] = ["general", .appearance]
-        #expect(section.panes.map(\.id) == expectedIDs)
-        #expect(section.panes.map(\.title) == ["General", "Appearance"])
+        let actualIDs = section.panes.map { $0.id }
+        let actualTitles = section.panes.map { $0.title }
+        #expect(actualIDs == expectedIDs)
+        #expect(actualTitles == ["General", "Appearance"])
     }
 
     @MainActor
