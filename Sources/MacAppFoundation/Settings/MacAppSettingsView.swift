@@ -3,8 +3,9 @@ import SwiftUI
 /// BYOKchat-inspired macOS Settings shell with an app-extensible pane model.
 ///
 /// MacAppFoundation owns the themed sidebar, selection interactions, detail
-/// header, separators, and content canvas. Apps own the pane content and may
-/// freely choose the sections, ordering, and identifiers they expose.
+/// header, separators, and content canvas. Flat panes are the recommended
+/// default for small Settings surfaces; apps can opt into labeled sections when
+/// stronger grouping is useful.
 @MainActor
 public struct MacAppSettingsView: View {
     private let title: String
@@ -15,6 +16,31 @@ public struct MacAppSettingsView: View {
     @Environment(\.macAppTheme) private var theme
     @State private var selectionID: MacAppSettingsPaneID?
 
+    /// Creates the recommended flat Settings sidebar.
+    public init(
+        title: String = "Settings",
+        systemImage: String = "gearshape.fill",
+        panes: [MacAppSettingsPane],
+        initialSelection: MacAppSettingsPaneID? = nil,
+        router: MacAppSettingsRouter? = nil
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.sections = [
+            MacAppSettingsSection(
+                id: "macappfoundation.flat",
+                title: "",
+                panes: panes
+            )
+        ]
+        self.router = router
+        _selectionID = State(initialValue: initialSelection)
+    }
+
+    /// Creates a Settings sidebar with explicit labeled sections.
+    ///
+    /// Prefer the `panes:` initializer for smaller apps. Sections are useful when
+    /// a larger Settings surface benefits from distinct conceptual groups.
     public init(
         title: String = "Settings",
         systemImage: String = "gearshape.fill",
@@ -95,13 +121,15 @@ public struct MacAppSettingsView: View {
     }
 
     private func settingsSidebarSection(_ section: MacAppSettingsSection) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(section.title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(theme.textMuted.opacity(0.82))
-                .tracking(0.55)
-                .padding(.horizontal, 9)
-                .padding(.bottom, 1)
+        VStack(alignment: .leading, spacing: section.title.isEmpty ? 0 : 5) {
+            if !section.title.isEmpty {
+                Text(section.title.uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(theme.textMuted.opacity(0.82))
+                    .tracking(0.55)
+                    .padding(.horizontal, 9)
+                    .padding(.bottom, 1)
+            }
 
             ForEach(section.panes) { pane in
                 MacAppSettingsSidebarRow(
