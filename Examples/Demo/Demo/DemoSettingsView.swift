@@ -17,56 +17,38 @@ struct DemoSettingsView: View {
 
     var body: some View {
         MacAppSettingsView(
-            sections: sections,
+            panes: panes,
             initialSelection: .demoGeneral,
             router: settingsRouter
         )
     }
 
-    private var sections: [MacAppSettingsSection] {
+    private var panes: [MacAppSettingsPane] {
         [
-            MacAppSettingsSection(
-                id: .application,
-                title: "Application",
-                panes: [
-                    MacAppSettingsPane(
-                        id: .demoGeneral,
-                        title: "General",
-                        subtitle: "Demo behavior and showcase preferences.",
-                        systemImage: "gearshape"
-                    ) {
-                        DemoGeneralSettingsPane(demoState: demoState)
-                    },
-                    .appearance(themeStore: themeStore)
-                ]
+            MacAppSettingsPane(
+                id: .demoGeneral,
+                title: "General",
+                subtitle: "Demo behavior and showcase preferences.",
+                systemImage: "gearshape"
+            ) {
+                DemoGeneralSettingsPane(demoState: demoState)
+            },
+            .appearance(themeStore: themeStore),
+            .plan(
+                purchaseManager: purchaseManager,
+                configuration: DemoCommerce.planConfiguration,
+                onUpgrade: {
+                    openWindow(id: DemoWindowID.paywall)
+                }
             ),
-            MacAppSettingsSection(
-                id: .account,
-                title: "Account",
-                panes: [
-                    .plan(
-                        purchaseManager: purchaseManager,
-                        configuration: DemoCommerce.planConfiguration,
-                        onUpgrade: {
-                            openWindow(id: DemoWindowID.paywall)
-                        }
-                    )
-                ]
-            ),
-            MacAppSettingsSection(
-                id: .advanced,
+            MacAppSettingsPane(
+                id: .demoAbout,
                 title: "About",
-                panes: [
-                    MacAppSettingsPane(
-                        id: .demoAbout,
-                        title: "About",
-                        subtitle: "How the Demo composes MacAppFoundation.",
-                        systemImage: "info.circle"
-                    ) {
-                        DemoAboutSettingsPane()
-                    }
-                ]
-            )
+                subtitle: "How the Demo composes MacAppFoundation.",
+                systemImage: "info.circle"
+            ) {
+                DemoAboutSettingsPane()
+            }
         ]
     }
 }
@@ -147,7 +129,7 @@ private struct DemoAboutSettingsPane: View {
                     VStack(alignment: .leading, spacing: 9) {
                         architectureRow("One shared PurchaseManager")
                         architectureRow("One shared MacAppThemeStore across scenes")
-                        architectureRow("Reusable MAF Settings shell")
+                        architectureRow("Flat MAF Settings sidebar for small apps")
                         architectureRow("App-injected General and About panes")
                         architectureRow("Separate debug Developer Tools window")
                     }
