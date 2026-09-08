@@ -1,11 +1,11 @@
 import XCTest
 
-@MainActor
 final class MacAppFoundationDemoLaunchTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testCleanLaunchShowsOnboarding() {
         let app = DemoAppLauncher.launch()
         defer { app.terminate() }
