@@ -152,6 +152,7 @@ struct MacAppFoundationDemoApp: App {
             .environment(demoState)
             .macAppTheme(themeStore)
         }
+        .windowStyle(.hiddenTitleBar)
     }
 
     #if DEBUG
