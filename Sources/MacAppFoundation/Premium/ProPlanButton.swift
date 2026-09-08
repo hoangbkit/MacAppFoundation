@@ -88,6 +88,7 @@ private struct ProPlanButtonStyleBody<Label: View>: View {
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.macAppTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
 
     var body: some View {
@@ -102,9 +103,19 @@ private struct ProPlanButtonStyleBody<Label: View>: View {
             }
             .contentShape(Capsule())
             .opacity(isEnabled ? 1 : 0.5)
-            .onHover { isHovered = $0 }
-            .animation(.easeOut(duration: 0.12), value: isHovered)
-            .animation(.easeOut(duration: 0.12), value: isPressed)
+            .onHover { hovering in
+                if reduceMotion {
+                    isHovered = hovering
+                } else {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        isHovered = hovering
+                    }
+                }
+            }
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: isPressed
+            )
     }
 
     private var foregroundColor: Color {
