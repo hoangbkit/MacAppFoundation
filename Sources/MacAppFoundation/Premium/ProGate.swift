@@ -51,6 +51,8 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
 
 /// A native macOS locked-content surface that delegates upgrade presentation to the app.
 public struct ProLockedOverlay: View {
+    @Environment(\.macAppTheme) private var theme
+
     private let feature: PremiumFeature
     private let message: String
     private let actionTitle: String
@@ -72,22 +74,27 @@ public struct ProLockedOverlay: View {
         VStack(spacing: 10) {
             Image(systemName: "lock.fill")
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme.accent)
 
             Text(feature.title)
                 .font(.headline)
+                .foregroundStyle(theme.textPrimary)
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.textSecondary)
                 .multilineTextAlignment(.center)
 
             Button(actionTitle, action: onUpgrade)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(MacAppButtonStyle(.primary))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
-        .background(.regularMaterial)
+        .background(theme.surface)
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.border, lineWidth: 1)
+        }
         .accessibilityIdentifier("premium.locked.\(feature.id)")
     }
 }
