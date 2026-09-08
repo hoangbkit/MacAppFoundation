@@ -164,7 +164,7 @@ public extension MacAppTheme {
             textMuted: Color(nsColor: .tertiaryLabelColor),
             accent: .accentColor,
             accentSoft: Color.accentColor.opacity(0.10),
-            accentForeground: .white,
+            accentForeground: Color(nsColor: .selectedControlTextColor),
             success: Color(nsColor: .systemGreen),
             warning: Color(nsColor: .systemOrange),
             destructive: Color(nsColor: .systemRed),
