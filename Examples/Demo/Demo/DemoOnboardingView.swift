@@ -35,7 +35,6 @@ struct DemoOnboardingView: View {
             .accessibilityIdentifier(DemoAccessibilityID.onboardingContinue)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier(DemoAccessibilityID.onboarding)
     }
 
     @ViewBuilder
