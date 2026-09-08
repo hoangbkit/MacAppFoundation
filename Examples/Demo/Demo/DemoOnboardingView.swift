@@ -32,7 +32,7 @@ struct DemoOnboardingView: View {
                 continueFlow()
             }
         }
-        .frame(width: 620, height: 500)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
