@@ -6,6 +6,9 @@ import SwiftUI
 /// navigation. Free users see an "Unlock Pro" action; Pro users see their active
 /// plan when it can be resolved from ``PurchaseManager.activeProduct``.
 public struct ProPlanButton: View {
+    /// Stable accessibility identifier for UI automation and assistive tooling.
+    public static let accessibilityIdentifier = "MacAppFoundation.ProPlanButton"
+
     private let purchaseManager: PurchaseManager
     private let onUpgrade: () -> Void
     private let onManagePlan: () -> Void
@@ -33,6 +36,8 @@ public struct ProPlanButton: View {
         }
         .buttonStyle(ProPlanButtonStyle(isPro: purchaseManager.hasPro))
         .help(purchaseManager.hasPro ? "Manage your plan" : "Unlock Pro")
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier(Self.accessibilityIdentifier)
         .accessibilityLabel(purchaseManager.hasPro ? "Manage plan" : "Unlock Pro")
         .accessibilityValue(purchaseManager.hasPro ? planLabel : "Free plan")
     }
