@@ -40,6 +40,7 @@ private enum DemoSection: String, CaseIterable, Identifiable {
 @MainActor
 struct ContentView: View {
     let purchaseManager: PurchaseManager
+    let settingsRouter: MacAppSettingsRouter
 
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
@@ -64,6 +65,7 @@ struct ContentView: View {
                                 openWindow(id: DemoWindowID.paywall)
                             },
                             onManagePlan: {
+                                settingsRouter.request(.plan)
                                 openSettings()
                             }
                         )
@@ -98,6 +100,7 @@ private struct OverviewView: View {
     let purchaseManager: PurchaseManager
 
     @Environment(DemoState.self) private var demoState
+    @Environment(\.macAppTheme) private var theme
 
     var body: some View {
         ScrollView {
@@ -105,9 +108,10 @@ private struct OverviewView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("MacAppFoundation")
                         .font(.system(size: 34, weight: .bold))
-                    Text("A live macOS 15 showcase of every v1 package surface.")
+                        .foregroundStyle(theme.textPrimary)
+                    Text("A live macOS 15 showcase of every reusable package surface.")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.textSecondary)
                 }
 
                 HStack(spacing: 14) {
@@ -132,17 +136,40 @@ private struct OverviewView: View {
 
                 GroupBox("Reusable plan button") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("The toolbar uses ProPlanButton: Free opens the paywall, while Pro opens Settings on the Plan tab.")
+                        Text("The toolbar uses ProPlanButton: Free opens the paywall, while Pro opens Settings directly on the Plan pane.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.textSecondary)
                         Text("Its label automatically follows the active entitlement: Unlock Pro, Pro Monthly, Pro Yearly, or Pro Lifetime.")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(theme.textMuted)
                     }
                     .padding(6)
                 }
 
-                GroupBox("Three v1 pillars") {
+                GroupBox("Theme + Settings foundation") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        pillar(
+                            "Shared theme environment",
+                            "One MacAppThemeStore drives the main window, onboarding, paywall, upsell, Developer Tools, and Settings scenes.",
+                            "paintpalette"
+                        )
+                        Divider()
+                        pillar(
+                            "Reusable Settings shell",
+                            "General and About are app-defined panes; Appearance and Plan are MacAppFoundation built-ins.",
+                            "gearshape"
+                        )
+                        Divider()
+                        pillar(
+                            "Open extension points",
+                            "The Demo mixes selected built-in themes with its own Demo Violet theme and routes directly to any settings pane.",
+                            "square.stack.3d.up"
+                        )
+                    }
+                    .padding(6)
+                }
+
+                GroupBox("Three foundation pillars") {
                     VStack(alignment: .leading, spacing: 14) {
                         pillar(
                             "Commerce + simulation",
@@ -158,7 +185,7 @@ private struct OverviewView: View {
                         Divider()
                         pillar(
                             "Settings + Developer Tools",
-                            "Spokio-style Plan settings plus a separate debug console window and Developer menu.",
+                            "Theme-aware custom Settings plus a separate debug console window and Developer menu.",
                             "hammer"
                         )
                     }
@@ -170,20 +197,21 @@ private struct OverviewView: View {
                         ForEach(purchaseManager.features) { feature in
                             HStack(alignment: .top, spacing: 12) {
                                 Image(systemName: feature.systemImage)
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(theme.accent)
                                     .frame(width: 22)
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack {
                                         Text(feature.title)
                                             .fontWeight(.semibold)
+                                            .foregroundStyle(theme.textPrimary)
                                         ProBadge(style: .outline)
                                     }
                                     Text(feature.message)
                                         .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(theme.textSecondary)
                                     Text("Free: \(feature.freeValue) · Pro: \(feature.proValue)")
                                         .font(.caption)
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(theme.textMuted)
                                 }
                             }
                         }
@@ -193,11 +221,12 @@ private struct OverviewView: View {
 
                 LabeledContent("Last demo action", value: demoState.lastAction)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
             }
             .padding(28)
             .frame(maxWidth: 820, alignment: .leading)
         }
+        .background(theme.canvas)
         .navigationTitle("Overview")
     }
 
@@ -205,28 +234,35 @@ private struct OverviewView: View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: systemImage)
                 .font(.title2)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme.accent)
             Text(value)
                 .font(.title2.bold())
+                .foregroundStyle(theme.textPrimary)
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.textSecondary)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.separator.opacity(0.82), lineWidth: 1)
+        }
     }
 
     private func pillar(_ title: String, _ message: String, _ icon: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(theme.accent)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).fontWeight(.semibold)
+                Text(title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(theme.textPrimary)
                 Text(message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
             }
         }
     }
