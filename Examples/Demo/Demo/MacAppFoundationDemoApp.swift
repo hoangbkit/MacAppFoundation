@@ -12,15 +12,29 @@ enum DemoWindowID {
 @MainActor
 struct MacAppFoundationDemoApp: App {
     @Environment(\.openWindow) private var openWindow
-    @State private var demoState = DemoState()
-    @State private var themeStore = MacAppThemeStore(configuration: DemoTheme.configuration)
-    @State private var settingsRouter = MacAppSettingsRouter()
-    @State private var onboarding = OnboardingState(
-        id: "demo",
-        stepCount: 3
-    )
+    @State private var demoState: DemoState
+    @State private var themeStore: MacAppThemeStore
+    @State private var settingsRouter: MacAppSettingsRouter
+    @State private var onboarding: OnboardingState
 
-    private let purchases = DemoCommerce.manager
+    private let purchases: PurchaseManager
+
+    init() {
+        #if DEBUG
+        DemoUITestLaunchConfiguration.apply()
+        #endif
+
+        _demoState = State(initialValue: DemoState())
+        _themeStore = State(initialValue: MacAppThemeStore(configuration: DemoTheme.configuration))
+        _settingsRouter = State(initialValue: MacAppSettingsRouter())
+        _onboarding = State(
+            initialValue: OnboardingState(
+                id: "demo",
+                stepCount: 3
+            )
+        )
+        purchases = DemoCommerce.manager
+    }
 
     var body: some Scene {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
