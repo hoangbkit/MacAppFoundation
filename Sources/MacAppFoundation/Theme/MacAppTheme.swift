@@ -64,9 +64,9 @@ public struct MacAppThemePalette: @unchecked Sendable {
         surface: Color,
         surfaceRaised: Color,
         border: Color,
-        separator: Color,
+        separator: Color? = nil,
         selection: Color,
-        codeSurface: Color,
+        codeSurface: Color? = nil,
         textPrimary: Color,
         textSecondary: Color,
         textMuted: Color,
@@ -83,9 +83,9 @@ public struct MacAppThemePalette: @unchecked Sendable {
         self.surface = surface
         self.surfaceRaised = surfaceRaised
         self.border = border
-        self.separator = separator
+        self.separator = separator ?? border
         self.selection = selection
-        self.codeSurface = codeSurface
+        self.codeSurface = codeSurface ?? surface
         self.textPrimary = textPrimary
         self.textSecondary = textSecondary
         self.textMuted = textMuted
