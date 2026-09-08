@@ -5,6 +5,8 @@ import SwiftUI
 /// MacAppFoundation owns only the footer layout: leading actions, a centered
 /// message, and trailing actions. The app supplies every view in the content area.
 public struct OnboardingView<Content: View, LeadingActions: View, Message: View, TrailingActions: View>: View {
+    @Environment(\.macAppTheme) private var theme
+
     private let content: Content
     private let leadingActions: LeadingActions
     private let message: Message
@@ -27,7 +29,9 @@ public struct OnboardingView<Content: View, LeadingActions: View, Message: View,
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            Rectangle()
+                .fill(theme.separator)
+                .frame(height: 1)
 
             OnboardingFooter(
                 leadingActions: { leadingActions },
@@ -45,6 +49,8 @@ public struct OnboardingView<Content: View, LeadingActions: View, Message: View,
 /// onboarding button style and trailing actions use the primary style by default.
 /// Apps can still apply a more specific button style to an individual action.
 public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActions: View>: View {
+    @Environment(\.macAppTheme) private var theme
+
     private let leadingActions: LeadingActions
     private let message: Message
     private let trailingActions: TrailingActions
@@ -77,7 +83,7 @@ public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActi
         .frame(maxWidth: .infinity)
         .frame(height: 52)
         .padding(.horizontal, 16)
-        .background(.bar)
+        .background(theme.surface)
     }
 }
 
@@ -87,6 +93,8 @@ public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActi
 /// "Step 2 of 4" message or combine the step with app-owned context such as
 /// "Step 2 of 4 · Permissions".
 public struct OnboardingStepMessage: View {
+    @Environment(\.macAppTheme) private var theme
+
     public let title: String?
     public let currentStep: Int
     public let stepCount: Int
@@ -104,7 +112,7 @@ public struct OnboardingStepMessage: View {
     public var body: some View {
         Text(message)
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(theme.textSecondary)
     }
 
     private var message: String {
