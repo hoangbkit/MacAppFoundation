@@ -65,8 +65,9 @@ jobs:
             build
 
       # One architecture is enough for behavioral UI smoke tests; both architectures
-      # still compile the full Demo above.
-      - name: Run demo UI smoke tests
+      # still compile the full Demo above. Build the UI bundle once, then run each
+      # critical flow separately so a CI failure identifies the broken behavior.
+      - name: Prepare demo UI smoke tests
         if: matrix.arch == 'Apple Silicon'
         working-directory: Examples/Demo
         run: |
@@ -80,4 +81,100 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             ASSETCATALOG_COMPILER_APPICON_NAME= \
             EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
-            test
+            build-for-testing
+
+      - name: UI smoke — clean launch onboarding
+        if: matrix.arch == 'Apple Silicon'
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -only-testing:MacAppFoundationDemoUITests/MacAppFoundationDemoLaunchTests/testCleanLaunchShowsOnboarding \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            test-without-building
+
+      - name: UI smoke — onboarding completion
+        if: matrix.arch == 'Apple Silicon'
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -only-testing:MacAppFoundationDemoUITests/MacAppFoundationDemoCriticalFlowsTests/testOnboardingCompletesIntoMainWindow \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            test-without-building
+
+      - name: UI smoke — settings navigation
+        if: matrix.arch == 'Apple Silicon'
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -only-testing:MacAppFoundationDemoUITests/MacAppFoundationDemoCriticalFlowsTests/testSettingsPaneNavigation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            test-without-building
+
+      - name: UI smoke — Pro plan routing
+        if: matrix.arch == 'Apple Silicon'
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -only-testing:MacAppFoundationDemoUITests/MacAppFoundationDemoCriticalFlowsTests/testProPlanButtonRoutesDirectlyToPlanSettings \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            test-without-building
+
+      - name: UI smoke — theme persistence
+        if: matrix.arch == 'Apple Silicon'
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -only-testing:MacAppFoundationDemoUITests/MacAppFoundationDemoCriticalFlowsTests/testThemeSelectionPersistsAcrossRelaunch \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            test-without-building
+
+      - name: UI smoke — compact paywall footer
+        if: matrix.arch == 'Apple Silicon'
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -only-testing:MacAppFoundationDemoUITests/MacAppFoundationDemoCriticalFlowsTests/testPaywallFooterActionsStayVisibleAndHittableAtCompactHeight \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            test-without-building
