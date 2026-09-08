@@ -41,6 +41,8 @@ private enum DemoSection: String, CaseIterable, Identifiable {
 struct ContentView: View {
     let purchaseManager: PurchaseManager
 
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @State private var selection: DemoSection? = .overview
 
     var body: some View {
@@ -55,14 +57,16 @@ struct ContentView: View {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .toolbar {
-                    ToolbarItem(placement: .status) {
-                        HStack(spacing: 7) {
-                            Circle()
-                                .fill(purchaseManager.hasPro ? Color.green : Color.secondary)
-                                .frame(width: 7, height: 7)
-                            Text(purchaseManager.hasPro ? "PRO" : "FREE")
-                                .font(.caption.bold())
-                        }
+                    ToolbarItem(placement: .primaryAction) {
+                        ProPlanButton(
+                            purchaseManager: purchaseManager,
+                            onUpgrade: {
+                                openWindow(id: DemoWindowID.paywall)
+                            },
+                            onManagePlan: {
+                                openSettings()
+                            }
+                        )
                     }
                 }
         }
