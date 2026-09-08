@@ -47,13 +47,16 @@ public struct ProPaywallView: View {
             let footerHeight: CGFloat = 58
 
             VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: columnSpacing) {
-                    leadingPane
-                    trailingPane
+                ScrollView(.vertical, showsIndicators: true) {
+                    HStack(alignment: .top, spacing: columnSpacing) {
+                        leadingPane
+                        trailingPane
+                    }
+                    .padding(.horizontal, outerPadding)
+                    .padding(.top, topPadding)
+                    .padding(.bottom, outerPadding)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
-                .padding(.horizontal, outerPadding)
-                .padding(.top, topPadding)
-                .padding(.bottom, outerPadding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 bottomBar
@@ -71,7 +74,7 @@ public struct ProPaywallView: View {
             minWidth: 760,
             idealWidth: 860,
             maxWidth: 980,
-            minHeight: 500,
+            minHeight: 420,
             idealHeight: 580
         )
         .foregroundStyle(theme.textPrimary)
@@ -107,46 +110,43 @@ public struct ProPaywallView: View {
     }
 
     private var leadingPane: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 26) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(configuration.title)
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(theme.textPrimary)
+        VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(configuration.title)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(theme.textPrimary)
 
-                    Text(configuration.subtitle)
-                        .font(.headline)
-                        .foregroundStyle(theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(configuration.subtitle)
+                    .font(.headline)
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                if !resolvedFeatures.isEmpty {
-                    VStack(alignment: .leading, spacing: 18) {
-                        ForEach(resolvedFeatures) { feature in
-                            HStack(alignment: .top, spacing: 14) {
-                                featureIcon(feature.systemImage)
+            if !resolvedFeatures.isEmpty {
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(resolvedFeatures) { feature in
+                        HStack(alignment: .top, spacing: 14) {
+                            featureIcon(feature.systemImage)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(feature.title)
-                                        .font(.headline)
-                                        .foregroundStyle(theme.textPrimary)
-                                    Text(feature.message)
-                                        .font(.body)
-                                        .foregroundStyle(theme.textSecondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(feature.title)
+                                    .font(.headline)
+                                    .foregroundStyle(theme.textPrimary)
+                                Text(feature.message)
+                                    .font(.body)
+                                    .foregroundStyle(theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(
             minWidth: 280,
             idealWidth: 420,
             maxWidth: .infinity,
-            maxHeight: .infinity,
             alignment: .topLeading
         )
     }
@@ -175,7 +175,6 @@ public struct ProPaywallView: View {
             minWidth: 300,
             idealWidth: 340,
             maxWidth: 390,
-            maxHeight: .infinity,
             alignment: .topLeading
         )
     }
