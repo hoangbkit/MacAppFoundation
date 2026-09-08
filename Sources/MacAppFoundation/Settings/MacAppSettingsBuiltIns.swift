@@ -55,9 +55,37 @@ public extension MacAppSettingsPane {
     }
 }
 
-/// Builders for MAF's conventional default Settings grouping.
+/// Builders for MAF's built-in Settings destinations.
 @MainActor
 public enum MacAppSettingsBuiltIns {
+    /// Returns the standard flat built-in pane list in display order.
+    public static func panes(
+        themeStore: MacAppThemeStore,
+        purchaseManager: PurchaseManager,
+        planConfiguration: ProPlanPaneConfiguration,
+        enabledPanes: Set<MacAppSettingsBuiltInPane> = MacAppSettingsBuiltInPane.defaults,
+        onUpgrade: @escaping () -> Void
+    ) -> [MacAppSettingsPane] {
+        var panes: [MacAppSettingsPane] = []
+
+        if enabledPanes.contains(.appearance) {
+            panes.append(.appearance(themeStore: themeStore))
+        }
+
+        if enabledPanes.contains(.plan) {
+            panes.append(
+                .plan(
+                    purchaseManager: purchaseManager,
+                    configuration: planConfiguration,
+                    onUpgrade: onUpgrade
+                )
+            )
+        }
+
+        return panes
+    }
+
+    /// Advanced grouped helper for apps that benefit from labeled sections.
     public static func appearanceSection(
         themeStore: MacAppThemeStore
     ) -> MacAppSettingsSection {
@@ -70,6 +98,7 @@ public enum MacAppSettingsBuiltIns {
         )
     }
 
+    /// Advanced grouped helper for apps that benefit from labeled sections.
     public static func planSection(
         purchaseManager: PurchaseManager,
         planConfiguration: ProPlanPaneConfiguration,
@@ -88,6 +117,7 @@ public enum MacAppSettingsBuiltIns {
         )
     }
 
+    /// Advanced grouped built-in layout retained for larger Settings surfaces.
     public static func sections(
         themeStore: MacAppThemeStore,
         purchaseManager: PurchaseManager,
@@ -122,16 +152,16 @@ public extension MacAppSettingsView {
         title: String = "Settings",
         systemImage: String = "gearshape.fill",
         themeStore: MacAppThemeStore,
-        additionalSections: [MacAppSettingsSection] = [],
+        additionalPanes: [MacAppSettingsPane] = [],
         initialSelection: MacAppSettingsPaneID? = nil,
         router: MacAppSettingsRouter? = nil
     ) {
         self.init(
             title: title,
             systemImage: systemImage,
-            sections: [
-                MacAppSettingsBuiltIns.appearanceSection(themeStore: themeStore)
-            ] + additionalSections,
+            panes: [
+                .appearance(themeStore: themeStore)
+            ] + additionalPanes,
             initialSelection: initialSelection,
             router: router
         )
@@ -139,9 +169,9 @@ public extension MacAppSettingsView {
 
     /// Convenience initializer for the standard MAF Settings experience.
     ///
-    /// Appearance and Plan are included by default. Apps can disable either pane
-    /// with `builtInPanes`, append additional sections, or use the lower-level
-    /// `sections:` initializer when exact interleaving/reordering is required.
+    /// Appearance and Plan are included as a flat pane list by default. Apps can
+    /// disable either pane with `builtInPanes`, append app-owned panes, or use the
+    /// lower-level `sections:` initializer when labeled grouping is actually useful.
     @MainActor
     init(
         title: String = "Settings",
@@ -150,23 +180,23 @@ public extension MacAppSettingsView {
         purchaseManager: PurchaseManager,
         planConfiguration: ProPlanPaneConfiguration,
         builtInPanes: Set<MacAppSettingsBuiltInPane> = MacAppSettingsBuiltInPane.defaults,
-        additionalSections: [MacAppSettingsSection] = [],
+        additionalPanes: [MacAppSettingsPane] = [],
         initialSelection: MacAppSettingsPaneID? = nil,
         router: MacAppSettingsRouter? = nil,
         onUpgrade: @escaping () -> Void
     ) {
-        let sections = MacAppSettingsBuiltIns.sections(
+        let panes = MacAppSettingsBuiltIns.panes(
             themeStore: themeStore,
             purchaseManager: purchaseManager,
             planConfiguration: planConfiguration,
             enabledPanes: builtInPanes,
             onUpgrade: onUpgrade
-        ) + additionalSections
+        ) + additionalPanes
 
         self.init(
             title: title,
             systemImage: systemImage,
-            sections: sections,
+            panes: panes,
             initialSelection: initialSelection,
             router: router
         )
