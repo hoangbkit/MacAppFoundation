@@ -34,7 +34,7 @@ public struct ProPlanButton: View {
         .buttonStyle(ProPlanButtonStyle(isPro: purchaseManager.hasPro))
         .help(purchaseManager.hasPro ? "Manage your plan" : "Unlock Pro")
         .accessibilityLabel(purchaseManager.hasPro ? "Manage plan" : "Unlock Pro")
-        .accessibilityValue(purchaseManager.hasPro ? planLabel : "")
+        .accessibilityValue(purchaseManager.hasPro ? planLabel : "Free plan")
     }
 
     private var title: String {
