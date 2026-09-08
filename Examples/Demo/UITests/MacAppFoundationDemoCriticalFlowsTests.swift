@@ -1,11 +1,11 @@
 import XCTest
 
-@MainActor
 final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testOnboardingCompletesIntoMainWindow() {
         let app = DemoAppLauncher.launch()
         defer { app.terminate() }
@@ -28,6 +28,7 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testSettingsPaneNavigation() {
         let app = DemoAppLauncher.launch(onboardingCompleted: true)
         defer { app.terminate() }
@@ -48,6 +49,7 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Architecture"].waitForExistence(timeout: 5))
     }
 
+    @MainActor
     func testProPlanButtonRoutesDirectlyToPlanSettings() {
         let app = DemoAppLauncher.launch(
             onboardingCompleted: true,
@@ -68,6 +70,7 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         XCTAssertEqual(plan.value as? String, "Selected")
     }
 
+    @MainActor
     func testThemeSelectionPersistsAcrossRelaunch() {
         var app = DemoAppLauncher.launch(onboardingCompleted: true)
         openSettings(in: app)
@@ -94,6 +97,7 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testPaywallFooterActionsStayVisibleAndHittable() {
         let app = DemoAppLauncher.launch(onboardingCompleted: true)
         defer { app.terminate() }
@@ -121,6 +125,7 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         XCTAssertFalse(close.waitForExistence(timeout: 3))
     }
 
+    @MainActor
     private func openSettings(in app: XCUIApplication) {
         app.typeKey(",", modifierFlags: .command)
         XCTAssertTrue(
@@ -129,6 +134,7 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         )
     }
 
+    @MainActor
     private func assertPane(
         _ title: String,
         isSelected: Bool,
