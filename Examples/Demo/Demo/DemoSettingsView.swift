@@ -1,123 +1,167 @@
 import MacAppFoundation
 import SwiftUI
 
+private extension MacAppSettingsPaneID {
+    static let demoGeneral: Self = "demo.general"
+    static let demoAbout: Self = "demo.about"
+}
+
 @MainActor
 struct DemoSettingsView: View {
     let purchaseManager: PurchaseManager
+    let themeStore: MacAppThemeStore
+    let settingsRouter: MacAppSettingsRouter
 
     @Environment(\.openWindow) private var openWindow
     @Environment(DemoState.self) private var demoState
-    @State private var selection: SettingsTab = .plan
-
-    private enum SettingsTab: Hashable {
-        case general
-        case plan
-        case about
-    }
 
     var body: some View {
-        @Bindable var demoState = demoState
+        MacAppSettingsView(
+            sections: sections,
+            initialSelection: .demoGeneral,
+            router: settingsRouter
+        )
+    }
 
-        TabView(selection: $selection) {
-            generalTab(showTips: $demoState.showTips, compactCards: $demoState.compactCards)
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-                .tag(SettingsTab.general)
-
-            ProPlanPane(
-                purchaseManager: purchaseManager,
-                configuration: DemoCommerce.planConfiguration,
-                onUpgrade: {
-                    openWindow(id: DemoWindowID.paywall)
-                }
+    private var sections: [MacAppSettingsSection] {
+        [
+            MacAppSettingsSection(
+                id: .application,
+                title: "Application",
+                panes: [
+                    MacAppSettingsPane(
+                        id: .demoGeneral,
+                        title: "General",
+                        subtitle: "Demo behavior and showcase preferences.",
+                        systemImage: "gearshape"
+                    ) {
+                        DemoGeneralSettingsPane(demoState: demoState)
+                    },
+                    .appearance(themeStore: themeStore)
+                ]
+            ),
+            MacAppSettingsSection(
+                id: .account,
+                title: "Account",
+                panes: [
+                    .plan(
+                        purchaseManager: purchaseManager,
+                        configuration: DemoCommerce.planConfiguration,
+                        onUpgrade: {
+                            openWindow(id: DemoWindowID.paywall)
+                        }
+                    )
+                ]
+            ),
+            MacAppSettingsSection(
+                id: .advanced,
+                title: "About",
+                panes: [
+                    MacAppSettingsPane(
+                        id: .demoAbout,
+                        title: "About",
+                        subtitle: "How the Demo composes MacAppFoundation.",
+                        systemImage: "info.circle"
+                    ) {
+                        DemoAboutSettingsPane()
+                    }
+                ]
             )
-            .tabItem {
-                Label("Plan", systemImage: "creditcard")
-            }
-            .tag(SettingsTab.plan)
+        ]
+    }
+}
 
-            aboutTab
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
+@MainActor
+private struct DemoGeneralSettingsPane: View {
+    @Bindable var demoState: DemoState
+    @Environment(\.macAppTheme) private var theme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox("Showcase") {
+                    VStack(spacing: 0) {
+                        settingRow("Show demo tips") {
+                            Toggle("", isOn: $demoState.showTips)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+
+                        Rectangle()
+                            .fill(theme.separator.opacity(0.72))
+                            .frame(height: 1)
+
+                        settingRow("Compact showcase cards") {
+                            Toggle("", isOn: $demoState.compactCards)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+                    }
                 }
-                .tag(SettingsTab.about)
+
+                GroupBox("Foundation ownership") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("Settings shell", value: "MacAppFoundation")
+                        LabeledContent("Pane content", value: "Host app + MAF built-ins")
+                        LabeledContent("Theme selection", value: "Shared MacAppThemeStore")
+                        LabeledContent("Window routing", value: "Host app")
+                    }
+                    .foregroundStyle(theme.textPrimary)
+                }
+            }
+            .padding(22)
+            .frame(maxWidth: 760, alignment: .leading)
         }
-        .padding()
-        .frame(width: 500)
+        .background(theme.canvas)
     }
 
-    private func generalTab(
-        showTips: Binding<Bool>,
-        compactCards: Binding<Bool>
+    private func settingRow<Accessory: View>(
+        _ title: String,
+        @ViewBuilder accessory: () -> Accessory
     ) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            GroupBox {
-                HStack {
-                    Text("Show demo tips")
-                    Spacer()
-                    Toggle("", isOn: showTips)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .padding(.horizontal, 8)
-
-                Divider()
-
-                HStack {
-                    Text("Compact showcase cards")
-                    Spacer()
-                    Toggle("", isOn: compactCards)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                }
-                .padding(.horizontal, 8)
-            }
-
-            GroupBox {
-                HStack {
-                    Text("Settings ownership")
-                    Spacer()
-                    Text("App-owned")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 8)
-            }
+        HStack {
+            Text(title)
+                .foregroundStyle(theme.textPrimary)
+            Spacer()
+            accessory()
         }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct DemoAboutSettingsPane: View {
+    @Environment(\.macAppTheme) private var theme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                GroupBox("Demo") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("Framework", value: "MacAppFoundation")
+                        LabeledContent("Deployment target", value: "macOS 15+")
+                        LabeledContent("Theme catalog", value: "Built-ins + Demo Violet")
+                    }
+                }
+
+                GroupBox("Architecture") {
+                    VStack(alignment: .leading, spacing: 9) {
+                        architectureRow("One shared PurchaseManager")
+                        architectureRow("One shared MacAppThemeStore across scenes")
+                        architectureRow("Reusable MAF Settings shell")
+                        architectureRow("App-injected General and About panes")
+                        architectureRow("Separate debug Developer Tools window")
+                    }
+                }
+            }
+            .padding(22)
+            .frame(maxWidth: 760, alignment: .leading)
+        }
+        .background(theme.canvas)
     }
 
-    private var aboutTab: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            GroupBox {
-                HStack {
-                    Text("Demo")
-                    Spacer()
-                    Text("MacAppFoundation")
-                        .fontWeight(.medium)
-                }
-                .padding(.horizontal, 8)
-
-                Divider()
-
-                HStack {
-                    Text("Deployment target")
-                    Spacer()
-                    Text("macOS 15+")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 8)
-            }
-
-            GroupBox("Architecture") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("One shared PurchaseManager", systemImage: "checkmark.circle")
-                    Label("App-owned Settings scene", systemImage: "checkmark.circle")
-                    Label("Separate debug Developer Tools window", systemImage: "checkmark.circle")
-                    Label("No app-specific state inside the package", systemImage: "checkmark.circle")
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-            }
-        }
+    private func architectureRow(_ title: String) -> some View {
+        Label(title, systemImage: "checkmark.circle.fill")
+            .foregroundStyle(theme.textPrimary)
+            .tint(theme.success)
     }
 }
