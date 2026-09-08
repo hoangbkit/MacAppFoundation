@@ -21,6 +21,7 @@ struct DemoSettingsView: View {
             initialSelection: .demoGeneral,
             router: settingsRouter
         )
+        .accessibilityIdentifier(DemoAccessibilityID.settings)
     }
 
     private var panes: [MacAppSettingsPane] {
