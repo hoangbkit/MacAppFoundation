@@ -3,9 +3,9 @@ import SwiftUI
 /// BYOKchat-inspired macOS Settings shell with an app-extensible pane model.
 ///
 /// MacAppFoundation owns the themed sidebar, selection interactions, detail
-/// header, separators, and content canvas. Flat panes are the recommended
-/// default for small Settings surfaces; apps can opt into labeled sections when
-/// stronger grouping is useful.
+/// header, separators, custom title-bar drag region, and content canvas. Flat
+/// panes are the recommended default for small Settings surfaces; apps can opt
+/// into labeled sections when stronger grouping is useful.
 @MainActor
 public struct MacAppSettingsView: View {
     private let title: String
@@ -56,21 +56,26 @@ public struct MacAppSettingsView: View {
     }
 
     public var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: 218)
+        VStack(spacing: 0) {
+            settingsTitlebar
 
-            Rectangle()
-                .fill(theme.separator.opacity(0.85))
-                .frame(width: 1)
+            HStack(spacing: 0) {
+                sidebar
+                    .frame(width: 218)
 
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(theme.canvas)
+                Rectangle()
+                    .fill(theme.separator.opacity(0.85))
+                    .frame(width: 1)
+
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(theme.canvas)
+            }
         }
         .frame(minWidth: 900, idealWidth: 940, minHeight: 620, idealHeight: 660)
         .background(theme.canvas)
         .groupBoxStyle(MacAppSettingsGroupBoxStyle())
+        .macAppFullSizeWindowChrome()
         .onAppear {
             consumeRouterRequest()
             normalizeSelection()
@@ -82,6 +87,24 @@ public struct MacAppSettingsView: View {
             consumeRouterRequest()
             normalizeSelection()
         }
+    }
+
+    private var settingsTitlebar: some View {
+        HStack(spacing: 0) {
+            MacAppWindowDragRegion(background: theme.surface)
+                .frame(width: 218)
+
+            Rectangle()
+                .fill(theme.separator.opacity(0.85))
+                .frame(width: 1)
+
+            MacAppWindowDragRegion(
+                trafficLightReserve: 0,
+                background: theme.canvas
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .frame(height: MacAppWindowChromeMetrics.titlebarHeight)
     }
 
     private var sidebar: some View {
