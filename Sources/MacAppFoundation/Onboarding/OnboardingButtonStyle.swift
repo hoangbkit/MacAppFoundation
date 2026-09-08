@@ -11,6 +11,7 @@ public struct OnboardingButtonStyle: ButtonStyle {
     }
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.macAppTheme) private var theme
 
     private let prominence: Prominence
 
@@ -42,25 +43,25 @@ public struct OnboardingButtonStyle: ButtonStyle {
     private var foregroundColor: Color {
         switch prominence {
         case .secondary:
-            .primary
+            theme.textPrimary
         case .primary:
-            .white
+            theme.accentForeground
         }
     }
 
     private func backgroundColor(isPressed: Bool) -> Color {
         switch prominence {
         case .secondary:
-            Color.primary.opacity(isPressed ? 0.13 : 0.08)
+            isPressed ? theme.selection : theme.surfaceRaised
         case .primary:
-            Color.accentColor.opacity(isPressed ? 0.84 : 1)
+            theme.accent.opacity(isPressed ? 0.84 : 1)
         }
     }
 
     private var borderColor: Color {
         switch prominence {
         case .secondary:
-            Color.primary.opacity(0.14)
+            theme.border
         case .primary:
             .clear
         }
