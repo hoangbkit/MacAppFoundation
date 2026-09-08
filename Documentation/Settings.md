@@ -11,18 +11,99 @@ MacAppFoundation provides a reusable BYOKchat-inspired Settings shell while the 
 - themed sidebar, separators, surfaces, and detail canvas
 - inherited `MacAppSettingsGroupBoxStyle` for pane content
 
-Apps own which sections and panes exist, their ordering, and the content of app-specific panes.
+MAF ships Appearance and Plan as its standard built-in panes. Apps may use both, remove either one, append their own sections, or compose every pane manually for exact ordering.
 
-## App-defined panes
+## Standard Appearance + Plan settings
 
-Pane and section identifiers are extensible value types rather than framework enums.
+The convenience initializer includes both built-ins by default:
+
+```swift
+@State private var themeStore = MacAppThemeStore(
+    configuration: .builtIns([
+        .system,
+        .midnight,
+        .ocean,
+        .porcelain
+    ])
+)
+@State private var settingsRouter = MacAppSettingsRouter()
+
+var body: some Scene {
+    Settings {
+        MacAppSettingsView(
+            themeStore: themeStore,
+            purchaseManager: purchases,
+            planConfiguration: ProPlanPaneConfiguration(appName: "My App"),
+            router: settingsRouter,
+            onUpgrade: {
+                openWindow(id: "pro-paywall")
+            }
+        )
+        .macAppTheme(themeStore)
+    }
+    .windowStyle(.hiddenTitleBar)
+}
+```
+
+The default grouping is:
+
+```text
+APPLICATION
+  Appearance
+
+ACCOUNT
+  Plan
+```
+
+`MacAppAppearanceSettingsPane` reads `themeStore.configuration.themes`, so it automatically shows the exact built-in subset and custom themes configured by the host app, in host-app order. Selection is persisted by `MacAppThemeStore`.
+
+`MacAppPlanSettingsPane` embeds `ProPlanPane`. MAF owns the pane layout, while the host app owns paywall presentation through `onUpgrade`.
+
+## Apps without commerce
+
+Apps that only need Appearance can use the lighter convenience initializer:
+
+```swift
+Settings {
+    MacAppSettingsView(
+        themeStore: themeStore,
+        additionalSections: appSections,
+        router: settingsRouter
+    )
+    .macAppTheme(themeStore)
+}
+```
+
+## Disabling built-in panes
+
+For apps using the full convenience initializer, select the built-ins explicitly:
+
+```swift
+MacAppSettingsView(
+    themeStore: themeStore,
+    purchaseManager: purchases,
+    planConfiguration: planConfiguration,
+    builtInPanes: [.appearance],
+    onUpgrade: presentPaywall
+)
+```
+
+Use `[.plan]` for Plan only. Use the lower-level `sections:` initializer when no built-ins are desired.
+
+## Exact ordering and app-defined panes
+
+Pane and section identifiers are extensible value types rather than framework-owned closed enums.
 
 ```swift
 extension MacAppSettingsPaneID {
     static let general: Self = "general"
     static let providers: Self = "providers"
 }
+```
 
+Built-in pane factories can be placed anywhere alongside app panes:
+
+```swift
 let sections = [
     MacAppSettingsSection(
         id: .application,
@@ -36,20 +117,18 @@ let sections = [
             ) {
                 GeneralSettingsView()
             },
-            MacAppSettingsPane(
-                id: .appearance,
-                title: "Appearance",
-                subtitle: "Choose how the app looks.",
-                systemImage: "paintpalette"
-            ) {
-                AppearanceSettingsView()
-            }
+            .appearance(themeStore: themeStore)
         ]
     ),
     MacAppSettingsSection(
         id: .account,
         title: "Account",
         panes: [
+            .plan(
+                purchaseManager: purchases,
+                configuration: planConfiguration,
+                onUpgrade: presentPaywall
+            ),
             MacAppSettingsPane(
                 id: .providers,
                 title: "Connections",
@@ -61,26 +140,27 @@ let sections = [
         ]
     )
 ]
+
+MacAppSettingsView(
+    sections: sections,
+    initialSelection: .general,
+    router: settingsRouter
+)
 ```
 
-Then host the shell from the app-owned Settings scene:
+This produces the BYOKchat-style structure without coupling MAF to app-specific panes:
 
-```swift
-@State private var settingsRouter = MacAppSettingsRouter()
+```text
+APPLICATION
+  General
+  Appearance
 
-var body: some Scene {
-    Settings {
-        MacAppSettingsView(
-            sections: sections,
-            initialSelection: .general,
-            router: settingsRouter
-        )
-    }
-    .windowStyle(.hiddenTitleBar)
-}
+ACCOUNT
+  Plan
+  Connections
 ```
 
-The shell inherits `macAppTheme` from the app root/scene, and every app-injected pane receives the same SwiftUI environment automatically.
+Apps may also use `MacAppSettingsBuiltIns.appearanceSection(...)` and `MacAppSettingsBuiltIns.planSection(...)` when the default MAF section grouping is useful during custom composition.
 
 ## Routing to a pane
 
@@ -89,19 +169,32 @@ The shell inherits `macAppTheme` from the app root/scene, and every app-injected
 ```swift
 @Environment(\.openSettings) private var openSettings
 
-Button("Manage Providers") {
-    settingsRouter.request(.providers)
+Button("Manage Plan") {
+    settingsRouter.request(.plan)
     openSettings()
 }
 ```
 
-The same pattern works for MAF built-ins such as `.plan` and `.appearance` and for any app-defined pane ID.
+The same pattern works for `.appearance` and any app-defined pane ID. If Settings is already open, requesting another pane updates the active selection. If a request is made first, the shell consumes the pending request when it appears.
 
-If the Settings window is already open, requesting another pane updates the active selection. If a request is made before the Settings scene appears, the shell consumes the pending request when it appears.
+## Theme environment
+
+Every MAF Settings surface reads `@Environment(\.macAppTheme)`. App-injected pane content inherits the same environment automatically.
+
+A SwiftUI `Settings` scene is a separate view root from the main `WindowGroup`, so inject the same shared store into that root as shown above:
+
+```swift
+Settings {
+    MacAppSettingsView(...)
+        .macAppTheme(themeStore)
+}
+```
+
+Changing the theme in Appearance updates the shared store immediately and therefore updates every scene hierarchy using that store.
 
 ## Group boxes
 
-`MacAppSettingsView` applies `MacAppSettingsGroupBoxStyle` to its content hierarchy. App panes may therefore use ordinary SwiftUI `GroupBox` controls and inherit the same MAF theme-aware chrome automatically.
+`MacAppSettingsView` applies `MacAppSettingsGroupBoxStyle` to its content hierarchy. App panes may use ordinary SwiftUI `GroupBox` controls and inherit the same MAF theme-aware chrome automatically.
 
 ```swift
 GroupBox("Chat") {
@@ -112,9 +205,3 @@ GroupBox("Chat") {
 ```
 
 Apps may also use `MacAppSettingsGroupBoxStyle` explicitly outside the Settings shell when they want the same visual treatment.
-
-## Built-in panes
-
-The shell deliberately does not hard-code pane content. The next implementation phase adds MAF-provided Appearance and Plan panes as the default built-ins while preserving the same injection model, so apps can add, reorder, or omit panes without replacing the shell.
-
-`ProPlanPane` remains independently reusable and theme-aware.
