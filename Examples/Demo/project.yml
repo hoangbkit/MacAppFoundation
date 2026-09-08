@@ -54,10 +54,6 @@ schemes:
     run:
       config: Debug
       storeKitConfiguration: Demo/Configuration.storekit
-    test:
-      config: Debug
-      targets:
-        - MacAppFoundationDemoUITests
     archive:
       config: Release
 
@@ -74,20 +70,3 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-
-  MacAppFoundationDemoUITests:
-    type: bundle.ui-testing
-    platform: macOS
-    deploymentTarget: "15.0"
-    sources:
-      - path: UITests
-    dependencies:
-      - target: MacAppFoundationDemo
-    settings:
-      base:
-        GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.hoangbkit.maf.uitests
-        PRODUCT_NAME: MacAppFoundationDemoUITests
-        PRODUCT_MODULE_NAME: MacAppFoundationDemoUITests
-        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-        TEST_TARGET_NAME: MacAppFoundationDemo
