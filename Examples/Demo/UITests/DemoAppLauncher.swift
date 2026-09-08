@@ -3,6 +3,7 @@ import XCTest
 @MainActor
 enum DemoAppLauncher {
     static let yearlyProductID = "com.hoangbkit.macappfoundation.demo.pro.yearly"
+    static let compactPaywallArgument = "--maf-ui-test-compact-paywall"
 
     static func launch(
         resetState: Bool = true,
@@ -31,8 +32,8 @@ enum DemoAppLauncher {
 }
 
 enum DemoUITestAccessibilityID {
-    static let onboarding = "maf.demo.onboarding"
     static let onboardingBack = "maf.demo.onboarding.back"
     static let onboardingContinue = "maf.demo.onboarding.continue"
     static let settings = "maf.demo.settings"
+    static let proPlanButton = "MacAppFoundation.ProPlanButton"
 }
