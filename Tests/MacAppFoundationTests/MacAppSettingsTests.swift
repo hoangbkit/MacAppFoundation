@@ -40,7 +40,8 @@ struct MacAppSettingsTests {
             panes: [general, appearance]
         )
 
-        #expect(section.panes.map(\.id) == ["general", .appearance])
+        let expectedIDs: [MacAppSettingsPaneID] = ["general", .appearance]
+        #expect(section.panes.map(\.id) == expectedIDs)
         #expect(section.panes.map(\.title) == ["General", "Appearance"])
     }
 
