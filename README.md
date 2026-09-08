@@ -33,7 +33,7 @@ MacAppFoundation now has five main areas:
 1. **Commerce + simulation** — verified StoreKit 2 entitlement state, product loading, purchase/restore, transaction observation, foreground refresh, and a Debug-only in-process simulator.
 2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
-4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, app-injected content, built-in Appearance/Plan panes, and selection routing.
+4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Appearance/Plan panes, and selection routing.
 5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, and app-defined developer actions.
 
 Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation does not persist a `hasPro` flag for entitlement decisions.
@@ -134,7 +134,7 @@ See `Documentation/Theming.md` for semantic palette roles, custom themes, the re
 
 ## 3. Use the reusable Settings shell
 
-`MacAppSettingsView` provides the custom macOS shell: themed sidebar, grouped sections, detail header, surfaces, and inherited group-box treatment. MAF ships Appearance and Plan as reusable built-ins; apps can inject unlimited custom panes and choose exact ordering.
+`MacAppSettingsView` provides the custom macOS shell: themed sidebar, detail header, surfaces, inherited group-box treatment, and optional labeled sections. For the common small-app case, **flat panes are the default**.
 
 A standard Appearance + Plan setup is:
 
@@ -156,38 +156,42 @@ Settings {
 .windowStyle(.hiddenTitleBar)
 ```
 
-For exact composition, build sections manually and interleave app panes with MAF factories:
+That produces a simple sidebar:
+
+```text
+Appearance
+Plan
+```
+
+For a typical app with a few custom destinations, compose panes directly:
 
 ```swift
-let sections = [
-    MacAppSettingsSection(
-        id: .application,
-        title: "Application",
-        panes: [
-            MacAppSettingsPane(
-                id: "general",
-                title: "General",
-                subtitle: "Application behavior and defaults.",
-                systemImage: "gearshape"
-            ) {
-                GeneralSettingsView()
-            },
-            .appearance(themeStore: themeStore)
-        ]
+let panes = [
+    MacAppSettingsPane(
+        id: "general",
+        title: "General",
+        subtitle: "Application behavior and defaults.",
+        systemImage: "gearshape"
+    ) {
+        GeneralSettingsView()
+    },
+    .appearance(themeStore: themeStore),
+    .plan(
+        purchaseManager: purchases,
+        configuration: ProPlanPaneConfiguration(appName: "Example"),
+        onUpgrade: openPaywall
     ),
-    MacAppSettingsSection(
-        id: .account,
-        title: "Account",
-        panes: [
-            .plan(
-                purchaseManager: purchases,
-                configuration: ProPlanPaneConfiguration(appName: "Example"),
-                onUpgrade: openPaywall
-            )
-        ]
-    )
+    aboutPane
 ]
+
+MacAppSettingsView(
+    panes: panes,
+    initialSelection: "general",
+    router: settingsRouter
+)
 ```
+
+Use `sections:` only when a larger Settings surface genuinely benefits from labeled groups such as Application, Account, and Advanced. The grouped BYOKchat-style layout remains fully supported.
 
 The router controls pane selection only; the host app still opens Settings:
 
@@ -196,7 +200,7 @@ settingsRouter.request(.plan)
 openSettings()
 ```
 
-See `Documentation/Settings.md` for built-in pane disabling, app-only Settings, exact interleaving, and routing patterns.
+See `Documentation/Settings.md` for flat composition, built-in pane disabling, optional grouped sections, app-only Settings, and routing patterns.
 
 ## 4. Present and gate Pro features
 
