@@ -130,6 +130,18 @@ private struct OverviewView: View {
                     #endif
                 }
 
+                GroupBox("Reusable plan button") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("The toolbar uses ProPlanButton: Free opens the paywall, while Pro opens Settings on the Plan tab.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text("Its label automatically follows the active entitlement: Unlock Pro, Pro Monthly, Pro Yearly, or Pro Lifetime.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(6)
+                }
+
                 GroupBox("Three v1 pillars") {
                     VStack(alignment: .leading, spacing: 14) {
                         pillar(
