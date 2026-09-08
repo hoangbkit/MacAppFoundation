@@ -87,6 +87,7 @@ private struct ProPlanButtonStyleBody<Label: View>: View {
     let isPressed: Bool
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.macAppTheme) private var theme
     @State private var isHovered = false
 
     var body: some View {
@@ -107,22 +108,25 @@ private struct ProPlanButtonStyleBody<Label: View>: View {
     }
 
     private var foregroundColor: Color {
-        isPro ? .secondary : .accentColor
+        isPro ? theme.textSecondary : theme.accent
     }
 
     private var backgroundColor: Color {
         if isPro {
-            return Color.primary.opacity(isPressed ? 0.09 : isHovered ? 0.07 : 0.05)
+            if isPressed {
+                return theme.selection
+            }
+            return isHovered ? theme.surfaceRaised : theme.surface
         }
 
-        return Color.accentColor.opacity(isPressed ? 0.24 : isHovered ? 0.20 : 0.16)
+        return theme.accent.opacity(isPressed ? 0.24 : isHovered ? 0.20 : 0.16)
     }
 
     private var borderColor: Color {
         if isPro {
-            return Color.primary.opacity(isHovered || isPressed ? 0.18 : 0.12)
+            return isHovered || isPressed ? theme.border.opacity(1) : theme.border.opacity(0.72)
         }
 
-        return Color.accentColor.opacity(isHovered || isPressed ? 0.58 : 0.45)
+        return theme.accent.opacity(isHovered || isPressed ? 0.58 : 0.45)
     }
 }
