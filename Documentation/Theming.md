@@ -1,25 +1,24 @@
 # Theming
 
-MacAppFoundation provides a shared semantic macOS theme system. Host apps create a `MacAppThemeStore` once and inject it at the app or scene root. Built-in MAF views read the active theme from `EnvironmentValues.macAppTheme`.
+MacAppFoundation provides a shared macOS theme system designed for apps that want consistent framework-owned UI while still controlling which themes are available.
+
+Apps create one `MacAppThemeStore` and inject it at each SwiftUI scene root:
 
 ```swift
 @State private var themeStore = MacAppThemeStore(
-    configuration: MacAppThemeConfiguration(
-        themes: [
-            .system,
-            .midnight,
-            .ocean,
-            .porcelain,
-        ],
-        defaultThemeID: .system
-    )
+    configuration: .builtIns([
+        .system,
+        .midnight,
+        .ocean,
+        .porcelain
+    ])
 )
 
 RootView()
     .macAppTheme(themeStore)
 ```
 
-The root modifier injects the active theme, applies its accent tint, and applies its preferred light/dark color scheme. The environment has a `.system` fallback so previews and isolated views still render without app setup.
+MAF visual components read `@Environment(\.macAppTheme)` and do not require ad-hoc theme parameters. The modifier also applies the active accent tint and preferred light/dark color scheme.
 
 ## Built-in themes
 
@@ -39,27 +38,58 @@ The shared catalog contains 13 presets:
 - Sunrise
 - GitHub Light
 
-Apps may expose all of them with `MacAppThemeConfiguration.allBuiltIn(...)`, select built-in IDs with `MacAppThemeConfiguration.builtIns(...)`, or provide an explicit ordered array that mixes built-in and custom themes.
+`System` follows semantic AppKit colors at runtime. The named presets use the shared richer semantic palette used by MAF surfaces.
 
-The 13-theme family follows BYOKchat, including the runtime-native System theme. The 12 named presets use Onlink's richer palette definitions; additional semantic roles such as selection, separator, and code surfaces are present so later MAF view migrations do not need local color inventions.
+## App-selected subsets and custom themes
 
-## Custom themes
-
-Theme IDs are extensible values rather than a framework-owned enum, so apps can add their own themes alongside built-ins.
+Apps can expose every built-in, a subset, or arbitrary custom themes. `MacAppThemeID` is an open value type rather than a closed enum, so custom themes remain first-class.
 
 ```swift
-let brandTheme = MacAppTheme(
-    id: "brand",
-    name: "Brand",
-    caption: "Our custom appearance",
+let custom = MacAppTheme(
+    id: "my-custom-theme",
+    name: "My Theme",
+    caption: "Custom app palette",
     preferredColorScheme: .dark,
-    palette: MacAppThemePalette(...)
+    palette: ...
 )
 
 let configuration = MacAppThemeConfiguration(
-    themes: [.system, brandTheme],
-    defaultThemeID: "brand"
+    themes: [
+        .system,
+        .midnight,
+        custom
+    ],
+    defaultThemeID: .system
 )
 ```
 
-`MacAppThemePalette` exposes semantic roles for canvases, surfaces, borders/separators, selection, code surfaces, primary/secondary/muted text, accent colors, status colors, and shadow. Host-app views may read the same environment when they want to visually integrate with MAF components.
+Theme ordering is preserved exactly as supplied by the host app.
+
+## Semantic palette
+
+The palette includes canvas, raised surfaces, borders, separators, selection, code surfaces, primary/secondary/muted text, accent roles, status colors, and shadow. MAF components consume these semantic roles rather than raw system colors.
+
+## Preferred appearance
+
+Every `MacAppTheme` may declare `preferredColorScheme` as `.dark`, `.light`, or `nil`. A `nil` preference follows the system appearance. The shared `.macAppTheme(themeStore)` modifier applies that preference automatically.
+
+## Reusable theme picker
+
+`MacAppThemePicker` renders any ordered theme list, including custom themes, and reports selection without owning persistence:
+
+```swift
+MacAppThemePicker(
+    themes: themeStore.configuration.themes,
+    selectedThemeID: themeStore.selectedThemeID
+) { id in
+    themeStore.select(id)
+}
+```
+
+`MacAppThemePreviewCard` previews candidate canvas, surface, separator, text, selection, and accent roles. It also shows whether the theme follows `System`, `Light`, or `Dark` appearance.
+
+The picker/cards support pointer hover, pressed feedback, keyboard focus, accessibility labels and values, and Reduce Motion. MAF's shared, onboarding, paywall, and compact Pro button treatments also suppress motion-based scale/animation when Reduce Motion is enabled.
+
+## Fallback behavior
+
+The SwiftUI environment defaults to `.system`, so previews and isolated MAF components remain usable even without an injected store. Production apps should still inject their shared store at each app/scene root so all MAF and app-owned surfaces remain synchronized.
