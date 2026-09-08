@@ -13,6 +13,7 @@ public struct PaywallButtonStyle: ButtonStyle {
     }
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.macAppTheme) private var theme
 
     private let kind: Kind
 
@@ -74,22 +75,22 @@ public struct PaywallButtonStyle: ButtonStyle {
     private var foregroundColor: Color {
         switch kind {
         case .primary:
-            .white
+            theme.accentForeground
         case .secondary:
-            .primary
+            theme.textPrimary
         case .text:
-            .secondary
+            theme.textSecondary
         }
     }
 
     private func backgroundColor(isPressed: Bool) -> Color {
         switch kind {
         case .primary:
-            Color.accentColor.opacity(isPressed ? 0.84 : 1)
+            theme.accent.opacity(isPressed ? 0.84 : 1)
         case .secondary:
-            Color.primary.opacity(isPressed ? 0.13 : 0.08)
+            isPressed ? theme.selection : theme.surfaceRaised
         case .text:
-            Color.primary.opacity(isPressed ? 0.07 : 0)
+            isPressed ? theme.selection : .clear
         }
     }
 
@@ -98,7 +99,7 @@ public struct PaywallButtonStyle: ButtonStyle {
         case .primary, .text:
             .clear
         case .secondary:
-            Color.primary.opacity(0.14)
+            theme.border
         }
     }
 }
