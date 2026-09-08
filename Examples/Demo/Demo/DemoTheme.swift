@@ -32,14 +32,7 @@ enum DemoTheme {
     )
 
     static let configuration = MacAppThemeConfiguration(
-        themes: [
-            .system,
-            .midnight,
-            .ocean,
-            violet,
-            .porcelain,
-            .githubLight
-        ],
+        themes: MacAppThemeCatalog.allBuiltIn + [violet],
         defaultThemeID: .system,
         storageKey: "MacAppFoundationDemo.theme"
     )
