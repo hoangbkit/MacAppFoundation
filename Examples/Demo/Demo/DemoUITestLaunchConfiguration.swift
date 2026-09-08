@@ -5,7 +5,12 @@ import Foundation
 enum DemoUITestLaunchConfiguration {
     static let resetStateArgument = "--maf-ui-test-reset-state"
     static let onboardingCompletedArgument = "--maf-ui-test-onboarding-completed"
+    static let compactPaywallArgument = "--maf-ui-test-compact-paywall"
     static let purchasedProductArgumentPrefix = "--maf-ui-test-purchased-product-id="
+
+    static var paywallDefaultHeight: CGFloat {
+        ProcessInfo.processInfo.arguments.contains(compactPaywallArgument) ? 420 : 600
+    }
 
     static func apply() {
         let arguments = ProcessInfo.processInfo.arguments
