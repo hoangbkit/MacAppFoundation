@@ -1,13 +1,13 @@
 # MacAppFoundation
 
-A focused macOS foundation package for StoreKit 2 commerce, Pro paywalls/gating, a Spokio-style Plan settings pane, and debug purchase tooling.
+A focused macOS foundation package for StoreKit 2 commerce, Pro experiences, reusable app theming, BYOKchat-style Settings, and debug purchase tooling.
 
 > [!IMPORTANT]
 > **Public source, not a community-maintained OSS project.**
 >
 > This repository is published primarily for transparency and reference. It is maintained for the author's own apps and priorities, not as a community project. Issues, pull requests, feature requests, support requests, and roadmap commitments should not be expected to receive a response or be accepted. Forking or other use of the source is subject to whatever license terms are provided by the repository.
 
-MacAppFoundation intentionally stays small. The app keeps ownership of navigation, branding, general settings, About content, product copy, and domain behavior.
+MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host apps keep ownership of product/domain behavior, app-specific settings content, navigation/window presentation, branding, and which themes/settings panes they expose.
 
 ## Requirements
 
@@ -17,24 +17,26 @@ MacAppFoundation intentionally stays small. The app keeps ownership of navigatio
 
 ## Demo app
 
-`Examples/Demo` contains a macOS 15 XcodeGen app wired against the local package checkout. It showcases the complete v1 surface: StoreKit + simulation, paywall, gating, upsells, Plan settings, and the separate Developer Tools window/menu.
+`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, and the separate Developer Tools window/menu.
 
 ```sh
 cd Examples/Demo
 make open
 ```
 
-The Debug build starts with in-process simulated purchases, while the included StoreKit configuration is available when simulation is turned off.
+The Debug build starts with in-process simulated purchases. The included StoreKit configuration is available when simulation is turned off.
 
-## v1.0.0 scope
+## Current scope
 
-MacAppFoundation has three pillars:
+MacAppFoundation now has five main areas:
 
 1. **Commerce + simulation** — verified StoreKit 2 entitlement state, product loading, purchase/restore, transaction observation, foreground refresh, and a Debug-only in-process simulator.
-2. **Pro experience** — native macOS paywall, trial/introductory-offer presentation, Pro gates, badges, locked-feature UI, and reusable upsells.
-3. **Settings + Developer Tools** — a generalized copy of Spokio's Plan pane plus a separate Debug-only developer console designed for a macOS `Developer` menu/window.
+2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
+3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
+4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, app-injected content, built-in Appearance/Plan panes, and selection routing.
+5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, and app-defined developer actions.
 
-Verified StoreKit transactions are the authorization source of truth. MacAppFoundation does not persist a `hasPro` flag for production entitlement decisions.
+Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation does not persist a `hasPro` flag for entitlement decisions.
 
 ## Installation
 
@@ -69,285 +71,190 @@ let purchaseConfiguration = PurchaseConfiguration(
             message: "Remove the free-plan limit.",
             freeValue: "Limited",
             proValue: "Unlimited"
-        ),
-        PurchaseFeature(
-            id: "batch",
-            systemImage: "square.stack.3d.up",
-            title: "Batch workflows",
-            message: "Process multiple items at once.",
-            freeValue: "Single item",
-            proValue: "Batch"
         )
     ]
 )
 ```
 
-By default every configured product grants Pro. Supply `entitledProductIDs` only when the catalog also contains products that should not unlock the main entitlement.
-
-Create one `PurchaseManager` for the app and attach lifecycle management near the root view:
+Create one `PurchaseManager` for the app and attach lifecycle management near the main root:
 
 ```swift
-import MacAppFoundation
-import SwiftUI
+@State private var purchases = PurchaseManager(
+    configuration: purchaseConfiguration
+)
 
-@main
-struct ExampleApp: App {
-    @State private var purchases = PurchaseManager(
-        configuration: purchaseConfiguration
-    )
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView(purchases: purchases)
-                .managesPurchases(purchases)
-        }
-    }
+WindowGroup {
+    ContentView()
+        .managesPurchases(purchases)
 }
 ```
 
-Normal feature checks use one property:
+Normal feature checks use `purchases.hasPro`. Richer commerce surfaces can also read loaded products, loading/activity state, preferred/active product, restore state, and entitlement refresh APIs.
+
+## 2. Configure app theming
+
+Create one shared `MacAppThemeStore`. Apps may expose all built-ins, a selected subset, and arbitrary custom themes in any order.
 
 ```swift
-if purchases.hasPro {
-    runPremiumAction()
-}
-```
-
-`PurchaseManager` also exposes loaded products, loading/activity state, the preferred product, active product, restore, and entitlement refresh APIs when a screen needs richer commerce state.
-
-## 2. Present the Pro paywall
-
-The app owns copy, legal URLs, and presentation. StoreKit owns prices and eligibility.
-
-```swift
-let paywallConfiguration = ProPaywallConfiguration(
-    title: "Example Pro",
-    subtitle: "Unlock every premium workflow.",
-    highlightedProductID: "com.example.app.pro.yearly",
-    highlightedProductBadge: "BEST VALUE",
-    termsURL: URL(string: "https://example.com/terms")!,
-    privacyURL: URL(string: "https://example.com/privacy")!
+@State private var themeStore = MacAppThemeStore(
+    configuration: .builtIns([
+        .system,
+        .midnight,
+        .ocean,
+        .porcelain,
+        .githubLight
+    ])
 )
 ```
 
-Use `ProPaywallView` inside the app's own window, sheet, or other presentation:
+Apply the same store to every SwiftUI scene root that should stay synchronized:
+
+```swift
+WindowGroup {
+    RootView()
+        .macAppTheme(themeStore)
+}
+
+Window("Pro", id: "pro") {
+    ProPaywallView(...)
+        .macAppTheme(themeStore)
+}
+
+Settings {
+    SettingsView(...)
+        .macAppTheme(themeStore)
+}
+```
+
+MAF visual components read `@Environment(\.macAppTheme)`. The modifier also applies accent tint and the theme's preferred System/Light/Dark appearance. SwiftUI scene environments do not cross separate scenes automatically, so each root should receive the shared store.
+
+The built-in catalog contains System, GitHub Dark Dimmed, Midnight, Ocean, Aurora, Ember, Graphite, Porcelain, Blossom, Morning Mist, Soft Sage, Sunrise, and GitHub Light.
+
+See `Documentation/Theming.md` for semantic palette roles, custom themes, the reusable picker/cards, and BYOKchat/Onlink migration guidance.
+
+## 3. Use the reusable Settings shell
+
+`MacAppSettingsView` provides the custom macOS shell: themed sidebar, grouped sections, detail header, surfaces, and inherited group-box treatment. MAF ships Appearance and Plan as reusable built-ins; apps can inject unlimited custom panes and choose exact ordering.
+
+A standard Appearance + Plan setup is:
+
+```swift
+@State private var settingsRouter = MacAppSettingsRouter()
+
+Settings {
+    MacAppSettingsView(
+        themeStore: themeStore,
+        purchaseManager: purchases,
+        planConfiguration: ProPlanPaneConfiguration(appName: "Example"),
+        router: settingsRouter,
+        onUpgrade: {
+            openWindow(id: "pro-paywall")
+        }
+    )
+    .macAppTheme(themeStore)
+}
+.windowStyle(.hiddenTitleBar)
+```
+
+For exact composition, build sections manually and interleave app panes with MAF factories:
+
+```swift
+let sections = [
+    MacAppSettingsSection(
+        id: .application,
+        title: "Application",
+        panes: [
+            MacAppSettingsPane(
+                id: "general",
+                title: "General",
+                subtitle: "Application behavior and defaults.",
+                systemImage: "gearshape"
+            ) {
+                GeneralSettingsView()
+            },
+            .appearance(themeStore: themeStore)
+        ]
+    ),
+    MacAppSettingsSection(
+        id: .account,
+        title: "Account",
+        panes: [
+            .plan(
+                purchaseManager: purchases,
+                configuration: ProPlanPaneConfiguration(appName: "Example"),
+                onUpgrade: openPaywall
+            )
+        ]
+    )
+]
+```
+
+The router controls pane selection only; the host app still opens Settings:
+
+```swift
+settingsRouter.request(.plan)
+openSettings()
+```
+
+See `Documentation/Settings.md` for built-in pane disabling, app-only Settings, exact interleaving, and routing patterns.
+
+## 4. Present and gate Pro features
+
+The app owns paywall presentation, copy, and legal URLs. StoreKit owns prices and offer eligibility.
 
 ```swift
 ProPaywallView(
     purchaseManager: purchases,
     configuration: paywallConfiguration,
-    onPurchased: { product in
-        closePaywall()
-    },
-    onRestored: {
-        closePaywall()
-    },
-    onClose: {
-        closePaywall()
-    }
+    onPurchased: { _ in closePaywall() },
+    onRestored: closePaywall,
+    onClose: closePaywall
 )
 ```
 
-The paywall supports recurring and lifetime products, preferred/highlighted plans, automatic monthly-vs-yearly savings badges, free trials and paid introductory offers, loading/retry, purchase errors, restore, Redeem Code, and catalog-aware legal disclosure.
+For simple actions use `ProGateButton` or `purchases.hasPro`. For whole content regions use `ProGate`, `ProLockedOverlay`, or `ProLockPopover`. Use `ProBadge` and `ProUpsellView` for smaller premium surfaces.
 
-Eligible StoreKit introductory offers automatically change the plan copy and CTA. For example, an eligible free trial becomes `Start Free Trial`; an ineligible trial falls back to normal paid-plan copy.
+`ProPlanButton` is a compact header/title-bar-adjacent control. Free users can route to the paywall; Pro users can route to Settings → Plan through `MacAppSettingsRouter`.
 
-## 3. Gate Pro features
+## 5. Debug purchase simulation and Developer Tools
 
-For a simple action, use `ProGateButton` or check `purchases.hasPro` directly. For whole content regions, use `ProGate`:
+The in-process simulator is compiled only in Debug builds. It never replaces production StoreKit behavior in Release builds.
 
-```swift
-let exportFeature = PremiumFeature(
-    id: "batch-export",
-    title: "Batch Export"
-)
-
-ProGate(
-    purchaseManager: purchases,
-    feature: exportFeature
-) {
-    BatchExportView()
-} lockedContent: { feature in
-    ProLockedOverlay(feature: feature) {
-        openPaywall()
-    }
-}
-```
-
-`PremiumAccessPolicy` keeps existing user-created content accessible by default after Pro expires while still allowing apps to gate creation or premium editing. Apps can opt into stricter behavior when their product requires it.
-
-Use `ProBadge`, `ProGateButton`, and `ProUpsellView` for smaller premium surfaces without introducing another entitlement store.
-
-## 4. Spokio-style Settings + Plan tab
-
-The app owns the native `Settings` scene and its General/About tabs. MacAppFoundation provides only the reusable Plan pane.
-
-```swift
-struct SettingsView: View {
-    @State private var selectedTab = SettingsTab.general
-    let purchases: PurchaseManager
-    let openPaywall: () -> Void
-
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gearshape") }
-                .tag(SettingsTab.general)
-
-            ProPlanPane(
-                purchaseManager: purchases,
-                configuration: ProPlanPaneConfiguration(appName: "Example"),
-                onUpgrade: openPaywall
-            )
-            .tabItem { Label("Plan", systemImage: "creditcard") }
-            .tag(SettingsTab.plan)
-
-            AboutSettingsView()
-                .tabItem { Label("About", systemImage: "info.circle") }
-                .tag(SettingsTab.about)
-        }
-        .padding()
-        .frame(width: 500, alignment: .top)
-        .fixedSize()
-    }
-}
-```
-
-Then keep the scene app-owned:
-
-```swift
-Settings {
-    SettingsView(
-        purchases: purchases,
-        openPaywall: { openWindow(id: "pro-paywall") }
-    )
-}
-```
-
-`ProPlanPane` preserves the Spokio structure: Free/Pro status card, active MONTHLY/YEARLY/LIFETIME/PRO badge, upgrade action, subscription-management action for active recurring plans, and a lower Pro feature `GroupBox`.
-
-See `Documentation/Settings.md` for the full composition pattern.
-
-## 5. Debug purchase simulation
-
-The simulator is compiled only in Debug builds. It never contacts App Store Connect and never replaces production StoreKit behavior in Release builds.
-
-A manager can start in simulation mode:
+Developer Tools deliberately stay outside Settings:
 
 ```swift
 #if DEBUG
-let purchases = PurchaseManager(
-    configuration: purchaseConfiguration,
-    simulated: true,
-    simulatedProducts: [
-        StoreProduct(
-            id: "com.example.app.pro.yearly",
-            displayName: "Yearly",
-            description: "Yearly Pro",
-            displayPrice: "$39.99",
-            price: 39.99,
-            subscriptionPeriod: .init(value: 1, unit: .year),
-            introductoryOffer: .init(
-                paymentMode: .freeTrial,
-                period: .init(value: 7, unit: .day),
-                displayPrice: "$0.00",
-                price: 0,
-                isEligible: true
-            )
-        )
-    ]
-)
-#endif
-```
-
-The Debug API can switch live/simulated mode at runtime, replace the simulated catalog, force entitlement, set purchase outcomes, inject product-loading/restore failures, change operation latency, and reset simulator state.
-
-## 6. Developer Tools window + menu
-
-Developer Tools deliberately stay outside Settings. Follow the normal macOS SwiftUI scene pattern:
-
-```swift
-@main
-struct ExampleApp: App {
-    @Environment(\.openWindow) private var openWindow
-    @State private var purchases = PurchaseManager(
-        configuration: purchaseConfiguration
+Window(
+    MacAppFoundationDeveloperTools.windowTitle,
+    id: MacAppFoundationDeveloperTools.windowID
+) {
+    FoundationDeveloperView(
+        purchaseManager: purchases,
+        configuration: developerConfiguration
     )
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .managesPurchases(purchases)
-        }
-
-        #if DEBUG
-        Window(
-            MacAppFoundationDeveloperTools.windowTitle,
-            id: MacAppFoundationDeveloperTools.windowID
-        ) {
-            FoundationDeveloperView(
-                purchaseManager: purchases,
-                configuration: developerConfiguration
-            )
-        }
-        .defaultSize(
-            width: MacAppFoundationDeveloperTools.defaultWidth,
-            height: MacAppFoundationDeveloperTools.defaultHeight
-        )
-
-        .commands {
-            CommandMenu("Developer") {
-                Button("Developer Tools…") {
-                    openWindow(id: MacAppFoundationDeveloperTools.windowID)
-                }
-            }
-        }
-        #endif
-    }
-
-    #if DEBUG
-    private var developerConfiguration: FoundationDeveloperConfiguration {
-        FoundationDeveloperConfiguration(
-            replays: [
-                FoundationDeveloperReplay(
-                    id: "paywall",
-                    title: "Pro Paywall",
-                    systemImage: "crown.fill"
-                ) { dismiss in
-                    ProPaywallView(
-                        purchaseManager: purchases,
-                        configuration: paywallConfiguration,
-                        onPurchased: { _ in dismiss() },
-                        onRestored: dismiss,
-                        onClose: dismiss
-                    )
-                }
-            ]
-        )
-    }
-    #endif
+    .macAppTheme(themeStore)
 }
+#endif
 ```
 
 The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, replays, and app-defined developer sections.
 
 See `Documentation/DeveloperTools.md` for app-specific actions/toggles/values and replay examples.
 
-## Design boundaries
+## Architecture boundaries
 
-MacAppFoundation v1.0.0 intentionally does **not** include:
+MacAppFoundation intentionally does **not** own:
 
-- legacy paid-app migration
-- startup recovery/resilience
-- a general window/menu framework
-- launch at login
-- notification management
-- a theme/design system
-- backup/export/media tooling
-- app persistence/domain models
-- AI features
+- app/domain persistence models
+- general app navigation or a universal window framework
+- branding assets or product-specific copy
+- app-specific Settings pane content
+- which themes/panes a host app chooses to expose
+- backup/export/media workflows
+- launch-at-login or general notification management
+- AI/provider/domain features
 
-This keeps the package focused on reusable macOS monetization infrastructure.
+Themes and Settings are reusable infrastructure, but host apps remain in control of configuration and composition.
 
 ## Project policy
 
@@ -355,8 +262,4 @@ MacAppFoundation is developed primarily as shared infrastructure for the author'
 
 External users should treat releases as snapshots, pin versions they depend on, and be prepared to maintain their own changes when their requirements diverge, subject to the repository's license terms.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution policy.
-
-## Release
-
-See `Documentation/Release-1.0.0.md` for the v1.0.0 release notes and tag checklist.
+See `CONTRIBUTING.md` for the contribution policy.
