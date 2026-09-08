@@ -50,21 +50,21 @@ public extension MacAppSettingsSectionID {
 }
 
 /// One selectable destination in ``MacAppSettingsView``.
-@MainActor
 public struct MacAppSettingsPane: Identifiable {
     public let id: MacAppSettingsPaneID
     public let title: String
     public let subtitle: String
     public let systemImage: String
 
-    private let makeContent: () -> AnyView
+    private let makeContent: @MainActor () -> AnyView
 
+    @MainActor
     public init<Content: View>(
         id: MacAppSettingsPaneID,
         title: String,
         subtitle: String,
         systemImage: String,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping @MainActor () -> Content
     ) {
         self.id = id
         self.title = title
@@ -73,13 +73,13 @@ public struct MacAppSettingsPane: Identifiable {
         self.makeContent = { AnyView(content()) }
     }
 
+    @MainActor
     func content() -> AnyView {
         makeContent()
     }
 }
 
 /// A labeled group of Settings panes displayed together in the custom sidebar.
-@MainActor
 public struct MacAppSettingsSection: Identifiable {
     public let id: MacAppSettingsSectionID
     public let title: String
