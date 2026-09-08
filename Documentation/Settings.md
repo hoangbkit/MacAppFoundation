@@ -1,93 +1,120 @@
-# macOS Settings Integration
+# macOS Settings
 
-MacAppFoundation keeps the macOS `Settings` scene app-owned. The package provides `ProPlanPane` as the reusable Plan tab; General, About, tab selection, and any other app preferences remain in the consuming app.
+MacAppFoundation provides a reusable BYOKchat-inspired Settings shell while the host app still owns the macOS `Settings` scene itself.
 
-A Spokio-style setup looks like this:
+`MacAppSettingsView` owns the visual structure:
+
+- 218pt custom sidebar
+- grouped section labels
+- 32pt hoverable/selectable rows
+- 72pt detail header
+- themed sidebar, separators, surfaces, and detail canvas
+- inherited `MacAppSettingsGroupBoxStyle` for pane content
+
+Apps own which sections and panes exist, their ordering, and the content of app-specific panes.
+
+## App-defined panes
+
+Pane and section identifiers are extensible value types rather than framework enums.
 
 ```swift
-import MacAppFoundation
-import SwiftUI
-
-@main
-struct DemoApp: App {
-    private let purchases = PurchaseManager(
-        configuration: PurchaseConfiguration(
-            productIDs: [
-                "com.example.demo.pro.monthly",
-                "com.example.demo.pro.yearly",
-                "com.example.demo.pro.lifetime"
-            ],
-            preferredProductID: "com.example.demo.pro.yearly"
-        )
-    )
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-
-        Settings {
-            DemoSettingsView(purchases: purchases)
-        }
-    }
+extension MacAppSettingsPaneID {
+    static let general: Self = "general"
+    static let providers: Self = "providers"
 }
 
-private enum SettingsTab: Hashable {
-    case general
-    case plan
-    case about
-}
-
-private struct DemoSettingsView: View {
-    let purchases: PurchaseManager
-    @State private var selection: SettingsTab = .general
-
-    var body: some View {
-        TabView(selection: $selection) {
-            GeneralSettingsView()
-                .tabItem {
-                    Label("General", systemImage: "gearshape")
-                }
-                .tag(SettingsTab.general)
-
-            ProPlanPane(
-                purchaseManager: purchases,
-                configuration: ProPlanPaneConfiguration(appName: "Demo")
+let sections = [
+    MacAppSettingsSection(
+        id: .application,
+        title: "Application",
+        panes: [
+            MacAppSettingsPane(
+                id: .general,
+                title: "General",
+                subtitle: "Application behavior and defaults.",
+                systemImage: "gearshape"
             ) {
-                // App-owned paywall presentation, for example openWindow(id:).
-                presentPaywall()
+                GeneralSettingsView()
+            },
+            MacAppSettingsPane(
+                id: .appearance,
+                title: "Appearance",
+                subtitle: "Choose how the app looks.",
+                systemImage: "paintpalette"
+            ) {
+                AppearanceSettingsView()
             }
-            .tabItem {
-                Label("Plan", systemImage: "creditcard")
+        ]
+    ),
+    MacAppSettingsSection(
+        id: .account,
+        title: "Account",
+        panes: [
+            MacAppSettingsPane(
+                id: .providers,
+                title: "Connections",
+                subtitle: "Manage provider connections.",
+                systemImage: "bolt.horizontal.circle"
+            ) {
+                ProviderSettingsView()
             }
-            .tag(SettingsTab.plan)
+        ]
+    )
+]
+```
 
-            AboutSettingsView()
-                .tabItem {
-                    Label("About", systemImage: "info.circle")
-                }
-                .tag(SettingsTab.about)
-        }
-        .padding()
-        .frame(width: 500, alignment: .top)
-        .fixedSize()
+Then host the shell from the app-owned Settings scene:
+
+```swift
+@State private var settingsRouter = MacAppSettingsRouter()
+
+var body: some Scene {
+    Settings {
+        MacAppSettingsView(
+            sections: sections,
+            initialSelection: .general,
+            router: settingsRouter
+        )
     }
+    .windowStyle(.hiddenTitleBar)
+}
+```
 
-    private func presentPaywall() {
-        // Keep navigation/window ownership in the app.
+The shell inherits `macAppTheme` from the app root/scene, and every app-injected pane receives the same SwiftUI environment automatically.
+
+## Routing to a pane
+
+`MacAppSettingsRouter` controls selection only. The host app remains responsible for opening the Settings scene.
+
+```swift
+@Environment(\.openSettings) private var openSettings
+
+Button("Manage Providers") {
+    settingsRouter.request(.providers)
+    openSettings()
+}
+```
+
+The same pattern works for MAF built-ins such as `.plan` and `.appearance` and for any app-defined pane ID.
+
+If the Settings window is already open, requesting another pane updates the active selection. If a request is made before the Settings scene appears, the shell consumes the pending request when it appears.
+
+## Group boxes
+
+`MacAppSettingsView` applies `MacAppSettingsGroupBoxStyle` to its content hierarchy. App panes may therefore use ordinary SwiftUI `GroupBox` controls and inherit the same MAF theme-aware chrome automatically.
+
+```swift
+GroupBox("Chat") {
+    LabeledContent("Keyboard") {
+        Text("Return sends · Shift-Return inserts a line")
     }
 }
 ```
 
-`ProPlanPane` follows the current Spokio Plan-pane structure:
+Apps may also use `MacAppSettingsGroupBoxStyle` explicitly outside the Settings shell when they want the same visual treatment.
 
-- Free/Pro status card in a top `GroupBox`
-- active plan badge derived from `PurchaseManager.activeProduct`
-- upgrade action supplied by the app
-- App Store subscription-management link for Pro users
-- lower `GroupBox` containing the Pro feature list
-- native system colors plus the app accent color rather than a framework theme system
+## Built-in panes
 
-The pane uses `PurchaseManager.features` by default. Pass `features:` in `ProPlanPaneConfiguration` only when the Plan tab should show a different list.
+The shell deliberately does not hard-code pane content. The next implementation phase adds MAF-provided Appearance and Plan panes as the default built-ins while preserving the same injection model, so apps can add, reorder, or omit panes without replacing the shell.
 
-Developer Tools intentionally do not belong in Settings; they are wired as a separate debug-only window and menu command in the next phase.
+`ProPlanPane` remains independently reusable and theme-aware.
