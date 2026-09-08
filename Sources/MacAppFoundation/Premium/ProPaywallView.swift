@@ -185,7 +185,7 @@ public struct ProPaywallView: View {
                 Button("Try Again") {
                     Task { await purchaseManager.loadProducts(force: true) }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PaywallButtonStyle(.secondary))
             }
             .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
 
@@ -306,15 +306,11 @@ public struct ProPaywallView: View {
                 }
 
                 Text(purchaseButtonTitle)
-                    .font(.headline)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(PaywallButtonStyle(.primary))
         .disabled(selectedProduct == nil || purchaseManager.isBusy)
-        .opacity(selectedProduct == nil || purchaseManager.isRestoring ? 0.6 : 1)
     }
 
     private var bottomBar: some View {
@@ -330,15 +326,14 @@ public struct ProPaywallView: View {
                     Text(purchaseManager.isRestoring ? "Restoring…" : "Restore Purchases")
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PaywallButtonStyle(.secondary))
             .disabled(purchaseManager.isBusy)
 
             if configuration.showsRedeemCode {
                 Button("Redeem Code") {
                     isOfferCodeRedemptionPresented = true
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(PaywallButtonStyle(.text))
                 .disabled(purchaseManager.isBusy)
             }
 
@@ -357,7 +352,7 @@ public struct ProPaywallView: View {
             } label: {
                 Label("Close", systemImage: "xmark")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PaywallButtonStyle(.secondary))
             .disabled(purchaseManager.isBusy)
         }
     }
