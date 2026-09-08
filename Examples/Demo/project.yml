@@ -89,4 +89,5 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.hoangbkit.maf.uitests
         PRODUCT_NAME: MacAppFoundationDemoUITests
         PRODUCT_MODULE_NAME: MacAppFoundationDemoUITests
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         TEST_TARGET_NAME: MacAppFoundationDemo
