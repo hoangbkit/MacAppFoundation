@@ -128,7 +128,7 @@ struct MacAppFoundationDemoApp: App {
             .macAppTheme(themeStore)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 860, height: 600)
+        .defaultSize(width: 860, height: paywallDefaultHeight)
         .windowResizability(.contentSize)
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
@@ -167,6 +167,14 @@ struct MacAppFoundationDemoApp: App {
             .macAppTheme(themeStore)
         }
         .windowStyle(.hiddenTitleBar)
+    }
+
+    private var paywallDefaultHeight: CGFloat {
+        #if DEBUG
+        DemoUITestLaunchConfiguration.paywallDefaultHeight
+        #else
+        600
+        #endif
     }
 
     #if DEBUG
