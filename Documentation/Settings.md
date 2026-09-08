@@ -225,7 +225,7 @@ Button("Manage Plan") {
 }
 ```
 
-The same pattern works for `.appearance` and any app-defined pane ID. If Settings is already open, requesting another pane updates the active selection. If a request is made first, the shell consumes the pending request when it appears.
+The same pattern works for `.appearance` and any app-defined pane ID. If Settings is already open, requesting another pane updates the active selection. If a request is made first, the shell consumes the pending request when it appears. Valid requests are one-shot: after the shell applies the requested pane, it clears that request so a later normal Settings launch does not unexpectedly reopen the old destination. Requests for panes that are not currently present remain pending so they can resolve if the pane list changes.
 
 ## Theme environment
 
