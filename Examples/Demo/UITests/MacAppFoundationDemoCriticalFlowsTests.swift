@@ -57,11 +57,13 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         )
         defer { app.terminate() }
 
-        let managePlan = app.buttons["Manage plan"]
+        let managePlan = app.buttons[DemoUITestAccessibilityID.proPlanButton]
         XCTAssertTrue(
             managePlan.waitForExistence(timeout: 10),
             "A persisted simulated Pro entitlement should expose Manage plan."
         )
+        XCTAssertEqual(managePlan.label, "Manage plan")
+        XCTAssertEqual(managePlan.value as? String, "Pro Yearly")
 
         managePlan.tap()
 
@@ -98,11 +100,25 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
     }
 
     @MainActor
-    func testPaywallFooterActionsStayVisibleAndHittable() {
-        let app = DemoAppLauncher.launch(onboardingCompleted: true)
+    func testPaywallFooterActionsStayVisibleAndHittableAtCompactHeight() {
+        let app = DemoAppLauncher.launch(
+            onboardingCompleted: true,
+            launchArguments: [DemoAppLauncher.compactPaywallArgument]
+        )
         defer { app.terminate() }
 
         app.typeKey("p", modifierFlags: [.command, .option])
+
+        let paywallWindow = app.windows["Demo Pro"]
+        XCTAssertTrue(
+            paywallWindow.waitForExistence(timeout: 10),
+            "The Demo Pro paywall window should open."
+        )
+        XCTAssertLessThanOrEqual(
+            paywallWindow.frame.height,
+            450,
+            "The compact launch mode must exercise the paywall at roughly its 420pt minimum height."
+        )
 
         let restore = app.buttons["Restore Purchases"]
         let close = app.buttons["Close"]
@@ -111,15 +127,16 @@ final class MacAppFoundationDemoCriticalFlowsTests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 10))
         XCTAssertTrue(restore.isHittable)
         XCTAssertTrue(close.isHittable)
-
-        let paywallWindow = app.windows["Demo Pro"]
-        if paywallWindow.exists {
-            XCTAssertLessThanOrEqual(
-                close.frame.maxY,
-                paywallWindow.frame.maxY + 1,
-                "The footer action must remain inside the visible paywall window."
-            )
-        }
+        XCTAssertGreaterThanOrEqual(
+            close.frame.minY,
+            paywallWindow.frame.minY - 1,
+            "The footer action must not be clipped above the visible paywall window."
+        )
+        XCTAssertLessThanOrEqual(
+            close.frame.maxY,
+            paywallWindow.frame.maxY + 1,
+            "The footer action must remain inside the visible paywall window."
+        )
 
         close.tap()
         XCTAssertFalse(close.waitForExistence(timeout: 3))
