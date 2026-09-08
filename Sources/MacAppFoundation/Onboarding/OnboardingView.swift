@@ -5,8 +5,6 @@ import SwiftUI
 /// MacAppFoundation owns only the footer layout: leading actions, a centered
 /// message, and trailing actions. The app supplies every view in the content area.
 public struct OnboardingView<Content: View, LeadingActions: View, Message: View, TrailingActions: View>: View {
-    @Environment(\.macAppTheme) private var theme
-
     private let content: Content
     private let leadingActions: LeadingActions
     private let message: Message
@@ -25,20 +23,15 @@ public struct OnboardingView<Content: View, LeadingActions: View, Message: View,
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Rectangle()
-                .fill(theme.separator)
-                .frame(height: 1)
-
-            OnboardingFooter(
-                leadingActions: { leadingActions },
-                message: { message },
-                trailingActions: { trailingActions }
-            )
-        }
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                OnboardingFooter(
+                    leadingActions: { leadingActions },
+                    message: { message },
+                    trailingActions: { trailingActions }
+                )
+            }
     }
 }
 
@@ -50,6 +43,7 @@ public struct OnboardingView<Content: View, LeadingActions: View, Message: View,
 /// Apps can still apply a more specific button style to an individual action.
 public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActions: View>: View {
     @Environment(\.macAppTheme) private var theme
+    @Environment(\.displayScale) private var displayScale
 
     private let leadingActions: LeadingActions
     private let message: Message
@@ -83,7 +77,11 @@ public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActi
         .frame(maxWidth: .infinity)
         .frame(height: 52)
         .padding(.horizontal, 16)
-        .background(theme.surface)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(theme.separator.opacity(0.85))
+                .frame(height: 1 / displayScale)
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import SwiftUI
 /// MacAppFoundation's commerce layer.
 public struct ProPaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.macAppTheme) private var theme
 
     private let purchaseManager: PurchaseManager
@@ -43,6 +44,7 @@ public struct ProPaywallView: View {
             let outerPadding = max(20, min(proxy.size.width * 0.03, 32))
             let topPadding = max(28, min(proxy.size.height * 0.08, 44))
             let columnSpacing = max(18, min(proxy.size.width * 0.03, 30))
+            let footerHeight: CGFloat = 58
 
             VStack(spacing: 0) {
                 HStack(alignment: .top, spacing: columnSpacing) {
@@ -52,15 +54,17 @@ public struct ProPaywallView: View {
                 .padding(.horizontal, outerPadding)
                 .padding(.top, topPadding)
                 .padding(.bottom, outerPadding)
-
-                Rectangle()
-                    .fill(theme.separator)
-                    .frame(height: 1)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 bottomBar
                     .padding(.horizontal, max(16, outerPadding - 6))
-                    .padding(.vertical, 14)
-                    .background(theme.surface)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: footerHeight)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(theme.separator.opacity(0.85))
+                            .frame(height: 1 / displayScale)
+                    }
             }
         }
         .frame(

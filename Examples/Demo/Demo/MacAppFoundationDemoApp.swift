@@ -90,30 +90,25 @@ struct MacAppFoundationDemoApp: App {
             defaultWidth: 620,
             defaultHeight: 500
         ) {
-            VStack(spacing: 0) {
-                MacAppWindowDragRegion()
-
-                DemoOnboardingView(onboarding: onboarding)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .macAppTheme(themeStore)
+            DemoOnboardingView(onboarding: onboarding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .macAppTheme(themeStore)
         }
 
         Window("Demo Pro", id: DemoWindowID.paywall) {
-            VStack(spacing: 0) {
-                MacAppWindowDragRegion()
-
-                ProPaywallView(
-                    purchaseManager: purchases,
-                    configuration: DemoCommerce.paywallConfiguration,
-                    onPurchased: { product in
-                        demoState.record("Purchased \(product.displayName)")
-                    },
-                    onRestored: {
-                        demoState.record("Restored purchases")
-                    }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProPaywallView(
+                purchaseManager: purchases,
+                configuration: DemoCommerce.paywallConfiguration,
+                onPurchased: { product in
+                    demoState.record("Purchased \(product.displayName)")
+                },
+                onRestored: {
+                    demoState.record("Restored purchases")
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) {
+                MacAppWindowDragRegion(background: .clear)
             }
             .macAppFullSizeWindowChrome()
             .macAppTheme(themeStore)
@@ -157,7 +152,6 @@ struct MacAppFoundationDemoApp: App {
             .environment(demoState)
             .macAppTheme(themeStore)
         }
-        .windowStyle(.hiddenTitleBar)
     }
 
     #if DEBUG

@@ -3,9 +3,9 @@ import SwiftUI
 /// BYOKchat-inspired macOS Settings shell with an app-extensible pane model.
 ///
 /// MacAppFoundation owns the themed sidebar, selection interactions, detail
-/// header, separators, custom title-bar drag region, and content canvas. Flat
-/// panes are the recommended default for small Settings surfaces; apps can opt
-/// into labeled sections when stronger grouping is useful.
+/// header, separators, and content canvas. Flat panes are the recommended default
+/// for small Settings surfaces; apps can opt into labeled sections when stronger
+/// grouping is useful.
 @MainActor
 public struct MacAppSettingsView: View {
     private let title: String
@@ -56,26 +56,21 @@ public struct MacAppSettingsView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            settingsTitlebar
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: 218)
 
-            HStack(spacing: 0) {
-                sidebar
-                    .frame(width: 218)
+            Rectangle()
+                .fill(theme.separator.opacity(0.85))
+                .frame(width: 1)
 
-                Rectangle()
-                    .fill(theme.separator.opacity(0.85))
-                    .frame(width: 1)
-
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(theme.canvas)
-            }
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(theme.canvas)
         }
         .frame(minWidth: 900, idealWidth: 940, minHeight: 620, idealHeight: 660)
         .background(theme.canvas)
         .groupBoxStyle(MacAppSettingsGroupBoxStyle())
-        .macAppFullSizeWindowChrome()
         .onAppear {
             consumeRouterRequest()
             normalizeSelection()
@@ -89,44 +84,8 @@ public struct MacAppSettingsView: View {
         }
     }
 
-    private var settingsTitlebar: some View {
-        HStack(spacing: 0) {
-            MacAppWindowDragRegion(background: theme.surface)
-                .frame(width: 218)
-
-            Rectangle()
-                .fill(theme.separator.opacity(0.85))
-                .frame(width: 1)
-
-            MacAppWindowDragRegion(
-                trafficLightReserve: 0,
-                background: theme.canvas
-            )
-            .frame(maxWidth: .infinity)
-        }
-        .frame(height: MacAppWindowChromeMetrics.titlebarHeight)
-    }
-
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(theme.accent)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        theme.accentSoft,
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    )
-
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(theme.textPrimary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 16)
-            .padding(.bottom, 14)
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(sections.filter { !$0.panes.isEmpty }) { section in
@@ -134,6 +93,7 @@ public struct MacAppSettingsView: View {
                     }
                 }
                 .padding(.horizontal, 9)
+                .padding(.top, 14)
                 .padding(.bottom, 14)
             }
             .scrollIndicators(.hidden)
