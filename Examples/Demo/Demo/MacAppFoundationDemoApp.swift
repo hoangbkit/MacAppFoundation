@@ -95,19 +95,26 @@ struct MacAppFoundationDemoApp: App {
         }
 
         Window("Demo Pro", id: DemoWindowID.paywall) {
-            ProPaywallView(
-                purchaseManager: purchases,
-                configuration: DemoCommerce.paywallConfiguration,
-                onPurchased: { product in
-                    demoState.record("Purchased \(product.displayName)")
-                },
-                onRestored: {
-                    demoState.record("Restored purchases")
-                }
-            )
+            VStack(spacing: 0) {
+                MacAppWindowDragRegion()
+
+                ProPaywallView(
+                    purchaseManager: purchases,
+                    configuration: DemoCommerce.paywallConfiguration,
+                    onPurchased: { product in
+                        demoState.record("Purchased \(product.displayName)")
+                    },
+                    onRestored: {
+                        demoState.record("Restored purchases")
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .macAppFullSizeWindowChrome()
             .macAppTheme(themeStore)
         }
-        .defaultSize(width: 860, height: 580)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 860, height: 600)
         .windowResizability(.contentSize)
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
