@@ -7,15 +7,23 @@ struct DemoSettingsView: View {
 
     @Environment(\.openWindow) private var openWindow
     @Environment(DemoState.self) private var demoState
+    @State private var selection: SettingsTab = .plan
+
+    private enum SettingsTab: Hashable {
+        case general
+        case plan
+        case about
+    }
 
     var body: some View {
         @Bindable var demoState = demoState
 
-        TabView {
+        TabView(selection: $selection) {
             generalTab(showTips: $demoState.showTips, compactCards: $demoState.compactCards)
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
+                .tag(SettingsTab.general)
 
             ProPlanPane(
                 purchaseManager: purchaseManager,
@@ -27,11 +35,13 @@ struct DemoSettingsView: View {
             .tabItem {
                 Label("Plan", systemImage: "creditcard")
             }
+            .tag(SettingsTab.plan)
 
             aboutTab
                 .tabItem {
                     Label("About", systemImage: "info.circle")
                 }
+                .tag(SettingsTab.about)
         }
         .padding()
         .frame(width: 500)
