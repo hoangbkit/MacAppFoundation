@@ -44,7 +44,9 @@ public struct MacAppThemePalette: @unchecked Sendable {
     public let surface: Color
     public let surfaceRaised: Color
     public let border: Color
+    public let separator: Color
     public let selection: Color
+    public let codeSurface: Color
     public let textPrimary: Color
     public let textSecondary: Color
     public let textMuted: Color
@@ -62,7 +64,9 @@ public struct MacAppThemePalette: @unchecked Sendable {
         surface: Color,
         surfaceRaised: Color,
         border: Color,
+        separator: Color,
         selection: Color,
+        codeSurface: Color,
         textPrimary: Color,
         textSecondary: Color,
         textMuted: Color,
@@ -79,7 +83,9 @@ public struct MacAppThemePalette: @unchecked Sendable {
         self.surface = surface
         self.surfaceRaised = surfaceRaised
         self.border = border
+        self.separator = separator
         self.selection = selection
+        self.codeSurface = codeSurface
         self.textPrimary = textPrimary
         self.textSecondary = textSecondary
         self.textMuted = textMuted
@@ -122,7 +128,9 @@ public extension MacAppTheme {
     var surface: Color { palette.surface }
     var surfaceRaised: Color { palette.surfaceRaised }
     var border: Color { palette.border }
+    var separator: Color { palette.separator }
     var selection: Color { palette.selection }
+    var codeSurface: Color { palette.codeSurface }
     var textPrimary: Color { palette.textPrimary }
     var textSecondary: Color { palette.textSecondary }
     var textMuted: Color { palette.textMuted }
@@ -148,12 +156,14 @@ public extension MacAppTheme {
             surface: Color(nsColor: .controlBackgroundColor),
             surfaceRaised: Color(nsColor: .underPageBackgroundColor),
             border: Color(nsColor: .separatorColor),
-            selection: Color(nsColor: .selectedContentBackgroundColor).opacity(0.16),
+            separator: Color(nsColor: .separatorColor),
+            selection: Color.accentColor.opacity(0.12),
+            codeSurface: Color(nsColor: .textBackgroundColor),
             textPrimary: Color(nsColor: .labelColor),
             textSecondary: Color(nsColor: .secondaryLabelColor),
             textMuted: Color(nsColor: .tertiaryLabelColor),
             accent: .accentColor,
-            accentSoft: Color.accentColor.opacity(0.16),
+            accentSoft: Color.accentColor.opacity(0.10),
             accentForeground: .white,
             success: Color(nsColor: .systemGreen),
             warning: Color(nsColor: .systemOrange),
