@@ -12,6 +12,7 @@ public struct OnboardingButtonStyle: ButtonStyle {
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.macAppTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let prominence: Prominence
 
@@ -36,8 +37,11 @@ public struct OnboardingButtonStyle: ButtonStyle {
             }
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.55)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.08),
+                value: configuration.isPressed
+            )
     }
 
     private var foregroundColor: Color {
