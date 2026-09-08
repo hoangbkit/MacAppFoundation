@@ -20,6 +20,7 @@ struct DemoOnboardingView: View {
                         onboarding.goBack()
                     }
                 }
+                .accessibilityIdentifier(DemoAccessibilityID.onboardingBack)
             }
         } message: {
             OnboardingStepMessage(
@@ -31,8 +32,10 @@ struct DemoOnboardingView: View {
             Button(onboarding.isLastStep ? "Get Started" : "Continue") {
                 continueFlow()
             }
+            .accessibilityIdentifier(DemoAccessibilityID.onboardingContinue)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier(DemoAccessibilityID.onboarding)
     }
 
     @ViewBuilder
