@@ -58,6 +58,36 @@ public extension MacAppSettingsPane {
 /// Builders for MAF's conventional default Settings grouping.
 @MainActor
 public enum MacAppSettingsBuiltIns {
+    public static func appearanceSection(
+        themeStore: MacAppThemeStore
+    ) -> MacAppSettingsSection {
+        MacAppSettingsSection(
+            id: .application,
+            title: "Application",
+            panes: [
+                .appearance(themeStore: themeStore)
+            ]
+        )
+    }
+
+    public static func planSection(
+        purchaseManager: PurchaseManager,
+        planConfiguration: ProPlanPaneConfiguration,
+        onUpgrade: @escaping () -> Void
+    ) -> MacAppSettingsSection {
+        MacAppSettingsSection(
+            id: .account,
+            title: "Account",
+            panes: [
+                .plan(
+                    purchaseManager: purchaseManager,
+                    configuration: planConfiguration,
+                    onUpgrade: onUpgrade
+                )
+            ]
+        )
+    }
+
     public static func sections(
         themeStore: MacAppThemeStore,
         purchaseManager: PurchaseManager,
@@ -68,29 +98,15 @@ public enum MacAppSettingsBuiltIns {
         var sections: [MacAppSettingsSection] = []
 
         if enabledPanes.contains(.appearance) {
-            sections.append(
-                MacAppSettingsSection(
-                    id: .application,
-                    title: "Application",
-                    panes: [
-                        .appearance(themeStore: themeStore)
-                    ]
-                )
-            )
+            sections.append(appearanceSection(themeStore: themeStore))
         }
 
         if enabledPanes.contains(.plan) {
             sections.append(
-                MacAppSettingsSection(
-                    id: .account,
-                    title: "Account",
-                    panes: [
-                        .plan(
-                            purchaseManager: purchaseManager,
-                            configuration: planConfiguration,
-                            onUpgrade: onUpgrade
-                        )
-                    ]
+                planSection(
+                    purchaseManager: purchaseManager,
+                    planConfiguration: planConfiguration,
+                    onUpgrade: onUpgrade
                 )
             )
         }
@@ -100,6 +116,27 @@ public enum MacAppSettingsBuiltIns {
 }
 
 public extension MacAppSettingsView {
+    /// Convenience initializer for apps that only need MAF's Appearance pane.
+    @MainActor
+    init(
+        title: String = "Settings",
+        systemImage: String = "gearshape.fill",
+        themeStore: MacAppThemeStore,
+        additionalSections: [MacAppSettingsSection] = [],
+        initialSelection: MacAppSettingsPaneID? = nil,
+        router: MacAppSettingsRouter? = nil
+    ) {
+        self.init(
+            title: title,
+            systemImage: systemImage,
+            sections: [
+                MacAppSettingsBuiltIns.appearanceSection(themeStore: themeStore)
+            ] + additionalSections,
+            initialSelection: initialSelection,
+            router: router
+        )
+    }
+
     /// Convenience initializer for the standard MAF Settings experience.
     ///
     /// Appearance and Plan are included by default. Apps can disable either pane
