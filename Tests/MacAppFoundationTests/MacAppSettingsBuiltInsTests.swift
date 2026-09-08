@@ -22,8 +22,8 @@ struct MacAppSettingsBuiltInsTests {
     }
 
     @MainActor
-    @Test("Default built-ins include Appearance then Plan")
-    func defaultSections() {
+    @Test("Default built-ins are a flat Appearance then Plan pane list")
+    func defaultPanes() {
         let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.defaults")!
         defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.defaults")
         let store = MacAppThemeStore(defaults: defaults)
@@ -32,15 +32,14 @@ struct MacAppSettingsBuiltInsTests {
             simulated: true
         )
 
-        let sections = MacAppSettingsBuiltIns.sections(
+        let panes = MacAppSettingsBuiltIns.panes(
             themeStore: store,
             purchaseManager: purchases,
             planConfiguration: ProPlanPaneConfiguration(appName: "Demo"),
             onUpgrade: {}
         )
 
-        #expect(sections.map(\.id) == [.application, .account])
-        #expect(sections.flatMap(\.panes).map(\.id) == [.appearance, .plan])
+        #expect(panes.map { $0.id } == [.appearance, .plan])
     }
 
     @MainActor
@@ -54,14 +53,14 @@ struct MacAppSettingsBuiltInsTests {
             simulated: true
         )
 
-        let appearanceOnly = MacAppSettingsBuiltIns.sections(
+        let appearanceOnly = MacAppSettingsBuiltIns.panes(
             themeStore: store,
             purchaseManager: purchases,
             planConfiguration: ProPlanPaneConfiguration(appName: "Demo"),
             enabledPanes: [.appearance],
             onUpgrade: {}
         )
-        let planOnly = MacAppSettingsBuiltIns.sections(
+        let planOnly = MacAppSettingsBuiltIns.panes(
             themeStore: store,
             purchaseManager: purchases,
             planConfiguration: ProPlanPaneConfiguration(appName: "Demo"),
@@ -69,7 +68,29 @@ struct MacAppSettingsBuiltInsTests {
             onUpgrade: {}
         )
 
-        #expect(appearanceOnly.flatMap(\.panes).map(\.id) == [.appearance])
-        #expect(planOnly.flatMap(\.panes).map(\.id) == [.plan])
+        #expect(appearanceOnly.map { $0.id } == [.appearance])
+        #expect(planOnly.map { $0.id } == [.plan])
+    }
+
+    @MainActor
+    @Test("Grouped section helpers remain available for larger settings surfaces")
+    func groupedSectionsRemainAvailable() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.grouped")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.grouped")
+        let store = MacAppThemeStore(defaults: defaults)
+        let purchases = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: ["pro"]),
+            simulated: true
+        )
+
+        let sections = MacAppSettingsBuiltIns.sections(
+            themeStore: store,
+            purchaseManager: purchases,
+            planConfiguration: ProPlanPaneConfiguration(appName: "Demo"),
+            onUpgrade: {}
+        )
+
+        #expect(sections.map { $0.id } == [.application, .account])
+        #expect(sections.flatMap { $0.panes }.map { $0.id } == [.appearance, .plan])
     }
 }
