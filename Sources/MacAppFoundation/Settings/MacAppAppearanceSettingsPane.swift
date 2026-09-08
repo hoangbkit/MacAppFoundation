@@ -37,20 +37,11 @@ public struct MacAppAppearanceSettingsPane: View {
         } label: {
             HStack(spacing: 14) {
                 HStack(spacing: 5) {
-                    Circle()
-                        .fill(candidate.canvas)
-                        .overlay {
-                            Circle().stroke(candidate.separator, lineWidth: 1)
-                        }
-                    Circle()
-                        .fill(candidate.surface)
-                        .overlay {
-                            Circle().stroke(candidate.separator, lineWidth: 1)
-                        }
-                    Circle()
-                        .fill(candidate.accent)
+                    themeSwatch(candidate.canvas, border: candidate.separator)
+                    themeSwatch(candidate.surface, border: candidate.separator)
+                    themeSwatch(candidate.accent, border: candidate.accent)
                 }
-                .frame(width: 58, height: 22)
+                .frame(width: 58, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(candidate.name)
@@ -90,5 +81,14 @@ public struct MacAppAppearanceSettingsPane: View {
         .buttonStyle(.plain)
         .accessibilityLabel(candidate.name)
         .accessibilityValue(isSelected ? "Selected" : candidate.caption)
+    }
+
+    private func themeSwatch(_ color: Color, border: Color) -> some View {
+        Circle()
+            .fill(color)
+            .frame(width: 14, height: 14)
+            .overlay {
+                Circle().stroke(border.opacity(0.9), lineWidth: 1)
+            }
     }
 }
