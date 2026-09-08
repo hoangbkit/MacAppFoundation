@@ -7,9 +7,9 @@ MacAppFoundation provides a shared semantic macOS theme system. Host apps create
     configuration: MacAppThemeConfiguration(
         themes: [
             .system,
-            MacAppThemeCatalog.midnight,
-            MacAppThemeCatalog.ocean,
-            MacAppThemeCatalog.porcelain,
+            .midnight,
+            .ocean,
+            .porcelain,
         ],
         defaultThemeID: .system
     )
@@ -39,7 +39,9 @@ The shared catalog contains 13 presets:
 - Sunrise
 - GitHub Light
 
-Apps may expose all of them with `MacAppThemeCatalog.allBuiltIn` or choose any subset.
+Apps may expose all of them with `MacAppThemeConfiguration.allBuiltIn(...)`, select built-in IDs with `MacAppThemeConfiguration.builtIns(...)`, or provide an explicit ordered array that mixes built-in and custom themes.
+
+The 13-theme family follows BYOKchat, including the runtime-native System theme. The 12 named presets use Onlink's richer palette definitions; additional semantic roles such as selection, separator, and code surfaces are present so later MAF view migrations do not need local color inventions.
 
 ## Custom themes
 
@@ -55,9 +57,9 @@ let brandTheme = MacAppTheme(
 )
 
 let configuration = MacAppThemeConfiguration(
-    themes: [MacAppThemeCatalog.system, brandTheme],
+    themes: [.system, brandTheme],
     defaultThemeID: "brand"
 )
 ```
 
-`MacAppThemePalette` exposes semantic roles for canvases, surfaces, borders, selection, primary/secondary/muted text, accent colors, status colors, and shadow. Host-app views may read the same environment when they want to visually integrate with MAF components.
+`MacAppThemePalette` exposes semantic roles for canvases, surfaces, borders/separators, selection, code surfaces, primary/secondary/muted text, accent colors, status colors, and shadow. Host-app views may read the same environment when they want to visually integrate with MAF components.
