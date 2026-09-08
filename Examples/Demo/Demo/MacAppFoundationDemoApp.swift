@@ -13,6 +13,8 @@ enum DemoWindowID {
 struct MacAppFoundationDemoApp: App {
     @Environment(\.openWindow) private var openWindow
     @State private var demoState = DemoState()
+    @State private var themeStore = MacAppThemeStore(configuration: DemoTheme.configuration)
+    @State private var settingsRouter = MacAppSettingsRouter()
     @State private var onboarding = OnboardingState(
         id: "demo",
         stepCount: 3
@@ -22,9 +24,13 @@ struct MacAppFoundationDemoApp: App {
 
     var body: some Scene {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
-            ContentView(purchaseManager: purchases)
-                .environment(demoState)
-                .managesPurchases(purchases)
+            ContentView(
+                purchaseManager: purchases,
+                settingsRouter: settingsRouter
+            )
+            .environment(demoState)
+            .macAppTheme(themeStore)
+            .managesPurchases(purchases)
         }
         .defaultSize(width: 1080, height: 700)
         .defaultLaunchBehavior(onboarding.mainWindowLaunchBehavior)
@@ -85,6 +91,7 @@ struct MacAppFoundationDemoApp: App {
             defaultHeight: 500
         ) {
             DemoOnboardingView(onboarding: onboarding)
+                .macAppTheme(themeStore)
         }
 
         Window("Demo Pro", id: DemoWindowID.paywall) {
@@ -98,6 +105,7 @@ struct MacAppFoundationDemoApp: App {
                     demoState.record("Restored purchases")
                 }
             )
+            .macAppTheme(themeStore)
         }
         .defaultSize(width: 860, height: 580)
         .windowResizability(.contentSize)
@@ -105,6 +113,7 @@ struct MacAppFoundationDemoApp: App {
         Window("Pro Upsell", id: DemoWindowID.upsell) {
             DemoUpsellWindow(purchaseManager: purchases)
                 .environment(demoState)
+                .macAppTheme(themeStore)
         }
         .defaultSize(width: 560, height: 520)
         .windowResizability(.contentSize)
@@ -119,6 +128,7 @@ struct MacAppFoundationDemoApp: App {
                 configuration: developerConfiguration
             )
             .environment(demoState)
+            .macAppTheme(themeStore)
         }
         .defaultSize(
             width: MacAppFoundationDeveloperTools.defaultWidth,
@@ -127,9 +137,15 @@ struct MacAppFoundationDemoApp: App {
         #endif
 
         Settings {
-            DemoSettingsView(purchaseManager: purchases)
-                .environment(demoState)
+            DemoSettingsView(
+                purchaseManager: purchases,
+                themeStore: themeStore,
+                settingsRouter: settingsRouter
+            )
+            .environment(demoState)
+            .macAppTheme(themeStore)
         }
+        .windowStyle(.hiddenTitleBar)
     }
 
     #if DEBUG
