@@ -8,6 +8,8 @@ It is intentionally small: apps explicitly record product events while the found
 
 A native analytics-only app can be configured without commerce and without App Attest. It still needs a server app ID and app key.
 
+`AppAnalyticsClient` intentionally does not implement App Attest. For analytics-only integrations, configure the server with `attestMode: disabled`. Do not use `attestMode: required` with this client.
+
 Example server shape:
 
 ```yaml
@@ -25,10 +27,11 @@ The native request uses:
 - `X-App-ID`
 - `X-App-Key`
 - `X-Installation-ID`
+- `X-Request-ID`
 - `X-App-Version` when available
 - `X-App-Build` when available
 
-No StoreKit transaction or entitlement is required for analytics ingestion.
+No StoreKit transaction, entitlement, or App Attest assertion is required for the supported analytics-only configuration.
 
 ## Setup
 
@@ -80,6 +83,9 @@ The client stores cumulative UTC-day snapshots locally and uploads opportunistic
 - 6-day offline age plus the current day
 - 50 event/dimension counters per day
 - 100 event counters per batch
+- 100,000 maximum count per event/day
+- 1,000 sessions per day
+- 86,400 session seconds per day
 - 32 KiB maximum request body
 - 1 transport retry
 
@@ -89,7 +95,9 @@ Automatic uploads are best effort. Tracking and lifecycle calls suppress upload 
 try await analytics.flush()
 ```
 
-Successful historical days are removed locally. The current UTC day remains cumulative so later uploads can safely send an updated snapshot.
+The server stores cumulative snapshots using retry-safe maximum semantics. The client therefore keeps the current UTC day cumulative and may safely resend it. Successful historical days are removed locally after acceptance.
+
+If the server returns HTTP `429 rate_limited`, automatic uploads persist and respect the server's `Retry-After` window before trying again. Events continue accumulating locally during that backoff. Explicit `flush()` bypasses the opportunistic schedule and surfaces the server error to the caller.
 
 ## Installation identity
 
@@ -112,6 +120,8 @@ To clear local counters without changing the installation identity:
 ```swift
 try await analytics.resetLocalState()
 ```
+
+Corrupt local analytics state is discarded safely rather than crashing the app. The installation identity remains in Keychain and is not affected by `resetLocalState()`.
 
 ## Privacy boundary
 
