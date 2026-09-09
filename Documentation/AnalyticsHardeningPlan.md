@@ -100,25 +100,23 @@ Exit criteria: payloads produced through the public client API remain within the
 
 **Status:** deterministic Phase 3 contract coverage is complete in `AppAnalyticsContractTests.swift`. The tests are grounded against the production `ai-proxy-server/src/analytics-contract.ts` constants and validators. Repository CI remains manual-only; execution on all three configured macOS lanes is deferred to Phase 4 final validation.
 
-## Phase 4 — Integration Surface, App Attest Policy, Documentation, and Final Validation
+## Phase 4 — Integration Surface, Documentation, and Final Validation
 
-Goal: make adoption safe for real Mac apps and document the remaining server-policy boundary explicitly.
+Goal: make adoption safe for real Mac apps, keep analytics independent from App Attest, and complete release validation.
 
 - [ ] Review `.managesAnalytics(_:)` lifecycle integration for duplicate app activation notifications and multi-window usage.
 - [ ] Add a lightweight deterministic integration test for the lifecycle bridge if it can be done without flaky UI automation.
 - [ ] Document that native analytics authentication uses app ID, app key, installation ID, request ID, and optional app/build headers.
-- [ ] Document server App Attest behavior: analytics requests for apps with required attestation will receive `attestation_required` unless a signing/attestation integration is supplied.
-- [ ] Decide and document one supported model:
-  - analytics clients are used only where server analytics attestation is disabled/preferred, or
-  - expose an optional request-signing/attestation hook reusable by apps with required App Attest.
+- [x] Keep App Attest out of scope for `AppAnalyticsClient`; no signing/attestation hook will be added for analytics.
+- [x] Document the supported server policy: analytics apps using this client must not require App Attest; `attestMode: disabled` is the recommended analytics-only configuration.
 - [ ] Update `Documentation/Analytics.md` with retry/backoff, cumulative snapshot semantics, UTC retention, reset behavior, and limits.
 - [ ] Run the repository's manual CI workflow on:
   - macOS 15 Intel
   - macOS 15 Apple Silicon
   - macOS 26 Apple Silicon
 
-Exit criteria: tests are green on all three supported CI lanes, documentation matches server behavior, and App Attest expectations are explicit rather than implicit.
+Exit criteria: tests are green on all three supported CI lanes, lifecycle integration is covered without flaky UI automation, and documentation matches the server/client behavior.
 
 ## Completion Target
 
-PR #3 is merge-ready when all P0 reliability work in Phases 1–2 is complete, Phase 3 contract/identity coverage is green, Phase 4 documentation/policy work is resolved, and the manual three-lane CI run succeeds.
+PR #3 is merge-ready when all P0 reliability work in Phases 1–2 is complete, Phase 3 contract/identity coverage is green, Phase 4 integration/documentation work is complete, and the manual three-lane CI run succeeds.
