@@ -6,23 +6,25 @@ This plan hardens the native macOS analytics client in PR #3 against the product
 
 Goal: make automatic uploads safe under rate limiting and transient server/network failure.
 
-- [ ] Persist an automatic-upload backoff timestamp (for example `nextUploadAttemptAt`).
-- [ ] Respect server `429 rate_limited` responses and `Retry-After` before another automatic upload attempt.
-- [ ] Keep explicit `flush()` forceful: it may bypass the opportunistic upload schedule and must surface errors to the caller.
-- [ ] Preserve all pending analytics data after transport failures, 4xx/5xx responses, malformed responses, cancellation, or a partially failed multi-batch upload.
-- [ ] Keep successful retries idempotent with the server's cumulative `MAX()` snapshot model.
+- [x] Persist an automatic-upload backoff timestamp (`nextUploadAttemptAt`).
+- [x] Respect server `429 rate_limited` responses and `Retry-After` before another automatic upload attempt.
+- [x] Keep explicit `flush()` forceful: it may bypass the opportunistic upload schedule and must surface errors to the caller.
+- [x] Preserve pending analytics data after transport failures, 4xx/5xx responses, malformed responses, cancellation, or a partially failed multi-batch upload.
+- [x] Keep successful retries idempotent with the server's cumulative `MAX()` snapshot model.
 
 Tests:
-- [ ] automatic upload respects the normal upload interval
-- [ ] 429 sets backoff and subsequent automatic flushes do not hit transport until expiry
-- [ ] explicit `flush()` still attempts immediately and surfaces the server error
-- [ ] transient transport failure retries according to `transportRetryCount`
-- [ ] exhausted retries preserve local data
-- [ ] server failure preserves local data
-- [ ] partial multi-batch success/failure remains safely retryable
-- [ ] cancellation does not discard pending state
+- [x] automatic upload respects the normal upload interval
+- [x] 429 sets backoff and subsequent automatic flushes do not hit transport until expiry
+- [x] explicit `flush()` still attempts immediately and surfaces the server error
+- [x] transient transport failure retries according to `transportRetryCount`
+- [x] exhausted retries preserve local data
+- [x] server failure preserves local data
+- [x] partial multi-batch success/failure remains safely retryable
+- [x] cancellation does not discard pending state
 
 Exit criteria: repeated events during a server outage/rate-limit window continue to accumulate locally without creating a request storm or losing data.
+
+**Status:** implementation and deterministic regression coverage are complete. Repository CI is manual-only; the three-lane execution pass remains part of Phase 4 final validation.
 
 ## Phase 2 — Cumulative Snapshot and Lifecycle Correctness
 
