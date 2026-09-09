@@ -30,26 +30,29 @@ Exit criteria: repeated events during a server outage/rate-limit window continue
 
 Goal: prove the client emits the cumulative daily snapshots the server's idempotent upsert model expects.
 
-- [ ] Verify same-day event counters are monotonic and cumulative across multiple uploads.
-- [ ] Verify each `name + dimension` pair accumulates independently.
-- [ ] Verify session count and session seconds remain cumulative across uploads.
-- [ ] Verify retries/resends never convert cumulative snapshots into deltas.
-- [ ] Verify active session duration is split correctly at UTC midnight.
-- [ ] Verify the 30-minute inactive gap resumes or creates a new session at the exact boundary.
-- [ ] Verify duplicate activation/resign notifications do not create phantom sessions or duration.
-- [ ] Verify state survives recreation of `AppAnalyticsClient` over the same state store.
+- [x] Verify same-day event counters are monotonic and cumulative across multiple uploads.
+- [x] Verify each `name + dimension` pair accumulates independently.
+- [x] Verify session count and session seconds remain cumulative across uploads.
+- [x] Verify retries/resends never convert cumulative snapshots into deltas.
+- [x] Verify active session duration is split correctly at UTC midnight.
+- [x] Verify the 30-minute inactive gap resumes or creates a new session at the exact boundary.
+- [x] Verify duplicate activation/resign notifications do not create phantom sessions or duration.
+- [x] Verify state survives recreation of `AppAnalyticsClient` over the same state store.
 
 Tests:
-- [ ] two same-day event uploads: second snapshot contains the cumulative count
-- [ ] same event with multiple dimensions produces separate counters
-- [ ] later session snapshot has non-decreasing sessions and session seconds
-- [ ] retrying a snapshot produces equivalent cumulative payloads
-- [ ] session crossing UTC midnight splits seconds between two day snapshots
-- [ ] inactivity at <= 30 minutes resumes; > 30 minutes starts a new session
-- [ ] duplicate lifecycle calls are harmless
-- [ ] persisted state reload continues cumulative accounting
+- [x] two same-day event uploads: second snapshot contains the cumulative count
+- [x] same event with multiple dimensions produces separate counters
+- [x] later session snapshot has non-decreasing sessions and session seconds
+- [x] retrying/resending a snapshot produces equivalent cumulative data
+- [x] session crossing UTC midnight splits seconds between two day snapshots
+- [x] inactivity at <= 30 minutes resumes; > 30 minutes starts a new session
+- [x] duplicate lifecycle calls are harmless
+- [x] persisted state reload continues cumulative accounting
+- [x] uninterrupted foreground sessions longer than 30 minutes are not expired by the inactive-session timeout
 
 Exit criteria: generated snapshots match the server's retry-safe cumulative `MAX(existing, incoming)` storage semantics.
+
+**Status:** implementation and deterministic regression coverage are complete. Phase 2 also fixed two lifecycle bugs found during hardening: duplicate resign notifications no longer move the inactive-session boundary, and the 30-minute timeout now expires only inactive sessions so long-running foreground sessions cannot lose duration.
 
 ## Phase 3 — Contract Limits, Retention, Identity, and Response Validation
 
