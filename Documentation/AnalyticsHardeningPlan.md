@@ -100,16 +100,34 @@ Exit criteria: payloads produced through the public client API remain within the
 
 **Status:** deterministic Phase 3 contract coverage is complete in `AppAnalyticsContractTests.swift`. The tests are grounded against the production `ai-proxy-server/src/analytics-contract.ts` constants and validators. Repository CI remains manual-only; execution on all three configured macOS lanes is deferred to Phase 4 final validation.
 
+## Consolidation Pass — Cross-Phase Review
+
+Goal: review the complete analytics diff as one system, remove stale assumptions, and tighten integration seams before final validation.
+
+- [x] Review the full PR diff across client, lifecycle bridge, Demo integration, documentation, and all analytics regression suites.
+- [x] Require `acceptedDays` to exactly equal the submitted ordered day list before any historical state is dropped; set-equivalent, reordered, duplicated, missing, or extra responses are rejected.
+- [x] Add a regression proving malformed reordered acceptance does not drop pending historical state.
+- [x] Add a regression proving `X-Request-ID` matches the body `requestId`.
+- [x] Reconcile App Attest language everywhere: it is intentionally out of scope and the supported analytics-only server configuration uses `attestMode: disabled`.
+- [x] Make analytics discoverable in the root README as a first-class package area with setup and documentation links.
+- [x] Keep the reliability, lifecycle, contract, and consolidation test files separated by concern instead of introducing a shared test abstraction that would couple otherwise independent regression suites.
+- [x] Preserve the no-XCUITest policy; analytics validation remains deterministic package/unit testing plus the existing Demo launch screenshot smoke test.
+
+Review outcome: no cross-phase architecture rewrite is needed. Retry/backoff, cumulative snapshots, lifecycle accounting, retention/batching, installation identity, and Demo integration remain compatible. The only production behavior change from consolidation is stricter successful-response acceptance.
+
+**Status:** complete. Final execution validation remains in Phase 4.
+
 ## Phase 4 — Integration Surface, Documentation, and Final Validation
 
 Goal: make adoption safe for real Mac apps, keep analytics independent from App Attest, and complete release validation.
 
 - [ ] Review `.managesAnalytics(_:)` lifecycle integration for duplicate app activation notifications and multi-window usage.
 - [ ] Add a lightweight deterministic integration test for the lifecycle bridge if it can be done without flaky UI automation.
-- [ ] Document that native analytics authentication uses app ID, app key, installation ID, request ID, and optional app/build headers.
+- [x] Document that native analytics authentication uses app ID, app key, installation ID, request ID, and optional app/build headers.
 - [x] Keep App Attest out of scope for `AppAnalyticsClient`; no signing/attestation hook will be added for analytics.
 - [x] Document the supported server policy: analytics apps using this client must not require App Attest; `attestMode: disabled` is the recommended analytics-only configuration.
-- [ ] Update `Documentation/Analytics.md` with retry/backoff, cumulative snapshot semantics, UTC retention, reset behavior, and limits.
+- [x] Update `Documentation/Analytics.md` with retry/backoff, cumulative snapshot semantics, UTC retention, reset behavior, and limits.
+- [x] Add analytics to the root README and Demo overview.
 - [ ] Run the repository's manual CI workflow on:
   - macOS 15 Intel
   - macOS 15 Apple Silicon
@@ -119,4 +137,4 @@ Exit criteria: tests are green on all three supported CI lanes, lifecycle integr
 
 ## Completion Target
 
-PR #3 is merge-ready when all P0 reliability work in Phases 1–2 is complete, Phase 3 contract/identity coverage is green, Phase 4 integration/documentation work is complete, and the manual three-lane CI run succeeds.
+PR #3 is merge-ready when Phases 1–3 and the consolidation pass are complete, Phase 4 lifecycle integration/documentation work is complete, and the manual three-lane CI run succeeds.
