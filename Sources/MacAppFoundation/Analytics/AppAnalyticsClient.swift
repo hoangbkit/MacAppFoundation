@@ -44,6 +44,7 @@ public actor AppAnalyticsClient {
         static let maxAppVersionLength = 64
         static let maxBodyBytes = 32 * 1024
         static let sessionTimeout: TimeInterval = 30 * 60
+        static let defaultRateLimitBackoff: TimeInterval = 60
     }
 
     private struct EventState: Codable, Sendable {
@@ -68,6 +69,7 @@ public actor AppAnalyticsClient {
         var days: [String: DayState] = [:]
         var session: SessionState?
         var lastUploadAt: Date?
+        var nextUploadAttemptAt: Date?
     }
 
     private struct BatchEvent: Encodable, Sendable {
@@ -305,14 +307,22 @@ public actor AppAnalyticsClient {
         checkpointActiveSession(in: &state, at: timestamp)
 
         guard !state.days.isEmpty else {
+            state.nextUploadAttemptAt = nil
             try await saveState(state)
             return
         }
 
-        if !force, let lastUploadAt = state.lastUploadAt,
-           timestamp.timeIntervalSince(lastUploadAt) < configuration.uploadInterval {
-            try await saveState(state)
-            return
+        if !force {
+            if let nextUploadAttemptAt = state.nextUploadAttemptAt,
+               timestamp < nextUploadAttemptAt {
+                try await saveState(state)
+                return
+            }
+            if let lastUploadAt = state.lastUploadAt,
+               timestamp.timeIntervalSince(lastUploadAt) < configuration.uploadInterval {
+                try await saveState(state)
+                return
+            }
         }
 
         try Self.validateConfiguration(configuration)
@@ -323,16 +333,32 @@ public actor AppAnalyticsClient {
             return
         }
 
+        // Checkpoint/prune mutations must survive a failed or cancelled network attempt.
+        try await saveState(state)
+
         let currentDay = Self.dayKey(for: timestamp)
-        for batch in batches {
-            try Task.checkCancellation()
-            try await send(batch, installationID: installationID)
-            for day in batch.days where day.day != currentDay {
-                state.days.removeValue(forKey: day.day)
+        do {
+            for batch in batches {
+                try Task.checkCancellation()
+                try await send(batch, installationID: installationID)
+                for day in batch.days where day.day != currentDay {
+                    state.days.removeValue(forKey: day.day)
+                }
             }
+        } catch {
+            if let retryDate = Self.automaticRetryDate(for: error, relativeTo: timestamp) {
+                if state.nextUploadAttemptAt.map({ $0 < retryDate }) ?? true {
+                    state.nextUploadAttemptAt = retryDate
+                }
+            }
+            // Preserve the last durable cumulative snapshot and any successfully accepted
+            // historical batches without replacing the original network/cancellation error.
+            try? await saveState(state)
+            throw error
         }
 
         state.lastUploadAt = timestamp
+        state.nextUploadAttemptAt = nil
         try await saveState(state)
     }
 
@@ -621,6 +647,22 @@ public actor AppAnalyticsClient {
                 )
             }
         }
+    }
+
+    private static func automaticRetryDate(for error: Error, relativeTo timestamp: Date) -> Date? {
+        guard let analyticsError = error as? AppAnalyticsError else { return nil }
+        guard case .server(let code, _, let retryAfter) = analyticsError,
+              code == "rate_limited" || code == "http_429" else { return nil }
+
+        let seconds: TimeInterval
+        if let retryAfter,
+           let parsed = TimeInterval(retryAfter.trimmingCharacters(in: .whitespacesAndNewlines)),
+           parsed >= 0 {
+            seconds = parsed
+        } else {
+            seconds = Limits.defaultRateLimitBackoff
+        }
+        return timestamp.addingTimeInterval(seconds)
     }
 
     private static func decodeServerError(
