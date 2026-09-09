@@ -408,7 +408,7 @@ public actor AppAnalyticsClient {
                 }
                 guard decoded.ok,
                       decoded.requestId == batch.requestId,
-                      Set(decoded.acceptedDays) == Set(batch.days.map(\.day)) else {
+                      decoded.acceptedDays == batch.days.map(\.day) else {
                     throw AppAnalyticsError.invalidResponse
                 }
                 return
