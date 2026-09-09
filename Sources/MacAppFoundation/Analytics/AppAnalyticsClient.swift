@@ -273,11 +273,13 @@ public actor AppAnalyticsClient {
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
         var state = try await loadState()
         pruneExpiredDays(in: &state, relativeTo: timestamp)
-        checkpointActiveSession(in: &state, at: timestamp)
-        if var session = state.session {
-            session.lastActivityAt = timestamp
-            session.activeSince = nil
-            state.session = session
+        if state.session?.activeSince != nil {
+            checkpointActiveSession(in: &state, at: timestamp)
+            if var session = state.session {
+                session.lastActivityAt = timestamp
+                session.activeSince = nil
+                state.session = session
+            }
         }
         try await saveState(state)
         try? await flushIfDue(at: timestamp)
@@ -542,6 +544,7 @@ public actor AppAnalyticsClient {
         }
 
         if let session = state.session,
+           session.activeSince == nil,
            timestamp.timeIntervalSince(session.lastActivityAt) > Limits.sessionTimeout {
             state.session = nil
         }
