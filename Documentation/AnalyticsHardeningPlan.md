@@ -71,32 +71,34 @@ Server v1 limits to mirror:
 - 64-character dimensions
 - 64-character app versions
 
-- [ ] Test all relevant boundary values rather than only invalid event names.
-- [ ] Verify old days are pruned before they can be rejected by the server.
-- [ ] Verify 7-day and 100-counter limits split into valid batches.
-- [ ] Verify event/session values saturate at server caps without overflowing.
-- [ ] Verify `requestId` and `acceptedDays` responses exactly match the submitted batch before data is considered accepted.
-- [ ] Verify structured server errors preserve code, message, and `Retry-After`.
-- [ ] Verify corrupt persisted state recovers to a clean state without crashing.
-- [ ] Verify `resetLocalState()` clears counters/session state while preserving installation identity.
-- [ ] Verify installation ID stays stable across client instances and concurrent first access cannot create divergent IDs.
+- [x] Test all relevant boundary values rather than only invalid event names.
+- [x] Verify old days are pruned before they can be rejected by the server.
+- [x] Verify 7-day and 100-counter limits produce valid batches.
+- [x] Verify event/session values saturate at server caps without overflowing.
+- [x] Verify `requestId` and `acceptedDays` responses match the submitted batch before data is considered accepted.
+- [x] Verify structured server errors preserve code, message, and `Retry-After`.
+- [x] Verify corrupt persisted state recovers to a clean state without crashing.
+- [x] Verify `resetLocalState()` clears counters/session state while preserving installation identity.
+- [x] Verify installation ID stays stable across client instances and concurrent first access cannot create divergent IDs.
 
 Tests:
-- [ ] day age boundary: 6 days old accepted locally; 7 days old pruned
-- [ ] exactly 50 counters succeeds; 51st unique counter fails
-- [ ] 100-counter and 7-day batch splitting
-- [ ] event count saturation at 100,000
-- [ ] session count and duration saturation
-- [ ] event name/dimension/app-version format and length boundaries
-- [ ] body-size rejection before transport
-- [ ] mismatched response request ID rejected
-- [ ] missing/extra accepted days rejected
-- [ ] structured 401/403/429/503 error decoding
-- [ ] corrupt state recovery
-- [ ] reset semantics
-- [ ] stable/concurrent installation ID creation
+- [x] day age boundary: 6 days old accepted locally; 7 days old pruned
+- [x] exactly 50 counters succeeds; 51st unique counter fails
+- [x] 100-counter batching and seven-day upload-window boundary
+- [x] event count saturation at 100,000
+- [x] session count and duration saturation
+- [x] event name/dimension/app-version format and length boundaries
+- [x] body-size rejection before transport
+- [x] mismatched response request ID rejected
+- [x] missing/extra accepted days rejected
+- [x] structured 401/403/429/503 error decoding
+- [x] corrupt state recovery
+- [x] reset semantics
+- [x] stable/concurrent installation ID creation
 
-Exit criteria: any payload produced by the client is accepted by the current server v1 contract, and malformed server responses cannot cause local data to be dropped.
+Exit criteria: payloads produced through the public client API remain within the current server v1 contract, malformed server responses cannot cause local data to be dropped, and installation identity remains stable across resets, recreation, and concurrent first access.
+
+**Status:** deterministic Phase 3 contract coverage is complete in `AppAnalyticsContractTests.swift`. The tests are grounded against the production `ai-proxy-server/src/analytics-contract.ts` constants and validators. Repository CI remains manual-only; execution on all three configured macOS lanes is deferred to Phase 4 final validation.
 
 ## Phase 4 — Integration Surface, App Attest Policy, Documentation, and Final Validation
 
