@@ -23,26 +23,28 @@ public struct OnboardingView<Content: View, LeadingActions: View, Message: View,
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-
-            OnboardingFooter(
-                leadingActions: { leadingActions },
-                message: { message },
-                trailingActions: { trailingActions }
-            )
-        }
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                OnboardingFooter(
+                    leadingActions: { leadingActions },
+                    message: { message },
+                    trailingActions: { trailingActions }
+                )
+            }
     }
 }
 
 /// The framework-owned footer used by ``OnboardingView``.
 ///
 /// The center message stays visually centered in the window independently of
-/// the width of the actions on either side.
+/// the width of the actions on either side. Leading actions use the secondary
+/// onboarding button style and trailing actions use the primary style by default.
+/// Apps can still apply a more specific button style to an individual action.
 public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActions: View>: View {
+    @Environment(\.macAppTheme) private var theme
+    @Environment(\.displayScale) private var displayScale
+
     private let leadingActions: LeadingActions
     private let message: Message
     private let trailingActions: TrailingActions
@@ -64,14 +66,22 @@ public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActi
 
             HStack(spacing: 8) {
                 leadingActions
+                    .buttonStyle(OnboardingButtonStyle(.secondary))
+
                 Spacer(minLength: 16)
+
                 trailingActions
+                    .buttonStyle(OnboardingButtonStyle(.primary))
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 52)
         .padding(.horizontal, 16)
-        .background(.bar)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(theme.separator.opacity(0.85))
+                .frame(height: 1 / displayScale)
+        }
     }
 }
 
@@ -81,6 +91,8 @@ public struct OnboardingFooter<LeadingActions: View, Message: View, TrailingActi
 /// "Step 2 of 4" message or combine the step with app-owned context such as
 /// "Step 2 of 4 · Permissions".
 public struct OnboardingStepMessage: View {
+    @Environment(\.macAppTheme) private var theme
+
     public let title: String?
     public let currentStep: Int
     public let stepCount: Int
@@ -98,7 +110,7 @@ public struct OnboardingStepMessage: View {
     public var body: some View {
         Text(message)
             .font(.callout)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(theme.textSecondary)
     }
 
     private var message: String {

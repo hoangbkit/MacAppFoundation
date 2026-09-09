@@ -3,6 +3,8 @@ import SwiftUI
 
 @MainActor
 struct FoundationDeveloperProductCatalogView: View {
+    @Environment(\.macAppTheme) private var theme
+
     let products: [StoreProduct]
 
     var body: some View {
@@ -25,26 +27,32 @@ struct FoundationDeveloperProductCatalogView: View {
                         }
                         Text(product.id)
                             .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.textSecondary)
                         Text(product.planLabel)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.textSecondary)
                         if let offer = product.introductoryOffer {
                             Text("\(offer.headline) · \(offer.isEligible ? "Eligible" : "Ineligible")")
                                 .font(.caption)
-                                .foregroundStyle(offer.isEligible ? Color.green : Color.secondary)
+                                .foregroundStyle(offer.isEligible ? theme.success : theme.textSecondary)
                         }
                     }
                     .padding(.vertical, 3)
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(theme.canvas)
+        .foregroundStyle(theme.textPrimary)
+        .tint(theme.accent)
         .navigationTitle("Product Prices")
     }
 }
 
 @MainActor
 struct FoundationDeveloperEntitlementView: View {
+    @Environment(\.macAppTheme) private var theme
+
     let purchaseManager: PurchaseManager
 
     var body: some View {
@@ -73,6 +81,10 @@ struct FoundationDeveloperEntitlementView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(theme.canvas)
+        .foregroundStyle(theme.textPrimary)
+        .tint(theme.accent)
         .navigationTitle("Entitlement")
     }
 
@@ -83,6 +95,7 @@ struct FoundationDeveloperEntitlementView: View {
             if isSelected(productID) {
                 Image(systemName: "checkmark")
                     .fontWeight(.semibold)
+                    .foregroundStyle(theme.accent)
             }
         }
         .contentShape(Rectangle())
@@ -97,9 +110,11 @@ struct FoundationDeveloperEntitlementView: View {
 
 @MainActor
 struct FoundationDeveloperPlansView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.macAppTheme) private var theme
+
     let purchaseManager: PurchaseManager
 
-    @Environment(\.dismiss) private var dismiss
     @State private var plans: [DeveloperPlanDraft]
     @State private var preferredProductID: String
     @State private var validationMessage: String?
@@ -140,12 +155,13 @@ struct FoundationDeveloperPlansView: View {
                 Text("Plans")
             } footer: {
                 Text("Only enabled products appear in simulated paywalls. Pricing and introductory-offer changes never affect App Store Connect.")
+                    .foregroundStyle(theme.textSecondary)
             }
 
             Section("Default Selection") {
                 if enabledPlans.isEmpty {
                     Text("Enable at least one plan")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.textSecondary)
                 } else {
                     Picker("Preferred plan", selection: $preferredProductID) {
                         ForEach(enabledPlans) { plan in
@@ -163,6 +179,10 @@ struct FoundationDeveloperPlansView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(theme.canvas)
+        .foregroundStyle(theme.textPrimary)
+        .tint(theme.accent)
         .navigationTitle("Simulated Plans")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -191,11 +211,11 @@ struct FoundationDeveloperPlansView: View {
                     Text(plan.displayName.isEmpty ? plan.productID : plan.displayName)
                     Text("\(plan.displayPrice) · \(plan.period.title)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.textSecondary)
                     if let offerSummary = plan.introductoryOfferSummary {
                         Text(offerSummary)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.textSecondary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -203,7 +223,7 @@ struct FoundationDeveloperPlansView: View {
 
             if plan.enabled {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.accent)
                     .help("Enabled")
             }
 
@@ -326,6 +346,8 @@ struct FoundationDeveloperPlansView: View {
 
 @MainActor
 struct FoundationDeveloperPlanDetailView: View {
+    @Environment(\.macAppTheme) private var theme
+
     @Binding var plan: DeveloperPlanDraft
 
     var body: some View {
@@ -358,6 +380,10 @@ struct FoundationDeveloperPlanDetailView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(theme.canvas)
+        .foregroundStyle(theme.textPrimary)
+        .tint(theme.accent)
         .navigationTitle(plan.displayName.isEmpty ? "Plan" : plan.displayName)
     }
 
@@ -408,6 +434,7 @@ struct FoundationDeveloperPlanDetailView: View {
             Text("Introductory Offer")
         } footer: {
             Text("Eligibility controls whether trial or introductory-offer copy appears in ProPaywallView. These settings affect the in-process simulator only.")
+                .foregroundStyle(theme.textSecondary)
         }
     }
 }

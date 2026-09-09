@@ -12,19 +12,35 @@ enum DemoWindowID {
 @MainActor
 struct MacAppFoundationDemoApp: App {
     @Environment(\.openWindow) private var openWindow
-    @State private var demoState = DemoState()
-    @State private var onboarding = OnboardingState(
-        id: "demo",
-        stepCount: 3
-    )
+    @State private var demoState: DemoState
+    @State private var themeStore: MacAppThemeStore
+    @State private var settingsRouter: MacAppSettingsRouter
+    @State private var onboarding: OnboardingState
 
-    private let purchases = DemoCommerce.manager
+    private let purchases: PurchaseManager
+
+    init() {
+        _demoState = State(initialValue: DemoState())
+        _themeStore = State(initialValue: MacAppThemeStore(configuration: DemoTheme.configuration))
+        _settingsRouter = State(initialValue: MacAppSettingsRouter())
+        _onboarding = State(
+            initialValue: OnboardingState(
+                id: "demo",
+                stepCount: 3
+            )
+        )
+        purchases = DemoCommerce.manager
+    }
 
     var body: some Scene {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
-            ContentView(purchaseManager: purchases)
-                .environment(demoState)
-                .managesPurchases(purchases)
+            ContentView(
+                purchaseManager: purchases,
+                settingsRouter: settingsRouter
+            )
+            .environment(demoState)
+            .macAppTheme(themeStore)
+            .managesPurchases(purchases)
         }
         .defaultSize(width: 1080, height: 700)
         .defaultLaunchBehavior(onboarding.mainWindowLaunchBehavior)
@@ -85,6 +101,8 @@ struct MacAppFoundationDemoApp: App {
             defaultHeight: 500
         ) {
             DemoOnboardingView(onboarding: onboarding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .macAppTheme(themeStore)
         }
 
         Window("Demo Pro", id: DemoWindowID.paywall) {
@@ -98,13 +116,21 @@ struct MacAppFoundationDemoApp: App {
                     demoState.record("Restored purchases")
                 }
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) {
+                MacAppWindowDragRegion(background: .clear)
+            }
+            .macAppFullSizeWindowChrome()
+            .macAppTheme(themeStore)
         }
-        .defaultSize(width: 860, height: 580)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 860, height: 600)
         .windowResizability(.contentSize)
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
             DemoUpsellWindow(purchaseManager: purchases)
                 .environment(demoState)
+                .macAppTheme(themeStore)
         }
         .defaultSize(width: 560, height: 520)
         .windowResizability(.contentSize)
@@ -119,6 +145,7 @@ struct MacAppFoundationDemoApp: App {
                 configuration: developerConfiguration
             )
             .environment(demoState)
+            .macAppTheme(themeStore)
         }
         .defaultSize(
             width: MacAppFoundationDeveloperTools.defaultWidth,
@@ -127,9 +154,15 @@ struct MacAppFoundationDemoApp: App {
         #endif
 
         Settings {
-            DemoSettingsView(purchaseManager: purchases)
-                .environment(demoState)
+            DemoSettingsView(
+                purchaseManager: purchases,
+                themeStore: themeStore,
+                settingsRouter: settingsRouter
+            )
+            .environment(demoState)
+            .macAppTheme(themeStore)
         }
+        .windowStyle(.hiddenTitleBar)
     }
 
     #if DEBUG

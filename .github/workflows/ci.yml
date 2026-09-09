@@ -1,27 +1,33 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - master
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   macos:
-    name: macOS 15 (${{ matrix.arch }})
+    name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: Apple Silicon
-            runner: macos-15
-            xcode_arch: arm64
-          - arch: Intel
+          - name: macOS 15 Intel
             runner: macos-15-intel
             xcode_arch: x86_64
+            capture_screenshot: false
+            screenshot_suffix: macos-15-intel
+          - name: macOS 15 Apple Silicon
+            runner: macos-15
+            xcode_arch: arm64
+            capture_screenshot: true
+            screenshot_suffix: macos-15-arm64
+          - name: macOS 26 Apple Silicon
+            runner: macos-26
+            xcode_arch: arm64
+            capture_screenshot: true
+            screenshot_suffix: macos-26-arm64
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -58,8 +64,29 @@ jobs:
             -scheme MacAppFoundationDemo \
             -configuration Debug \
             -destination "platform=macOS,arch=${{ matrix.xcode_arch }}" \
+            -derivedDataPath "$PWD/.derivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             ASSETCATALOG_COMPILER_APPICON_NAME= \
             EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
             build
+
+      # UI behavior is intentionally left to manual testing. On Apple Silicon,
+      # CI only proves the built Demo can launch and saves a screenshot for inspection.
+      - name: Launch demo and capture screenshot
+        if: matrix.capture_screenshot
+        working-directory: Examples/Demo
+        run: |
+          APP_PATH="$PWD/.derivedData/Build/Products/Debug/MAF.app"
+          open -n "$APP_PATH"
+          sleep 5
+          screencapture -x "$PWD/demo-launch.png"
+          pkill -x MAF || true
+
+      - name: Upload demo launch screenshot
+        if: matrix.capture_screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-launch-screenshot-${{ matrix.screenshot_suffix }}
+          path: Examples/Demo/demo-launch.png
+          retention-days: 14

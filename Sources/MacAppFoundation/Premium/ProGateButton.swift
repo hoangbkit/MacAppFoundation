@@ -45,6 +45,7 @@ public struct ProLockPopover<Info: ProLockInfoProvider>: View {
     private let onUpgrade: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.macAppTheme) private var theme
 
     public init(info: Info, onUpgrade: (() -> Void)? = nil) {
         self.info = info
@@ -56,26 +57,29 @@ public struct ProLockPopover<Info: ProLockInfoProvider>: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.title)
                     .font(.headline)
+                    .foregroundStyle(theme.textPrimary)
                 Text(info.reason)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Divider()
+            Rectangle()
+                .fill(theme.separator)
+                .frame(height: 1)
 
             VStack(alignment: .leading, spacing: 10) {
                 tierRow(
                     icon: "circle",
                     tierName: "Free",
                     description: info.freeTierDescription,
-                    tint: .secondary
+                    tint: theme.textSecondary
                 )
                 tierRow(
                     icon: "star.fill",
                     tierName: "Pro",
                     description: info.proTierDescription,
-                    tint: .accentColor
+                    tint: theme.accent
                 )
             }
 
@@ -89,10 +93,11 @@ public struct ProLockPopover<Info: ProLockInfoProvider>: View {
                 Text(info.upgradeButtonTitle)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(MacAppButtonStyle(.primary))
         }
         .padding()
         .frame(width: 280)
+        .background(theme.surface)
     }
 
     private func tierRow(
@@ -113,7 +118,7 @@ public struct ProLockPopover<Info: ProLockInfoProvider>: View {
                     .foregroundStyle(tint)
                 Text(description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

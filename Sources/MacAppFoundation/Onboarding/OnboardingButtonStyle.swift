@@ -1,0 +1,73 @@
+import SwiftUI
+
+/// A framework-owned button style for onboarding actions.
+///
+/// The style uses explicit sizing, padding, shape, and pressed-state treatment so
+/// onboarding controls stay visually consistent across supported macOS releases.
+public struct OnboardingButtonStyle: ButtonStyle {
+    public enum Prominence: Sendable, Equatable {
+        case secondary
+        case primary
+    }
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.macAppTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let prominence: Prominence
+
+    public init(_ prominence: Prominence = .secondary) {
+        self.prominence = prominence
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .lineLimit(1)
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 30)
+            .background {
+                shape.fill(backgroundColor(isPressed: configuration.isPressed))
+            }
+            .overlay {
+                shape.strokeBorder(borderColor, lineWidth: 1)
+            }
+            .contentShape(shape)
+            .opacity(isEnabled ? 1 : 0.55)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.08),
+                value: configuration.isPressed
+            )
+    }
+
+    private var foregroundColor: Color {
+        switch prominence {
+        case .secondary:
+            theme.textPrimary
+        case .primary:
+            theme.accentForeground
+        }
+    }
+
+    private func backgroundColor(isPressed: Bool) -> Color {
+        switch prominence {
+        case .secondary:
+            isPressed ? theme.selection : theme.surfaceRaised
+        case .primary:
+            theme.accent.opacity(isPressed ? 0.84 : 1)
+        }
+    }
+
+    private var borderColor: Color {
+        switch prominence {
+        case .secondary:
+            theme.border
+        case .primary:
+            .clear
+        }
+    }
+}

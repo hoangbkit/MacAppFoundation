@@ -9,6 +9,8 @@ import SwiftUI
 /// MacAppFoundation's commerce layer.
 public struct ProPaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.macAppTheme) private var theme
 
     private let purchaseManager: PurchaseManager
     private let configuration: ProPaywallConfiguration
@@ -42,31 +44,42 @@ public struct ProPaywallView: View {
             let outerPadding = max(20, min(proxy.size.width * 0.03, 32))
             let topPadding = max(28, min(proxy.size.height * 0.08, 44))
             let columnSpacing = max(18, min(proxy.size.width * 0.03, 30))
+            let footerHeight: CGFloat = 58
 
             VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: columnSpacing) {
-                    leadingPane
-                    trailingPane
+                ScrollView(.vertical, showsIndicators: true) {
+                    HStack(alignment: .top, spacing: columnSpacing) {
+                        leadingPane
+                        trailingPane
+                    }
+                    .padding(.horizontal, outerPadding)
+                    .padding(.top, topPadding)
+                    .padding(.bottom, outerPadding)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
-                .padding(.horizontal, outerPadding)
-                .padding(.top, topPadding)
-                .padding(.bottom, outerPadding)
-
-                Divider()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 bottomBar
                     .padding(.horizontal, max(16, outerPadding - 6))
-                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: footerHeight)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(theme.separator.opacity(0.85))
+                            .frame(height: 1 / displayScale)
+                    }
             }
         }
         .frame(
             minWidth: 760,
             idealWidth: 860,
             maxWidth: 980,
-            minHeight: 500,
+            minHeight: 420,
             idealHeight: 580
         )
-        .background(Color(nsColor: .windowBackgroundColor))
+        .foregroundStyle(theme.textPrimary)
+        .background(theme.canvas)
+        .tint(theme.accent)
         .task {
             if purchaseManager.products.isEmpty {
                 await purchaseManager.loadProducts(force: true)
@@ -97,44 +110,43 @@ public struct ProPaywallView: View {
     }
 
     private var leadingPane: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 26) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(configuration.title)
-                        .font(.system(size: 34, weight: .bold))
+        VStack(alignment: .leading, spacing: 26) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(configuration.title)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(theme.textPrimary)
 
-                    Text(configuration.subtitle)
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(configuration.subtitle)
+                    .font(.headline)
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-                if !resolvedFeatures.isEmpty {
-                    VStack(alignment: .leading, spacing: 18) {
-                        ForEach(resolvedFeatures) { feature in
-                            HStack(alignment: .top, spacing: 14) {
-                                featureIcon(feature.systemImage)
+            if !resolvedFeatures.isEmpty {
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(resolvedFeatures) { feature in
+                        HStack(alignment: .top, spacing: 14) {
+                            featureIcon(feature.systemImage)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(feature.title)
-                                        .font(.headline)
-                                    Text(feature.message)
-                                        .font(.body)
-                                        .foregroundStyle(.secondary)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(feature.title)
+                                    .font(.headline)
+                                    .foregroundStyle(theme.textPrimary)
+                                Text(feature.message)
+                                    .font(.body)
+                                    .foregroundStyle(theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(
             minWidth: 280,
             idealWidth: 420,
             maxWidth: .infinity,
-            maxHeight: .infinity,
             alignment: .topLeading
         )
     }
@@ -150,7 +162,7 @@ public struct ProPaywallView: View {
             if let disclosure = selectedProduct?.introductoryOfferDisclosure {
                 Text(disclosure)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity)
@@ -163,7 +175,6 @@ public struct ProPaywallView: View {
             minWidth: 300,
             idealWidth: 340,
             maxWidth: 390,
-            maxHeight: .infinity,
             alignment: .topLeading
         )
     }
@@ -178,14 +189,15 @@ public struct ProPaywallView: View {
             VStack(spacing: 12) {
                 Label("Unable to load plans", systemImage: "wifi.exclamationmark")
                     .font(.headline)
+                    .foregroundStyle(theme.textPrimary)
                 Text(failure.message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
                     .multilineTextAlignment(.center)
                 Button("Try Again") {
                     Task { await purchaseManager.loadProducts(force: true) }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PaywallButtonStyle(.secondary))
             }
             .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
 
@@ -193,7 +205,7 @@ public struct ProPaywallView: View {
             if paywallProducts.isEmpty {
                 Text("No Pro purchase options are available right now.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
             } else {
@@ -221,23 +233,23 @@ public struct ProPaywallView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(product.planLabel)
                         .font(.headline)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(theme.textPrimary)
 
                     if let headline = product.introductoryOfferHeadline {
                         Text(headline)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(theme.accent)
 
                         if let postOffer = product.postIntroductoryOfferBillingDescription {
                             Text(postOffer)
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(theme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     } else {
                         Text(product.isLifetime ? "Pay once" : product.billingDescription)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -248,15 +260,15 @@ public struct ProPaywallView: View {
                     if let badge = badge(for: product) {
                         Text(badge)
                             .font(.caption2.bold())
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(theme.accent)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                            .background(theme.accentSoft, in: Capsule())
                     }
 
                     Text(product.displayPrice)
                         .font(.headline.weight(.bold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(theme.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                 }
@@ -264,13 +276,13 @@ public struct ProPaywallView: View {
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
             .background(
-                isSelected ? Color.accentColor.opacity(0.10) : Color.clear,
+                isSelected ? theme.selection : theme.surface,
                 in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(
-                        isSelected ? Color.accentColor : Color.primary.opacity(0.12),
+                        isSelected ? theme.accent : theme.border,
                         lineWidth: isSelected ? 2 : 1
                     )
             }
@@ -306,15 +318,11 @@ public struct ProPaywallView: View {
                 }
 
                 Text(purchaseButtonTitle)
-                    .font(.headline)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
+        .buttonStyle(PaywallButtonStyle(.primary))
         .disabled(selectedProduct == nil || purchaseManager.isBusy)
-        .opacity(selectedProduct == nil || purchaseManager.isRestoring ? 0.6 : 1)
     }
 
     private var bottomBar: some View {
@@ -330,22 +338,21 @@ public struct ProPaywallView: View {
                     Text(purchaseManager.isRestoring ? "Restoring…" : "Restore Purchases")
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PaywallButtonStyle(.secondary))
             .disabled(purchaseManager.isBusy)
 
             if configuration.showsRedeemCode {
                 Button("Redeem Code") {
                     isOfferCodeRedemptionPresented = true
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .buttonStyle(PaywallButtonStyle(.text))
                 .disabled(purchaseManager.isBusy)
             }
 
             if let restoreMessage {
                 Text(restoreMessage)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.textSecondary)
                     .lineLimit(1)
                     .help(restoreMessage)
             }
@@ -357,7 +364,7 @@ public struct ProPaywallView: View {
             } label: {
                 Label("Close", systemImage: "xmark")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PaywallButtonStyle(.secondary))
             .disabled(purchaseManager.isBusy)
         }
     }
@@ -368,7 +375,7 @@ public struct ProPaywallView: View {
                 .controlSize(.small)
             Text("Loading available plans…")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.textSecondary)
         }
         .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
     }
@@ -377,28 +384,29 @@ public struct ProPaywallView: View {
         VStack(spacing: 9) {
             Text(PurchasePlanDisclosure.text(for: paywallProducts))
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 12) {
                 Link("Terms of Use", destination: configuration.termsURL)
                 Text("•")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(theme.textMuted)
                 Link("Privacy Policy", destination: configuration.privacyURL)
             }
             .font(.caption.weight(.semibold))
+            .tint(theme.accent)
         }
     }
 
     private func featureIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(theme.accentForeground)
             .frame(width: 38, height: 38)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.accentColor)
+                    .fill(theme.accent)
             )
     }
 
@@ -406,12 +414,12 @@ public struct ProPaywallView: View {
         ZStack {
             Circle()
                 .strokeBorder(
-                    isSelected ? Color.accentColor : Color.secondary.opacity(0.55),
+                    isSelected ? theme.accent : theme.textMuted,
                     lineWidth: 1.5
                 )
             if isSelected {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(theme.accent)
                     .padding(4)
             }
         }
