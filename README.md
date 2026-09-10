@@ -1,13 +1,13 @@
 # MacAppFoundation
 
-A focused macOS foundation package for StoreKit 2 commerce, Pro experiences, reusable app theming, BYOKchat-style Settings, and debug purchase tooling.
+A focused macOS foundation package for StoreKit 2 commerce, Pro experiences, reusable app theming, BYOKchat-style Settings, first-party analytics, and debug tooling.
 
 > [!IMPORTANT]
 > **Public source, not a community-maintained OSS project.**
 >
 > This repository is published primarily for transparency and reference. It is maintained for the author's own apps and priorities, not as a community project. Issues, pull requests, feature requests, support requests, and roadmap commitments should not be expected to receive a response or be accepted. Forking or other use of the source is subject to whatever license terms are provided by the repository.
 
-MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host apps keep ownership of product/domain behavior, app-specific settings content, navigation/window presentation, branding, and which themes/settings panes they expose.
+MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host apps keep ownership of product/domain behavior, app-specific settings content, navigation/window presentation, branding, analytics event selection, and which themes/settings panes they expose.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host 
 
 ## Demo app
 
-`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, and the separate Developer Tools window/menu.
+`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, first-party analytics lifecycle wiring, and the separate Developer Tools window/menu.
 
 ```sh
 cd Examples/Demo
@@ -28,13 +28,14 @@ The Debug build starts with in-process simulated purchases. The included StoreKi
 
 ## Current scope
 
-MacAppFoundation now has five main areas:
+MacAppFoundation now has six main areas:
 
 1. **Commerce + simulation** — verified StoreKit 2 entitlement state, product loading, purchase/restore, transaction observation, foreground refresh, and a Debug-only in-process simulator.
 2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
 4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Appearance/Plan panes, and selection routing.
-5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, and app-defined developer actions.
+5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, analytics actions, and app-defined developer actions.
+6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, stable Keychain installation identity, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
 
 Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation does not persist a `hasPro` flag for entitlement decisions.
 
@@ -241,9 +242,39 @@ Window(
 #endif
 ```
 
-The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, replays, and app-defined developer sections.
+The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, replays, and app-defined developer sections. The Demo uses an app-defined section to exercise analytics track/flush/reset actions without contacting production infrastructure.
 
 See `Documentation/DeveloperTools.md` for app-specific actions/toggles/values and replay examples.
+
+## 6. Add first-party analytics
+
+Create one analytics client at app scope and attach application-level lifecycle management to the main root:
+
+```swift
+private let analytics = AppAnalyticsClient(
+    configuration: AppAnalyticsConfiguration(
+        appID: "my-app",
+        appKey: "your-native-app-key",
+        baseURL: URL(string: "https://api.example.com")!
+    )
+)
+
+WindowGroup {
+    ContentView()
+        .managesAnalytics(analytics)
+}
+```
+
+Apps explicitly choose bounded product events to record:
+
+```swift
+try await analytics.track("generation_completed", dimension: "nano")
+try await analytics.track("export_completed")
+```
+
+The client keeps cumulative UTC-day snapshots compatible with the retry-safe `ai-proxy-server` analytics contract. It handles foreground session accounting, retention, batching, stable installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics; use the supported analytics-only server configuration with `attestMode: disabled`.
+
+See `Documentation/Analytics.md` for server setup, limits, upload behavior, privacy boundaries, reset behavior, and testing/injection points.
 
 ## Architecture boundaries
 
@@ -253,12 +284,13 @@ MacAppFoundation intentionally does **not** own:
 - general app navigation or a universal window framework
 - branding assets or product-specific copy
 - app-specific Settings pane content
+- app-specific analytics event taxonomy or privacy-policy decisions
 - which themes/panes a host app chooses to expose
 - backup/export/media workflows
 - launch-at-login or general notification management
 - AI/provider/domain features
 
-Themes and Settings are reusable infrastructure, but host apps remain in control of configuration and composition.
+Themes, Settings, and analytics are reusable infrastructure, but host apps remain in control of configuration and composition.
 
 ## Project policy
 

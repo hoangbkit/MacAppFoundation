@@ -1,4 +1,4 @@
-name: CI
+name: Full CI
 
 on:
   workflow_dispatch:
@@ -50,13 +50,13 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate demo project
+      - name: Generate Demo project
         working-directory: Examples/Demo
         run: xcodegen generate --spec project.yml
 
       # Xcode 26's asset compiler crashes on Icon Composer .icon packages on macOS 15 CI.
       # Exclude only the app icon; the package and all demo Swift sources still build normally.
-      - name: Build demo app
+      - name: Build Demo app
         working-directory: Examples/Demo
         run: |
           xcodebuild \
@@ -72,8 +72,8 @@ jobs:
             build
 
       # UI behavior is intentionally left to manual testing. On Apple Silicon,
-      # CI only proves the built Demo can launch and saves a screenshot for inspection.
-      - name: Launch demo and capture screenshot
+      # Full CI only proves the built Demo can launch and saves a screenshot for inspection.
+      - name: Launch Demo and capture screenshot
         if: matrix.capture_screenshot
         working-directory: Examples/Demo
         run: |
@@ -83,7 +83,7 @@ jobs:
           screencapture -x "$PWD/demo-launch.png"
           pkill -x MAF || true
 
-      - name: Upload demo launch screenshot
+      - name: Upload Demo launch screenshot
         if: matrix.capture_screenshot
         uses: actions/upload-artifact@v4
         with:
