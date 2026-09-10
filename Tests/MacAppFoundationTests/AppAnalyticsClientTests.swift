@@ -77,7 +77,6 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     )
 
     try await client.track("generation_completed", dimension: "nano", count: 2)
-    try await client.flush()
 
     let requests = await transport.capturedRequests()
     #expect(requests.count == 1)
