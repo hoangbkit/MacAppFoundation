@@ -1,0 +1,51 @@
+name: Fast CI
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: macos-26
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Select Xcode 26.3
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+
+      - name: Show toolchain
+        run: |
+          uname -m
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Run package tests
+        run: swift test
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Demo project
+        working-directory: Examples/Demo
+        run: xcodegen generate --spec project.yml
+
+      - name: Build Demo app
+        working-directory: Examples/Demo
+        run: |
+          xcodebuild \
+            -project MacAppFoundationDemo.xcodeproj \
+            -scheme MacAppFoundationDemo \
+            -configuration Debug \
+            -destination "platform=macOS,arch=arm64" \
+            -derivedDataPath "$PWD/.derivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME= \
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon \
+            build
