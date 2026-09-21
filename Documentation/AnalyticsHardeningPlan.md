@@ -123,7 +123,7 @@ Goal: make adoption safe for real Mac apps, keep analytics independent from App 
 
 - [ ] Review `.managesAnalytics(_:)` lifecycle integration for duplicate app activation notifications and multi-window usage.
 - [ ] Add a lightweight deterministic integration test for the lifecycle bridge if it can be done without flaky UI automation.
-- [x] Document that native analytics authentication uses app ID, app key, installation ID, request ID, and optional app/build headers.
+- [x] Document that native analytics requests use app ID, optional app key, installation ID, request ID, and optional app/build headers.
 - [x] Keep App Attest out of scope for `AppAnalyticsClient`; no signing/attestation hook will be added for analytics.
 - [x] Document the supported server policy: analytics apps using this client must not require App Attest; `attestMode: disabled` is the recommended analytics-only configuration.
 - [x] Update `Documentation/Analytics.md` with retry/backoff, cumulative snapshot semantics, UTC retention, reset behavior, and limits.

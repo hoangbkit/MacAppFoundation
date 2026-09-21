@@ -17,7 +17,7 @@ MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host 
 
 ## Demo app
 
-`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, first-party analytics lifecycle wiring, and the separate Developer Tools window/menu.
+`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, a runtime-configured analytics tester for events/errors, and the separate Developer Tools window/menu.
 
 ```sh
 cd Examples/Demo
@@ -254,7 +254,6 @@ Create one analytics client at app scope and attach application-level lifecycle 
 private let analytics = AppAnalyticsClient(
     configuration: AppAnalyticsConfiguration(
         appID: "my-app",
-        appKey: "your-native-app-key",
         baseURL: URL(string: "https://api.example.com")!
     )
 )
@@ -265,14 +264,17 @@ WindowGroup {
 }
 ```
 
-Apps explicitly choose bounded product events to record:
+Pass `appKey:` only when the analytics server requires native app-key authentication; otherwise MacAppFoundation sends no `X-App-Key` header.
+
+Apps explicitly choose bounded product events and stable error codes to record:
 
 ```swift
 try await analytics.track("generation_completed", dimension: "nano")
 try await analytics.track("export_completed")
+try await analytics.trackError("model_load_failed", component: "generation")
 ```
 
-The client keeps cumulative UTC-day snapshots compatible with the retry-safe `ai-proxy-server` analytics contract. It handles foreground session accounting, retention, batching, stable installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics; use the supported analytics-only server configuration with `attestMode: disabled`.
+The client keeps cumulative UTC-day snapshots compatible with the retry-safe `analytics-server` contract. It automatically includes macOS version, app build, `mac` device family, and CPU architecture, and handles foreground session accounting, retention, batching, stable installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics.
 
 See `Documentation/Analytics.md` for server setup, limits, upload behavior, privacy boundaries, reset behavior, and testing/injection points.
 

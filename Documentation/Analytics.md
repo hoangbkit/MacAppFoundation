@@ -1,37 +1,23 @@
 # Analytics
 
-`MacAppFoundation` includes a lightweight first-party analytics client for the native `/v1/analytics/batch` contract in `ai-proxy-server`.
+`MacAppFoundation` includes a lightweight first-party analytics client for the native `/v1/analytics/batch` contract in `analytics-server`.
 
 It is intentionally small: apps explicitly record product events while the foundation handles stable installation identity, foreground session accounting, local cumulative counters, bounded offline storage, and batched uploads.
 
 ## Server requirements
 
-A native analytics-only app can be configured without commerce and without App Attest. It still needs a server app ID and app key.
-
-`AppAnalyticsClient` intentionally does not implement App Attest. For analytics-only integrations, configure the server with `attestMode: disabled`. Do not use `attestMode: required` with this client.
-
-Example server shape:
-
-```yaml
-analytics:
-  enabled: true
-  webOrigins: []
-attestMode: disabled
-capabilities: []
-products: []
-creditProducts: []
-```
+Register the app in `analytics-server` with the `macos` platform enabled. `AppAnalyticsClient` supports an optional native app key and intentionally does not send App Attest data. If the server requires native app-key authentication, configure `appKey`; otherwise the SDK omits `X-App-Key` entirely.
 
 The native request uses:
 
 - `X-App-ID`
-- `X-App-Key`
+- `X-App-Key` when `appKey` is configured
 - `X-Installation-ID`
 - `X-Request-ID`
 - `X-App-Version` when available
 - `X-App-Build` when available
 
-No StoreKit transaction, entitlement, or App Attest assertion is required for the supported analytics-only configuration.
+No StoreKit transaction, entitlement, or App Attest assertion is sent with analytics.
 
 ## Setup
 
@@ -41,9 +27,18 @@ Create one client at app scope:
 private let analytics = AppAnalyticsClient(
     configuration: AppAnalyticsConfiguration(
         appID: "my-app",
-        appKey: "your-native-app-key",
         baseURL: URL(string: "https://api.example.com")!
     )
+)
+```
+
+When the server requires a native key, pass it explicitly:
+
+```swift
+AppAnalyticsConfiguration(
+    appID: "my-app",
+    appKey: "your-native-app-key",
+    baseURL: URL(string: "https://api.example.com")!
 )
 ```
 
@@ -68,6 +63,41 @@ try await analytics.track("purchase_started", dimension: "yearly")
 
 Event names must be lowercase snake case. Dimensions use the server-safe character set and are intended for bounded categories such as model, plan, feature, or export type. Do not put free-form user content, prompts, filenames, email addresses, or other high-cardinality/private values in dimensions.
 
+
+## Native context
+
+Each daily macOS snapshot automatically includes bounded runtime context when available:
+
+- `osVersion` — for example `26.0.1`
+- `appBuild` — `CFBundleVersion`
+- `deviceFamily` — `mac`
+- `architecture` — `arm64` or `x86_64`
+
+`appVersion` continues to come from the explicit configuration override or `CFBundleShortVersionString`.
+
+These values are stored with the local daily snapshot so offline uploads preserve the context associated with that day. MacAppFoundation does not collect a hardware model, serial number, RAM amount, hostname, or other device fingerprint.
+
+## Errors
+
+Use the dedicated bounded error stream for stable product diagnostics:
+
+```swift
+try await analytics.trackError(
+    "model_load_failed",
+    component: "generation"
+)
+
+try await analytics.trackError(
+    "unexpected_termination",
+    component: "app",
+    severity: .fatal
+)
+```
+
+Error `code` and `component` must be lowercase snake case. Severity is `.error` or `.fatal`. Counters are cumulative per UTC day, using the same retry-safe semantics as normal events.
+
+Do not send exception messages, `localizedDescription`, stack traces, filesystem paths, URLs, prompts, filenames, or arbitrary metadata as error identifiers. Map failures to a small stable vocabulary such as `model_load_failed`, `database_open_failed`, or `export_failed`.
+
 ## Sessions
 
 A session starts when the application becomes active. If the app becomes active again within 30 minutes, the existing session resumes; after a longer gap, a new session is counted.
@@ -83,7 +113,11 @@ The client stores cumulative UTC-day snapshots locally and uploads opportunistic
 - 6-day offline age plus the current day
 - 50 event/dimension counters per day
 - 100 event counters per batch
-- 100,000 maximum count per event/day
+- 500 maximum occurrences per event/day
+- 2,000 total event occurrences per day
+- 20 error counters per day
+- 140 error counters per batch
+- 100 total error occurrences per day
 - 1,000 sessions per day
 - 86,400 session seconds per day
 - 32 KiB maximum request body
@@ -101,7 +135,7 @@ If the server returns HTTP `429 rate_limited`, automatic uploads persist and res
 
 ## Installation identity
 
-The client creates a random installation UUID and stores it in Keychain under `<appID>.installation`. The raw identifier is sent only to your server, which hashes it before analytics persistence.
+The client creates a random installation UUID and stores it in Keychain under `<appID>.installation`. The opaque identifier is sent to `analytics-server` so cumulative snapshots from the same app installation can be associated. It is an installation identifier, not a human identity.
 
 The default Keychain service is:
 
@@ -125,6 +159,6 @@ Corrupt local analytics state is discarded safely rather than crashing the app. 
 
 ## Privacy boundary
 
-The client does not automatically collect screen names, text content, device fingerprints, IP addresses, contacts, files, prompts, or purchase receipts. Apps decide which bounded event names and dimensions to record.
+The client automatically collects only the bounded native context documented above: OS version, app build, `mac` device family, and CPU architecture. It does not collect screen names, text content, hardware model, serial number, hostname, IP addresses, contacts, files, prompts, exception text, stack traces, or purchase receipts. Apps decide which bounded event names, dimensions, and error codes to record.
 
 Review each shipping app's App Privacy answers and privacy policy based on the events that app actually sends; adding this package does not make every possible analytics field appropriate to collect.

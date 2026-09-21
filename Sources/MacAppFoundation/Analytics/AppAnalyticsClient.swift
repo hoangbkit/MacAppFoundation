@@ -1,5 +1,33 @@
 import Foundation
 
+struct AppAnalyticsClientContext: Sendable {
+    let osVersion: String
+    let appBuild: String?
+    let deviceFamily: String
+    let architecture: String?
+
+    static func current() -> AppAnalyticsClientContext {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        let osVersion = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        let appBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+
+        #if arch(arm64)
+        let architecture: String? = "arm64"
+        #elseif arch(x86_64)
+        let architecture: String? = "x86_64"
+        #else
+        let architecture: String? = nil
+        #endif
+
+        return AppAnalyticsClientContext(
+            osVersion: osVersion,
+            appBuild: appBuild,
+            deviceFamily: "mac",
+            architecture: architecture
+        )
+    }
+}
+
 private actor AppAnalyticsInstallationGate {
     static let shared = AppAnalyticsInstallationGate()
 
@@ -36,12 +64,18 @@ public actor AppAnalyticsClient {
         static let maxOfflineAgeDays = 6
         static let maxEventsPerDay = 50
         static let maxEventCountersPerBatch = 100
-        static let maxEventCountPerDay = 100_000
+        static let maxEventCountPerDay = 500
+        static let maxTotalEventCountPerDay = 2_000
+        static let maxErrorsPerDay = 20
+        static let maxErrorCountersPerBatch = 140
+        static let maxTotalErrorCountPerDay = 100
         static let maxSessionsPerDay = 1_000
         static let maxSessionSecondsPerDay = 86_400
         static let maxEventNameLength = 48
         static let maxDimensionLength = 64
         static let maxAppVersionLength = 64
+        static let maxNativeContextLength = 32
+        static let maxErrorTokenLength = 48
         static let maxBodyBytes = 32 * 1024
         static let sessionTimeout: TimeInterval = 30 * 60
         static let defaultRateLimitBackoff: TimeInterval = 60
@@ -53,11 +87,23 @@ public actor AppAnalyticsClient {
         var count: Int
     }
 
+    private struct ErrorState: Codable, Sendable {
+        var code: String
+        var component: String
+        var severity: AppAnalyticsErrorSeverity
+        var count: Int
+    }
+
     private struct DayState: Codable, Sendable {
         var appVersion: String?
+        var osVersion: String?
+        var appBuild: String?
+        var deviceFamily: String?
+        var architecture: String?
         var sessions: Int = 0
         var sessionSeconds: Int = 0
         var events: [String: EventState] = [:]
+        var errors: [String: ErrorState]?
     }
 
     private struct SessionState: Codable, Sendable {
@@ -93,21 +139,38 @@ public actor AppAnalyticsClient {
         }
     }
 
+    private struct BatchError: Encodable, Sendable {
+        let code: String
+        let component: String
+        let severity: AppAnalyticsErrorSeverity
+        let count: Int
+    }
+
     private struct BatchDay: Encodable, Sendable {
         let day: String
         let platform = "macos"
         let appVersion: String?
+        let osVersion: String?
+        let appBuild: String?
+        let deviceFamily: String?
+        let architecture: String?
         let sessions: Int
         let sessionSeconds: Int
         let events: [BatchEvent]
+        let errors: [BatchError]
 
         enum CodingKeys: String, CodingKey {
             case day
             case platform
             case appVersion
+            case osVersion
+            case appBuild
+            case deviceFamily
+            case architecture
             case sessions
             case sessionSeconds
             case events
+            case errors
         }
 
         func encode(to encoder: Encoder) throws {
@@ -117,9 +180,22 @@ public actor AppAnalyticsClient {
             if let appVersion {
                 try container.encode(appVersion, forKey: .appVersion)
             }
+            if let osVersion {
+                try container.encode(osVersion, forKey: .osVersion)
+            }
+            if let appBuild {
+                try container.encode(appBuild, forKey: .appBuild)
+            }
+            if let deviceFamily {
+                try container.encode(deviceFamily, forKey: .deviceFamily)
+            }
+            if let architecture {
+                try container.encode(architecture, forKey: .architecture)
+            }
             try container.encode(sessions, forKey: .sessions)
             try container.encode(sessionSeconds, forKey: .sessionSeconds)
             try container.encode(events, forKey: .events)
+            try container.encode(errors, forKey: .errors)
         }
     }
 
@@ -152,6 +228,7 @@ public actor AppAnalyticsClient {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
+    private let clientContext: AppAnalyticsClientContext
 
     public init(
         configuration: AppAnalyticsConfiguration,
@@ -166,6 +243,7 @@ public actor AppAnalyticsClient {
         self.encoder = Self.makeEncoder()
         self.decoder = Self.makeDecoder()
         self.now = Date.init
+        self.clientContext = .current()
     }
 
     public init(
@@ -180,13 +258,15 @@ public actor AppAnalyticsClient {
         self.encoder = Self.makeEncoder()
         self.decoder = Self.makeDecoder()
         self.now = Date.init
+        self.clientContext = .current()
     }
 
     init(
         configuration: AppAnalyticsConfiguration,
         transport: any AppAnalyticsTransport,
         stateStore: any AppAnalyticsStateStoring,
-        now: @escaping @Sendable () -> Date
+        now: @escaping @Sendable () -> Date,
+        clientContext: AppAnalyticsClientContext = .current()
     ) {
         self.configuration = configuration
         self.transport = transport
@@ -195,6 +275,7 @@ public actor AppAnalyticsClient {
         self.encoder = Self.makeEncoder()
         self.decoder = Self.makeDecoder()
         self.now = now
+        self.clientContext = clientContext
     }
 
     public func track(
@@ -212,8 +293,18 @@ public actor AppAnalyticsClient {
         var day = dayState(in: state, for: dayKey)
         let eventKey = Self.eventKey(name: name, dimension: dimension)
 
+        let previousCount = day.events[eventKey]?.count ?? 0
+        let nextCount = min(Limits.maxEventCountPerDay, previousCount + count)
+        let currentTotal = day.events.values.reduce(0) { $0 + $1.count }
+        let nextTotal = currentTotal - previousCount + nextCount
+        guard nextTotal <= Limits.maxTotalEventCountPerDay else {
+            throw AppAnalyticsError.invalidEvent(
+                "A UTC day may contain at most \(Limits.maxTotalEventCountPerDay) total event occurrences."
+            )
+        }
+
         if var event = day.events[eventKey] {
-            event.count = min(Limits.maxEventCountPerDay, event.count + count)
+            event.count = nextCount
             day.events[eventKey] = event
         } else {
             guard day.events.count < Limits.maxEventsPerDay else {
@@ -224,10 +315,65 @@ public actor AppAnalyticsClient {
             day.events[eventKey] = EventState(
                 name: name,
                 dimension: dimension,
-                count: min(count, Limits.maxEventCountPerDay)
+                count: nextCount
             )
         }
 
+        state.days[dayKey] = day
+        try await saveState(state)
+        try? await flushIfDue(at: timestamp)
+    }
+
+    public func trackError(
+        _ code: String,
+        component: String,
+        severity: AppAnalyticsErrorSeverity = .error,
+        count: Int = 1
+    ) async throws {
+        try Self.validateError(
+            code: code,
+            component: component,
+            count: count
+        )
+
+        let timestamp = now()
+        var state = try await loadState()
+        pruneExpiredDays(in: &state, relativeTo: timestamp)
+        checkpointActiveSession(in: &state, at: timestamp)
+
+        let dayKey = Self.dayKey(for: timestamp)
+        var day = dayState(in: state, for: dayKey)
+        var errors = day.errors ?? [:]
+        let key = Self.errorKey(code: code, component: component, severity: severity)
+        let previousCount = errors[key]?.count ?? 0
+        let currentTotal = errors.values.reduce(0) { $0 + $1.count }
+        let nextCount = min(Limits.maxTotalErrorCountPerDay, previousCount + count)
+        let nextTotal = currentTotal - previousCount + nextCount
+
+        guard nextTotal <= Limits.maxTotalErrorCountPerDay else {
+            throw AppAnalyticsError.invalidError(
+                "A UTC day may contain at most \(Limits.maxTotalErrorCountPerDay) total error occurrences."
+            )
+        }
+
+        if var error = errors[key] {
+            error.count = nextCount
+            errors[key] = error
+        } else {
+            guard errors.count < Limits.maxErrorsPerDay else {
+                throw AppAnalyticsError.invalidError(
+                    "A UTC day may contain at most \(Limits.maxErrorsPerDay) error counters."
+                )
+            }
+            errors[key] = ErrorState(
+                code: code,
+                component: component,
+                severity: severity,
+                count: nextCount
+            )
+        }
+
+        day.errors = errors
         state.days[dayKey] = day
         try await saveState(state)
         try? await flushIfDue(at: timestamp)
@@ -328,6 +474,10 @@ public actor AppAnalyticsClient {
         }
 
         try Self.validateConfiguration(configuration)
+        let currentDay = Self.dayKey(for: timestamp)
+        if state.days[currentDay] != nil {
+            state.days[currentDay] = dayState(in: state, for: currentDay)
+        }
         let installationID = try await installationID()
         let batches = try makeBatches(from: state)
         guard !batches.isEmpty else {
@@ -338,7 +488,6 @@ public actor AppAnalyticsClient {
         // Checkpoint/prune mutations must survive a failed or cancelled network attempt.
         try await saveState(state)
 
-        let currentDay = Self.dayKey(for: timestamp)
         do {
             for batch in batches {
                 try Task.checkCancellation()
@@ -379,13 +528,15 @@ public actor AppAnalyticsClient {
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(configuration.appID, forHTTPHeaderField: "X-App-ID")
-        request.setValue(configuration.appKey, forHTTPHeaderField: "X-App-Key")
+        if let appKey = configuration.appKey {
+            request.setValue(appKey, forHTTPHeaderField: "X-App-Key")
+        }
         request.setValue(installationID, forHTTPHeaderField: "X-Installation-ID")
         request.setValue(batch.requestId, forHTTPHeaderField: "X-Request-ID")
         if let version = resolvedAppVersion() {
             request.setValue(version, forHTTPHeaderField: "X-App-Version")
         }
-        if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+        if let build = clientContext.appBuild.flatMap(Self.validNativeVersion) {
             request.setValue(build, forHTTPHeaderField: "X-App-Build")
         }
 
@@ -492,6 +643,10 @@ public actor AppAnalyticsClient {
         if let version = resolvedAppVersion() {
             day.appVersion = version
         }
+        day.osVersion = Self.validNativeVersion(clientContext.osVersion)
+        day.appBuild = clientContext.appBuild.flatMap(Self.validNativeVersion)
+        day.deviceFamily = Self.validNativeToken(clientContext.deviceFamily)
+        day.architecture = clientContext.architecture.flatMap(Self.validNativeToken)
         return day
     }
 
@@ -555,6 +710,7 @@ public actor AppAnalyticsClient {
         var result: [Batch] = []
         var pending: [BatchDay] = []
         var pendingEventCounters = 0
+        var pendingErrorCounters = 0
 
         func finishPending() {
             guard !pending.isEmpty else { return }
@@ -566,26 +722,61 @@ public actor AppAnalyticsClient {
             )
             pending = []
             pendingEventCounters = 0
+            pendingErrorCounters = 0
         }
 
         for key in sortedDays {
             guard let day = state.days[key] else { continue }
+            var remainingEventOccurrences = Limits.maxTotalEventCountPerDay
             let events = day.events.values
                 .sorted {
                     if $0.name != $1.name { return $0.name < $1.name }
                     return ($0.dimension ?? "") < ($1.dimension ?? "")
                 }
-                .map { BatchEvent(name: $0.name, dimension: $0.dimension, count: $0.count) }
+                .compactMap { event -> BatchEvent? in
+                    guard remainingEventOccurrences > 0 else { return nil }
+                    let count = min(
+                        max(0, event.count),
+                        Limits.maxEventCountPerDay,
+                        remainingEventOccurrences
+                    )
+                    guard count > 0 else { return nil }
+                    remainingEventOccurrences -= count
+                    return BatchEvent(name: event.name, dimension: event.dimension, count: count)
+                }
+
+            let errors = (day.errors ?? [:]).values
+                .sorted {
+                    if $0.code != $1.code { return $0.code < $1.code }
+                    if $0.component != $1.component { return $0.component < $1.component }
+                    return $0.severity.rawValue < $1.severity.rawValue
+                }
+                .map {
+                    BatchError(
+                        code: $0.code,
+                        component: $0.component,
+                        severity: $0.severity,
+                        count: min(max(0, $0.count), Limits.maxTotalErrorCountPerDay)
+                    )
+                }
+                .filter { $0.count > 0 }
 
             guard events.count <= Limits.maxEventsPerDay else {
                 throw AppAnalyticsError.invalidConfiguration(
                     "Stored analytics exceeds the per-day event-counter limit."
                 )
             }
+            guard errors.count <= Limits.maxErrorsPerDay,
+                  errors.reduce(0, { $0 + $1.count }) <= Limits.maxTotalErrorCountPerDay else {
+                throw AppAnalyticsError.invalidConfiguration(
+                    "Stored analytics exceeds the per-day error limits."
+                )
+            }
 
             if !pending.isEmpty,
                (pending.count >= Limits.maxDaysPerBatch
-                || pendingEventCounters + events.count > Limits.maxEventCountersPerBatch) {
+                || pendingEventCounters + events.count > Limits.maxEventCountersPerBatch
+                || pendingErrorCounters + errors.count > Limits.maxErrorCountersPerBatch) {
                 finishPending()
             }
 
@@ -593,12 +784,18 @@ public actor AppAnalyticsClient {
                 BatchDay(
                     day: key,
                     appVersion: day.appVersion,
+                    osVersion: day.osVersion,
+                    appBuild: day.appBuild,
+                    deviceFamily: day.deviceFamily,
+                    architecture: day.architecture,
                     sessions: min(day.sessions, Limits.maxSessionsPerDay),
                     sessionSeconds: min(day.sessionSeconds, Limits.maxSessionSecondsPerDay),
-                    events: events
+                    events: events,
+                    errors: errors
                 )
             )
             pendingEventCounters += events.count
+            pendingErrorCounters += errors.count
         }
 
         finishPending()
@@ -621,10 +818,12 @@ public actor AppAnalyticsClient {
                 "appID must match the server app identifier format."
             )
         }
-        guard configuration.appKey.count >= 16, configuration.appKey.count <= 512 else {
-            throw AppAnalyticsError.invalidConfiguration(
-                "appKey must contain between 16 and 512 characters."
-            )
+        if let appKey = configuration.appKey {
+            guard appKey.count >= 16, appKey.count <= 512 else {
+                throw AppAnalyticsError.invalidConfiguration(
+                    "appKey must contain between 16 and 512 characters when provided."
+                )
+            }
         }
         guard configuration.baseURL.scheme == "https"
                 || configuration.baseURL.host == "localhost" else {
@@ -649,6 +848,28 @@ public actor AppAnalyticsClient {
                     "Analytics dimensions must use the server-safe character set and be at most \(Limits.maxDimensionLength) characters."
                 )
             }
+        }
+    }
+
+    private static func validateError(
+        code: String,
+        component: String,
+        count: Int
+    ) throws {
+        guard count > 0, count <= Limits.maxTotalErrorCountPerDay else {
+            throw AppAnalyticsError.invalidError(
+                "Analytics error count must be between 1 and \(Limits.maxTotalErrorCountPerDay)."
+            )
+        }
+        guard code.count <= Limits.maxErrorTokenLength, isValidErrorToken(code) else {
+            throw AppAnalyticsError.invalidError(
+                "Analytics error codes must be lowercase snake_case and at most \(Limits.maxErrorTokenLength) characters."
+            )
+        }
+        guard component.count <= Limits.maxErrorTokenLength, isValidErrorToken(component) else {
+            throw AppAnalyticsError.invalidError(
+                "Analytics error components must be lowercase snake_case and at most \(Limits.maxErrorTokenLength) characters."
+            )
         }
     }
 
@@ -725,6 +946,46 @@ public actor AppAnalyticsClient {
 
     private static func eventKey(name: String, dimension: String?) -> String {
         "\(name)\u{0}\(dimension ?? "")"
+    }
+
+    private static func errorKey(
+        code: String,
+        component: String,
+        severity: AppAnalyticsErrorSeverity
+    ) -> String {
+        "\(code)\u{0}\(component)\u{0}\(severity.rawValue)"
+    }
+
+    private static func validNativeVersion(_ value: String) -> String? {
+        guard !value.isEmpty,
+              value.count <= Limits.maxNativeContextLength,
+              let first = value.unicodeScalars.first,
+              isAlphaNumericASCII(first) else { return nil }
+        let extra: Set<UInt32> = [46, 95, 43, 45]
+        guard value.unicodeScalars.dropFirst().allSatisfy({
+            isAlphaNumericASCII($0) || extra.contains($0.value)
+        }) else { return nil }
+        return value
+    }
+
+    private static func validNativeToken(_ value: String) -> String? {
+        guard !value.isEmpty,
+              value.count <= Limits.maxNativeContextLength,
+              let first = value.unicodeScalars.first,
+              isLowercaseASCII(first) || isDigitASCII(first) else { return nil }
+        guard value.unicodeScalars.dropFirst().allSatisfy({
+            isLowercaseASCII($0) || isDigitASCII($0) || $0.value == 95
+        }) else { return nil }
+        return value
+    }
+
+    private static func isValidErrorToken(_ value: String) -> Bool {
+        guard !value.isEmpty,
+              let first = value.unicodeScalars.first,
+              isLowercaseASCII(first) else { return false }
+        return value.unicodeScalars.dropFirst().allSatisfy {
+            isLowercaseASCII($0) || isDigitASCII($0) || $0.value == 95
+        }
     }
 
     private static func isValidAppID(_ value: String) -> Bool {

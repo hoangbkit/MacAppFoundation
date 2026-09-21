@@ -8,6 +8,7 @@ private enum DemoSection: String, CaseIterable, Identifiable {
     case gating
     case upsell
     case settings
+    case analytics
     case developer
 
     var id: String { rawValue }
@@ -20,6 +21,7 @@ private enum DemoSection: String, CaseIterable, Identifiable {
         case .gating: "Gating"
         case .upsell: "Upsells"
         case .settings: "Settings / Plan"
+        case .analytics: "Analytics"
         case .developer: "Developer Tools"
         }
     }
@@ -32,6 +34,7 @@ private enum DemoSection: String, CaseIterable, Identifiable {
         case .gating: "lock.open"
         case .upsell: "arrow.up.circle"
         case .settings: "gearshape"
+        case .analytics: "chart.xyaxis.line"
         case .developer: "hammer"
         }
     }
@@ -89,6 +92,8 @@ struct ContentView: View {
             UpsellShowcaseView(purchaseManager: purchaseManager)
         case .settings:
             SettingsShowcaseView()
+        case .analytics:
+            AnalyticsShowcaseView()
         case .developer:
             DeveloperToolsShowcaseView()
         }

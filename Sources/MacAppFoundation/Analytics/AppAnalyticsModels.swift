@@ -2,7 +2,7 @@ import Foundation
 
 public struct AppAnalyticsConfiguration: Sendable {
     public var appID: String
-    public var appKey: String
+    public var appKey: String?
     public var baseURL: URL
     public var keychainService: String
     public var stateStorageKey: String
@@ -12,7 +12,7 @@ public struct AppAnalyticsConfiguration: Sendable {
 
     public init(
         appID: String,
-        appKey: String,
+        appKey: String? = nil,
         baseURL: URL,
         keychainService: String = "com.hoangbkit.MacAppFoundation.AppAnalytics",
         stateStorageKey: String? = nil,
@@ -32,9 +32,15 @@ public struct AppAnalyticsConfiguration: Sendable {
     }
 }
 
+public enum AppAnalyticsErrorSeverity: String, Codable, Sendable {
+    case error
+    case fatal
+}
+
 public enum AppAnalyticsError: Error, LocalizedError, Sendable, Equatable {
     case invalidConfiguration(String)
     case invalidEvent(String)
+    case invalidError(String)
     case invalidResponse
     case transport(String)
     case server(code: String, message: String, retryAfter: String?)
@@ -43,7 +49,7 @@ public enum AppAnalyticsError: Error, LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .invalidConfiguration(let message), .invalidEvent(let message),
-             .transport(let message), .storage(let message):
+             .invalidError(let message), .transport(let message), .storage(let message):
             message
         case .invalidResponse:
             "The analytics service returned an invalid response."
