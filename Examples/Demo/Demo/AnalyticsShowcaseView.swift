@@ -50,7 +50,7 @@ struct AnalyticsShowcaseView: View {
                                 .frame(minWidth: 360)
                         }
 
-                        Text("Leave App Key empty to test keyless native ingestion. Credentials stay only in this view state.")
+                        Text("Leave App Key empty to test keyless native ingestion. The Demo does not persist the app key; App ID still scopes the SDK local analytics state and installation identity.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
