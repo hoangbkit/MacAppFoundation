@@ -39,7 +39,7 @@ private actor MockAnalyticsTransport: AppAnalyticsTransport {
     func capturedRequests() -> [URLRequest] { requests }
 }
 
-private func analyticsConfiguration() -> AppAnalyticsConfiguration {
+private func analyticsConfiguration(uploadInterval: TimeInterval = 21_600) -> AppAnalyticsConfiguration {
     AppAnalyticsConfiguration(
         appID: "analytics-test",
         appKey: "test-key-123456789",
@@ -47,7 +47,7 @@ private func analyticsConfiguration() -> AppAnalyticsConfiguration {
         keychainService: "com.hoangbkit.MacAppFoundationTests.\(UUID().uuidString)",
         stateStorageKey: "analytics-state-\(UUID().uuidString)",
         appVersion: "1.2.3",
-        uploadInterval: 21_600,
+        uploadInterval: uploadInterval,
         transportRetryCount: 0
     )
 }
@@ -55,6 +55,16 @@ private func analyticsConfiguration() -> AppAnalyticsConfiguration {
 private func isoDate(_ value: String) -> Date {
     ISO8601DateFormatter().date(from: value)!
 }
+
+private func analyticsContext() -> AppAnalyticsClientContext {
+    AppAnalyticsClientContext(
+        osVersion: "26.0.1",
+        appBuild: "143",
+        deviceFamily: "mac",
+        architecture: "arm64"
+    )
+}
+
 
 private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     guard let body = request.httpBody,
@@ -73,7 +83,8 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
         configuration: configuration,
         transport: transport,
         stateStore: store,
-        now: { timestamp }
+        now: { timestamp },
+        clientContext: analyticsContext()
     )
 
     try await client.track("generation_completed", dimension: "nano", count: 2)
@@ -85,6 +96,7 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     #expect(request.value(forHTTPHeaderField: "X-App-ID") == configuration.appID)
     #expect(request.value(forHTTPHeaderField: "X-App-Key") == configuration.appKey)
     #expect(request.value(forHTTPHeaderField: "X-App-Version") == "1.2.3")
+    #expect(request.value(forHTTPHeaderField: "X-App-Build") == "143")
     #expect(request.value(forHTTPHeaderField: "X-Installation-ID")?.isEmpty == false)
 
     let body = try requestBody(request)
@@ -94,11 +106,89 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     #expect(days.count == 1)
     #expect(days[0]["day"] as? String == "2026-09-05")
     #expect(days[0]["platform"] as? String == "macos")
+    #expect(days[0]["appVersion"] as? String == "1.2.3")
+    #expect(days[0]["appBuild"] as? String == "143")
+    #expect(days[0]["osVersion"] as? String == "26.0.1")
+    #expect(days[0]["deviceFamily"] as? String == "mac")
+    #expect(days[0]["architecture"] as? String == "arm64")
+    let errors = try #require(days[0]["errors"] as? [[String: Any]])
+    #expect(errors.isEmpty)
     let events = try #require(days[0]["events"] as? [[String: Any]])
     #expect(events.count == 1)
     #expect(events[0]["name"] as? String == "generation_completed")
     #expect(events[0]["dimension"] as? String == "nano")
     #expect(events[0]["count"] as? Int == 2)
+}
+
+@Test func analyticsTracksBoundedCumulativeErrors() async throws {
+    let transport = MockAnalyticsTransport()
+    let store = MemoryAnalyticsStateStore()
+    let timestamp = isoDate("2026-09-05T10:00:00Z")
+    let client = AppAnalyticsClient(
+        configuration: analyticsConfiguration(uploadInterval: 86_400),
+        transport: transport,
+        stateStore: store,
+        now: { timestamp },
+        clientContext: analyticsContext()
+    )
+
+    try await client.trackError(
+        "model_load_failed",
+        component: "generation",
+        count: 2
+    )
+    try await client.trackError(
+        "model_load_failed",
+        component: "generation",
+        count: 1
+    )
+    try await client.trackError(
+        "unexpected_termination",
+        component: "app",
+        severity: .fatal
+    )
+    try await client.flush()
+
+    let request = try #require(await transport.capturedRequests().last)
+    let body = try requestBody(request)
+    let days = try #require(body["days"] as? [[String: Any]])
+    let errors = try #require(days[0]["errors"] as? [[String: Any]])
+    #expect(errors.count == 2)
+
+    let modelError = try #require(errors.first { $0["code"] as? String == "model_load_failed" })
+    #expect(modelError["component"] as? String == "generation")
+    #expect(modelError["severity"] as? String == "error")
+    #expect(modelError["count"] as? Int == 3)
+
+    let fatal = try #require(errors.first { $0["code"] as? String == "unexpected_termination" })
+    #expect(fatal["component"] as? String == "app")
+    #expect(fatal["severity"] as? String == "fatal")
+    #expect(fatal["count"] as? Int == 1)
+}
+
+@Test func analyticsRejectsInvalidOrExcessErrorSignals() async throws {
+    let client = AppAnalyticsClient(
+        configuration: analyticsConfiguration(uploadInterval: 86_400),
+        transport: MockAnalyticsTransport(),
+        stateStore: MemoryAnalyticsStateStore(),
+        now: { isoDate("2026-09-05T10:00:00Z") },
+        clientContext: analyticsContext()
+    )
+
+    await #expect(throws: AppAnalyticsError.self) {
+        try await client.trackError("NotValid", component: "generation")
+    }
+    await #expect(throws: AppAnalyticsError.self) {
+        try await client.trackError("model_load_failed", component: "Generation")
+    }
+    await #expect(throws: AppAnalyticsError.self) {
+        try await client.trackError("model_load_failed", component: "generation", count: 101)
+    }
+
+    try await client.trackError("model_load_failed", component: "generation", count: 100)
+    await #expect(throws: AppAnalyticsError.self) {
+        try await client.trackError("database_open_failed", component: "storage")
+    }
 }
 
 @Test func analyticsSessionAccountingExcludesInactiveTimeAndUsesThirtyMinuteTimeout() async throws {
