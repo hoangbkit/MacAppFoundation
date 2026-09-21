@@ -254,7 +254,6 @@ Create one analytics client at app scope and attach application-level lifecycle 
 private let analytics = AppAnalyticsClient(
     configuration: AppAnalyticsConfiguration(
         appID: "my-app",
-        appKey: "your-native-app-key",
         baseURL: URL(string: "https://api.example.com")!
     )
 )
@@ -264,6 +263,8 @@ WindowGroup {
         .managesAnalytics(analytics)
 }
 ```
+
+Pass `appKey:` only when the analytics server requires native app-key authentication; otherwise MacAppFoundation sends no `X-App-Key` header.
 
 Apps explicitly choose bounded product events and stable error codes to record:
 
