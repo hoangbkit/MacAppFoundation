@@ -528,7 +528,9 @@ public actor AppAnalyticsClient {
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(configuration.appID, forHTTPHeaderField: "X-App-ID")
-        request.setValue(configuration.appKey, forHTTPHeaderField: "X-App-Key")
+        if let appKey = configuration.appKey {
+            request.setValue(appKey, forHTTPHeaderField: "X-App-Key")
+        }
         request.setValue(installationID, forHTTPHeaderField: "X-Installation-ID")
         request.setValue(batch.requestId, forHTTPHeaderField: "X-Request-ID")
         if let version = resolvedAppVersion() {
@@ -816,10 +818,12 @@ public actor AppAnalyticsClient {
                 "appID must match the server app identifier format."
             )
         }
-        guard configuration.appKey.count >= 16, configuration.appKey.count <= 512 else {
-            throw AppAnalyticsError.invalidConfiguration(
-                "appKey must contain between 16 and 512 characters."
-            )
+        if let appKey = configuration.appKey {
+            guard appKey.count >= 16, appKey.count <= 512 else {
+                throw AppAnalyticsError.invalidConfiguration(
+                    "appKey must contain between 16 and 512 characters when provided."
+                )
+            }
         }
         guard configuration.baseURL.scheme == "https"
                 || configuration.baseURL.host == "localhost" else {
