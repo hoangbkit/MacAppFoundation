@@ -6,12 +6,12 @@ It is intentionally small: apps explicitly record product events while the found
 
 ## Server requirements
 
-Register the app in `analytics-server` with the `macos` platform enabled and create a native app key. `AppAnalyticsClient` intentionally does not send App Attest data; the analytics endpoint authenticates native requests with the app key.
+Register the app in `analytics-server` with the `macos` platform enabled. `AppAnalyticsClient` supports an optional native app key and intentionally does not send App Attest data. If the server requires native app-key authentication, configure `appKey`; otherwise the SDK omits `X-App-Key` entirely.
 
 The native request uses:
 
 - `X-App-ID`
-- `X-App-Key`
+- `X-App-Key` when `appKey` is configured
 - `X-Installation-ID`
 - `X-Request-ID`
 - `X-App-Version` when available
@@ -27,9 +27,18 @@ Create one client at app scope:
 private let analytics = AppAnalyticsClient(
     configuration: AppAnalyticsConfiguration(
         appID: "my-app",
-        appKey: "your-native-app-key",
         baseURL: URL(string: "https://api.example.com")!
     )
+)
+```
+
+When the server requires a native key, pass it explicitly:
+
+```swift
+AppAnalyticsConfiguration(
+    appID: "my-app",
+    appKey: "your-native-app-key",
+    baseURL: URL(string: "https://api.example.com")!
 )
 ```
 
