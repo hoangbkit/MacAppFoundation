@@ -317,14 +317,33 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
         now: { timestamp }
     )
 
-    try await client.track("generation_completed", count: 99_999)
+    try await client.track("generation_completed", count: 499)
     try await client.track("generation_completed", count: 10)
     try await client.flush()
 
     let request = try #require(await transport.capturedRequests().last)
     let day = try #require(phase3Days(request).first)
     let event = try #require(phase3Events(day).first)
-    #expect(event["count"] as? Int == 100_000)
+    #expect(event["count"] as? Int == 500)
+}
+
+@Test func analyticsRejectsMoreThanTwoThousandTotalEventsPerDay() async throws {
+    let timestamp = phase3Date("2026-09-08T12:00:00Z")
+    let client = AppAnalyticsClient(
+        configuration: phase3Configuration(uploadInterval: 86_400),
+        transport: Phase3AnalyticsTransport(),
+        stateStore: Phase3MemoryAnalyticsStateStore(),
+        now: { timestamp }
+    )
+
+    try await client.track("event_one", count: 500)
+    try await client.track("event_two", count: 500)
+    try await client.track("event_three", count: 500)
+    try await client.track("event_four", count: 500)
+
+    await #expect(throws: AppAnalyticsError.self) {
+        try await client.track("event_five")
+    }
 }
 
 @Test func analyticsStoredSessionValuesAreBoundedToServerCaps() async throws {
