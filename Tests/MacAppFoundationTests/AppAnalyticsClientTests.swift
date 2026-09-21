@@ -39,10 +39,13 @@ private actor MockAnalyticsTransport: AppAnalyticsTransport {
     func capturedRequests() -> [URLRequest] { requests }
 }
 
-private func analyticsConfiguration(uploadInterval: TimeInterval = 21_600) -> AppAnalyticsConfiguration {
+private func analyticsConfiguration(
+    appKey: String? = "test-key-123456789",
+    uploadInterval: TimeInterval = 21_600
+) -> AppAnalyticsConfiguration {
     AppAnalyticsConfiguration(
         appID: "analytics-test",
-        appKey: "test-key-123456789",
+        appKey: appKey,
         baseURL: URL(string: "https://example.com")!,
         keychainService: "com.hoangbkit.MacAppFoundationTests.\(UUID().uuidString)",
         stateStorageKey: "analytics-state-\(UUID().uuidString)",
@@ -118,6 +121,24 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     #expect(events[0]["name"] as? String == "generation_completed")
     #expect(events[0]["dimension"] as? String == "nano")
     #expect(events[0]["count"] as? Int == 2)
+}
+
+@Test func analyticsOmitsAppKeyHeaderWhenNotConfigured() async throws {
+    let transport = MockAnalyticsTransport()
+    let client = AppAnalyticsClient(
+        configuration: analyticsConfiguration(appKey: nil),
+        transport: transport,
+        stateStore: MemoryAnalyticsStateStore(),
+        now: { isoDate("2026-09-05T10:00:00Z") },
+        clientContext: analyticsContext()
+    )
+
+    try await client.track("generation_completed")
+
+    let request = try #require(await transport.capturedRequests().first)
+    #expect(request.value(forHTTPHeaderField: "X-App-Key") == nil)
+    #expect(request.value(forHTTPHeaderField: "X-App-ID") == "analytics-test")
+    #expect(request.value(forHTTPHeaderField: "X-Installation-ID")?.isEmpty == false)
 }
 
 @Test func analyticsTracksBoundedCumulativeErrors() async throws {
