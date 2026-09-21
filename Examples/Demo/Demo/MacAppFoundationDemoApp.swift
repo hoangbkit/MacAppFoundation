@@ -248,7 +248,8 @@ struct MacAppFoundationDemoApp: App {
                             }
                         )
                     ]
-                )            ]
+                )
+            ]
         )
     }
 
