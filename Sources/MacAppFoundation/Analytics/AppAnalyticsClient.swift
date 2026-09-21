@@ -474,6 +474,10 @@ public actor AppAnalyticsClient {
         }
 
         try Self.validateConfiguration(configuration)
+        let currentDay = Self.dayKey(for: timestamp)
+        if state.days[currentDay] != nil {
+            state.days[currentDay] = dayState(in: state, for: currentDay)
+        }
         let installationID = try await installationID()
         let batches = try makeBatches(from: state)
         guard !batches.isEmpty else {
@@ -484,7 +488,6 @@ public actor AppAnalyticsClient {
         // Checkpoint/prune mutations must survive a failed or cancelled network attempt.
         try await saveState(state)
 
-        let currentDay = Self.dayKey(for: timestamp)
         do {
             for batch in batches {
                 try Task.checkCancellation()
@@ -531,7 +534,7 @@ public actor AppAnalyticsClient {
         if let version = resolvedAppVersion() {
             request.setValue(version, forHTTPHeaderField: "X-App-Version")
         }
-        if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+        if let build = clientContext.appBuild.flatMap(Self.validNativeVersion) {
             request.setValue(build, forHTTPHeaderField: "X-App-Build")
         }
 
