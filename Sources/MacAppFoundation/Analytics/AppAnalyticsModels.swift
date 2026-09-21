@@ -2,7 +2,7 @@ import Foundation
 
 public struct AppAnalyticsConfiguration: Sendable {
     public var appID: String
-    public var appKey: String
+    public var appKey: String?
     public var baseURL: URL
     public var keychainService: String
     public var stateStorageKey: String
@@ -12,7 +12,7 @@ public struct AppAnalyticsConfiguration: Sendable {
 
     public init(
         appID: String,
-        appKey: String,
+        appKey: String? = nil,
         baseURL: URL,
         keychainService: String = "com.hoangbkit.MacAppFoundation.AppAnalytics",
         stateStorageKey: String? = nil,
