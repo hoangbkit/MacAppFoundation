@@ -17,7 +17,7 @@ MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host 
 
 ## Demo app
 
-`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, first-party analytics lifecycle wiring, and the separate Developer Tools window/menu.
+`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, a runtime-configured analytics tester for events/errors, and the separate Developer Tools window/menu.
 
 ```sh
 cd Examples/Demo
