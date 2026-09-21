@@ -265,14 +265,15 @@ WindowGroup {
 }
 ```
 
-Apps explicitly choose bounded product events to record:
+Apps explicitly choose bounded product events and stable error codes to record:
 
 ```swift
 try await analytics.track("generation_completed", dimension: "nano")
 try await analytics.track("export_completed")
+try await analytics.trackError("model_load_failed", component: "generation")
 ```
 
-The client keeps cumulative UTC-day snapshots compatible with the retry-safe `ai-proxy-server` analytics contract. It handles foreground session accounting, retention, batching, stable installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics; use the supported analytics-only server configuration with `attestMode: disabled`.
+The client keeps cumulative UTC-day snapshots compatible with the retry-safe `analytics-server` contract. It automatically includes macOS version, app build, `mac` device family, and CPU architecture, and handles foreground session accounting, retention, batching, stable installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics.
 
 See `Documentation/Analytics.md` for server setup, limits, upload behavior, privacy boundaries, reset behavior, and testing/injection points.
 
