@@ -245,7 +245,7 @@ public final class PurchaseManager {
         let records = await service.currentEntitlements()
         guard generation == serviceGeneration else { return [] }
 
-        entitlementState = EntitlementEvaluator.evaluate(
+        entitlementState = EntitlementEvaluator.evaluateCurrentEntitlements(
             records,
             entitledProductIDs: entitledProductIDs
         )
