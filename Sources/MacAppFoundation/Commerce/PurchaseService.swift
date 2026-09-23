@@ -9,7 +9,7 @@ protocol PurchaseServing: AnyObject {
     /// Returns only records the backing store currently considers entitled.
     /// Consumers must not independently expire these records after they are returned.
     func currentEntitlements() async -> [EntitlementRecord]
-    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void>
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String>
     func sync() async throws
 }
 
@@ -83,7 +83,7 @@ final class LiveStoreKitService: PurchaseServing {
     /// Observes only transactions owned by this purchase manager.
     /// Unknown transactions are deliberately left unfinished so another StoreKit
     /// subsystem can deliver its content and finish them itself.
-    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void> {
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
         AsyncStream { continuation in
             let task = Task {
                 for await verification in Transaction.updates {
@@ -98,7 +98,7 @@ final class LiveStoreKitService: PurchaseServing {
                     }
 
                     await transaction.finish()
-                    continuation.yield()
+                    continuation.yield(transaction.productID)
                 }
                 continuation.finish()
             }
