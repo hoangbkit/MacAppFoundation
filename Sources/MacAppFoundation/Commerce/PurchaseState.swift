@@ -22,6 +22,13 @@ public enum PurchaseActivity: Sendable, Equatable {
             false
         }
     }
+
+    public var isPending: Bool {
+        if case .pending = self {
+            return true
+        }
+        return false
+    }
 }
 
 public enum PurchaseOutcome: Sendable, Equatable {
