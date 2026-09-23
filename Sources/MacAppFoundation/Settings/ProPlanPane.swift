@@ -70,7 +70,7 @@ public struct ProPlanPane: View {
                     .foregroundStyle(theme.textSecondary)
 
                     if purchaseManager.hasPro {
-                        if purchaseManager.activeProduct?.isRecurring == true {
+                        if purchaseManager.activeSubscriptionProduct != nil {
                             Link(
                                 configuration.manageSubscriptionTitle,
                                 destination: configuration.manageSubscriptionURL
