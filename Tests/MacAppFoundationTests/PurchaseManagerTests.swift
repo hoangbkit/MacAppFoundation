@@ -22,6 +22,30 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertEqual(service.observedProductIDs, [Self.monthly.id])
     }
 
+    func testPrepareObservesOnlyEntitlementProducts() async {
+        let bonus = StoreProduct(
+            id: "bonus",
+            displayName: "Bonus",
+            description: "",
+            displayPrice: "$1.99",
+            price: 1.99
+        )
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly, bonus]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id, bonus.id],
+                entitledProductIDs: [Self.monthly.id]
+            ),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(service.observedProductIDs, [Self.monthly.id])
+    }
+
     func testPrepareTrustsCurrentEntitlementsWithoutRecheckingExpiration() async {
         let service = MockPurchaseService()
         service.productsResult = [Self.monthly]
