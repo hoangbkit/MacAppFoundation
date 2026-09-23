@@ -18,3 +18,4 @@ All notable changes to MacAppFoundation will be documented in this file.
 - Added a separate active recurring-subscription lookup so plan display and subscription-management state are represented independently.
 - Clarified the `PurchaseServing.currentEntitlements()` contract: returned records are already considered current by the backing store.
 - Transaction update streams now identify the updated product so pending purchases are resolved only by their matching StoreKit transaction.
+- Pro paywalls now refresh StoreKit product metadata and introductory-offer eligibility on presentation while keeping cached plans visible if the refresh fails.
