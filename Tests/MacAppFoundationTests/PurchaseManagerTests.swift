@@ -245,6 +245,23 @@ final class PurchaseManagerTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertEqual(manager.activeProduct?.id, Self.lifetime.id)
+        XCTAssertEqual(manager.activeSubscriptionProduct?.id, Self.monthly.id)
+    }
+
+    func testLifetimeOnlyHasNoActiveSubscriptionProduct() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.lifetime]
+        service.entitlements = [EntitlementRecord(productID: Self.lifetime.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.lifetime.id]),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(manager.activeProduct?.id, Self.lifetime.id)
+        XCTAssertNil(manager.activeSubscriptionProduct)
     }
 
     func testEntitlementProductsExcludeNonEntitledAndUnsupportedProducts() async {
