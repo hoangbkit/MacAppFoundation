@@ -27,7 +27,7 @@ final class SimulatedPurchaseService: PurchaseServing {
     private var productLoadingFailure: PurchaseFailure?
     private var syncFailure: PurchaseFailure?
     private var purchaseDates: [String: Date] = [:]
-    private var updateContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
+    private var updateContinuations: [UUID: AsyncStream<String>.Continuation] = [:]
 
     init(
         products: [StoreProduct],
@@ -76,7 +76,7 @@ final class SimulatedPurchaseService: PurchaseServing {
             let purchaseDate = Date.now
             purchaseDates[productID] = purchaseDate
             persistPurchasedProductIDs()
-            publishEntitlementUpdate()
+            publishEntitlementUpdate(for: productID)
             return .success(
                 EntitlementRecord(
                     productID: product.id,
@@ -102,7 +102,7 @@ final class SimulatedPurchaseService: PurchaseServing {
         }
     }
 
-    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void> {
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
         let identifier = UUID()
         return AsyncStream { continuation in
             updateContinuations[identifier] = continuation
@@ -154,13 +154,17 @@ final class SimulatedPurchaseService: PurchaseServing {
 
     /// Replaces the active simulated entitlements with known catalog products.
     func setPurchasedProductIDs(_ productIDs: Set<String>) {
+        let previousProductIDs = purchasedProductIDs
         purchasedProductIDs = productIDs.intersection(Set(productsByID.keys))
+        let changedProductIDs = previousProductIDs.symmetricDifference(purchasedProductIDs)
         let now = Date.now
         purchaseDates = Dictionary(
             uniqueKeysWithValues: purchasedProductIDs.map { ($0, now) }
         )
         persistPurchasedProductIDs()
-        publishEntitlementUpdate()
+        for productID in changedProductIDs {
+            publishEntitlementUpdate(for: productID)
+        }
     }
 
     /// Updates artificial latency for subsequent simulated StoreKit operations.
@@ -177,13 +181,16 @@ final class SimulatedPurchaseService: PurchaseServing {
 
     /// Clears all simulated transactions and entitlements.
     func reset() {
+        let previousProductIDs = purchasedProductIDs
         purchasedProductIDs = []
         purchaseDates = [:]
         resetFailures()
         if let persistenceKey {
             userDefaults.removeObject(forKey: persistenceKey)
         }
-        publishEntitlementUpdate()
+        for productID in previousProductIDs {
+            publishEntitlementUpdate(for: productID)
+        }
     }
 
     private func waitForSimulationDelay() async {
@@ -197,9 +204,9 @@ final class SimulatedPurchaseService: PurchaseServing {
         userDefaults.set(purchasedProductIDs.sorted(), forKey: persistenceKey)
     }
 
-    private func publishEntitlementUpdate() {
+    private func publishEntitlementUpdate(for productID: String) {
         for continuation in updateContinuations.values {
-            continuation.yield()
+            continuation.yield(productID)
         }
     }
 
