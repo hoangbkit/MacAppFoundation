@@ -198,8 +198,6 @@ public final class PurchaseManager {
             return
         }
 
-        let generation = serviceGeneration
-        let service = service
         let configuration = activeConfiguration
         guard !configuration.productIDs.isEmpty else {
             products = []
@@ -208,12 +206,60 @@ public final class PurchaseManager {
         }
 
         productLoadingState = .loading
+
+        do {
+            guard let loadedProducts = try await fetchProducts(configuration: configuration) else {
+                return
+            }
+            products = loadedProducts
+            productLoadingState = .loaded
+        } catch {
+            productLoadingState = .failed(Self.mapFailure(error))
+        }
+    }
+
+    /// Refreshes StoreKit product metadata while keeping an existing catalog usable.
+    ///
+    /// This is intended for purchase surfaces such as the Pro paywall: cached plans remain
+    /// visible while prices and introductory-offer eligibility are revalidated. If refreshing
+    /// fails, an existing catalog is retained instead of replacing it with an error state.
+    func refreshProductsForPresentation() async {
+        guard !products.isEmpty else {
+            await loadProducts(force: true)
+            return
+        }
+
+        let configuration = activeConfiguration
+        guard !configuration.productIDs.isEmpty else {
+            return
+        }
+
+        // Existing products are intentionally considered usable throughout this refresh.
+        productLoadingState = .loaded
+
+        do {
+            guard let refreshedProducts = try await fetchProducts(configuration: configuration) else {
+                return
+            }
+            products = refreshedProducts
+            productLoadingState = .loaded
+        } catch {
+            // Stale-while-revalidate: keep the previously loaded products and loaded state.
+            productLoadingState = .loaded
+        }
+    }
+
+    private func fetchProducts(
+        configuration: PurchaseConfiguration
+    ) async throws -> [StoreProduct]? {
+        let generation = serviceGeneration
+        let service = service
         var lastFailure = PurchaseFailure.noProductsAvailable
 
         for attempt in 1...configuration.productLoadAttempts {
             do {
                 let loadedProducts = try await service.products(for: configuration.productIDs)
-                guard generation == serviceGeneration else { return }
+                guard generation == serviceGeneration else { return nil }
 
                 let orderedProducts = ProductCatalog.ordered(
                     loadedProducts,
@@ -224,11 +270,9 @@ public final class PurchaseManager {
                     throw PurchaseFailure.noProductsAvailable
                 }
 
-                products = orderedProducts
-                productLoadingState = .loaded
-                return
+                return orderedProducts
             } catch {
-                guard generation == serviceGeneration else { return }
+                guard generation == serviceGeneration else { return nil }
                 lastFailure = Self.mapFailure(error)
                 guard attempt < configuration.productLoadAttempts else {
                     break
@@ -236,12 +280,11 @@ public final class PurchaseManager {
 
                 let delay = UInt64(attempt) * 350_000_000
                 try? await Task.sleep(nanoseconds: delay)
-                guard generation == serviceGeneration else { return }
+                guard generation == serviceGeneration else { return nil }
             }
         }
 
-        guard generation == serviceGeneration else { return }
-        productLoadingState = .failed(lastFailure)
+        throw lastFailure
     }
 
     public func refreshEntitlements() async {
