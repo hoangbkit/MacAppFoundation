@@ -627,8 +627,8 @@ public final class PurchaseManager {
         updateTask?.cancel()
         let generation = serviceGeneration
         let service = service
-        let managedProductIDs = Set(activeConfiguration.productIDs)
-        let updates = service.entitlementUpdates(for: managedProductIDs)
+        let entitlementProductIDs = activeConfiguration.entitledProductIDs
+        let updates = service.entitlementUpdates(for: entitlementProductIDs)
 
         updateTask = Task { [weak self] in
             for await updatedProductID in updates {
