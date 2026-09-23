@@ -11,6 +11,7 @@ All notable changes to MacAppFoundation will be documented in this file.
 - Keep subscription management available when a recurring subscription remains active alongside Lifetime access.
 - Prevent duplicate purchase attempts while a StoreKit purchase is pending approval.
 - Keep unrelated transaction updates from clearing the pending state of another product.
+- Limit StoreKit transaction observation to products that actually grant Pro, leaving non-Pro catalog transactions for their owning subsystem.
 
 ### Changed
 
