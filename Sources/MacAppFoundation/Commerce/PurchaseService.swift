@@ -6,6 +6,8 @@ import StoreKit
 protocol PurchaseServing: AnyObject {
     func products(for identifiers: [String]) async throws -> [StoreProduct]
     func purchase(productID: String) async throws -> PurchaseOutcome
+    /// Returns only records the backing store currently considers entitled.
+    /// Consumers must not independently expire these records after they are returned.
     func currentEntitlements() async -> [EntitlementRecord]
     func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void>
     func sync() async throws
