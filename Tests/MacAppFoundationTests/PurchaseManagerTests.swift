@@ -46,6 +46,64 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertEqual(service.observedProductIDs, [Self.monthly.id])
     }
 
+    func testPresentationRefreshReplacesCachedProductMetadata() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        await manager.loadProducts()
+
+        let refreshedMonthly = StoreProduct(
+            id: Self.monthly.id,
+            displayName: "Monthly",
+            description: "Monthly access",
+            displayPrice: "$5.99",
+            price: 5.99,
+            subscriptionPeriod: .init(value: 1, unit: .month),
+            introductoryOffer: .init(
+                paymentMode: .freeTrial,
+                period: .init(value: 1, unit: .week),
+                displayPrice: "Free",
+                price: 0,
+                isEligible: false
+            )
+        )
+        service.productsResult = [refreshedMonthly]
+
+        await manager.refreshProductsForPresentation()
+
+        XCTAssertEqual(manager.products, [refreshedMonthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+        XCTAssertEqual(service.productLoadCount, 2)
+    }
+
+    func testPresentationRefreshKeepsCachedProductsWhenRefreshFails() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                productLoadAttempts: 1
+            ),
+            service: service
+        )
+
+        await manager.loadProducts()
+        service.productLoadingFailure = PurchaseFailure(
+            code: .networkUnavailable,
+            message: "Offline"
+        )
+
+        await manager.refreshProductsForPresentation()
+
+        XCTAssertEqual(manager.products, [Self.monthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+        XCTAssertEqual(service.productLoadCount, 2)
+    }
+
     func testPrepareTrustsCurrentEntitlementsWithoutRecheckingExpiration() async {
         let service = MockPurchaseService()
         service.productsResult = [Self.monthly]
@@ -440,12 +498,16 @@ private final class MockPurchaseService: PurchaseServing {
     var purchaseCount = 0
     var syncCount = 0
     var syncFailure: PurchaseFailure?
+    var productLoadingFailure: PurchaseFailure?
     var observedProductIDs: Set<String> = []
 
     private var updateContinuations: [AsyncStream<String>.Continuation] = []
 
     func products(for identifiers: [String]) async throws -> [StoreProduct] {
         productLoadCount += 1
+        if let productLoadingFailure {
+            throw productLoadingFailure
+        }
         return productsResult.filter { identifiers.contains($0.id) }
     }
 
