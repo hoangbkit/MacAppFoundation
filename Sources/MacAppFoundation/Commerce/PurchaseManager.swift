@@ -100,6 +100,17 @@ public final class PurchaseManager {
         return false
     }
 
+    public var isPurchasePending: Bool {
+        activity.isPending
+    }
+
+    public var pendingProductID: String? {
+        if case .pending(let productID) = activity {
+            return productID
+        }
+        return nil
+    }
+
     /// Product identifiers that currently grant Pro, including Debug simulator edits.
     public var entitledProductIDs: Set<String> {
         activeConfiguration.entitledProductIDs
@@ -256,7 +267,7 @@ public final class PurchaseManager {
     /// Failures are exposed through ``activity`` and return `nil`.
     @discardableResult
     public func purchase(_ product: StoreProduct) async -> PurchaseOutcome? {
-        guard !isBusy else {
+        guard !isBusy, !isPurchasePending else {
             return nil
         }
 
@@ -301,7 +312,7 @@ public final class PurchaseManager {
         if let restoreTask {
             return await restoreTask.value
         }
-        guard !isPurchasing else {
+        guard !isPurchasing, !isPurchasePending else {
             return .failed(.operationInProgress)
         }
 
@@ -541,7 +552,6 @@ public final class PurchaseManager {
             return
         }
         simulatedService.setPurchasedProductIDs(productIDs)
-        activity = .idle
         await refreshEntitlements()
     }
 
@@ -621,7 +631,7 @@ public final class PurchaseManager {
         let updates = service.entitlementUpdates(for: managedProductIDs)
 
         updateTask = Task { [weak self] in
-            for await _ in updates {
+            for await updatedProductID in updates {
                 guard !Task.isCancelled else {
                     return
                 }
@@ -630,7 +640,8 @@ public final class PurchaseManager {
                 }
                 await self.refreshEntitlements()
                 guard generation == self.serviceGeneration else { return }
-                if case .pending = self.activity {
+                if case .pending(let pendingProductID) = self.activity,
+                   pendingProductID == updatedProductID {
                     self.activity = .idle
                 }
             }
