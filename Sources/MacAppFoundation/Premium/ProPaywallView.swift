@@ -81,9 +81,7 @@ public struct ProPaywallView: View {
         .background(theme.canvas)
         .tint(theme.accent)
         .task {
-            if purchaseManager.products.isEmpty {
-                await purchaseManager.loadProducts(force: true)
-            }
+            await purchaseManager.refreshProductsForPresentation()
             await purchaseManager.refreshEntitlements()
             selectDefaultPlanIfNeeded()
         }
