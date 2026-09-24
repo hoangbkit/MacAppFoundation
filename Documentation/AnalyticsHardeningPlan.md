@@ -24,6 +24,13 @@ Tests:
 
 Exit criteria: repeated events during a server outage/rate-limit window continue to accumulate locally without creating a request storm or losing data.
 
+Additional concurrency hardening:
+- [x] Automatic uploads run independently after local persistence, so tracking does not wait for a slow or unavailable server.
+- [x] Only one analytics upload is allowed in flight at a time.
+- [x] Local load/mutate/save transactions are serialized independently from network upload time.
+- [x] Upload completion reloads the newest persisted state before merging accepted historical days, success metadata, or retry backoff.
+- [x] Deterministic blocked-network tests prove events recorded during successful, failed, and rate-limited requests survive.
+
 **Status:** implementation and deterministic regression coverage are complete. Repository CI is manual-only; the three-lane execution pass remains part of Phase 4 final validation.
 
 ## Phase 2 — Cumulative Snapshot and Lifecycle Correctness
