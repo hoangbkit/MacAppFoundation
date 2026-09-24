@@ -72,7 +72,12 @@ public struct ProPlanPane: View {
                     HStack(spacing: 10) {
                         if actionState.showsUpgrade {
                             Button(configuration.upgradeButtonTitle, action: onUpgrade)
-                                .buttonStyle(MacAppButtonStyle(.primary))
+                                .buttonStyle(
+                                    MacAppButtonStyle(
+                                        .primary,
+                                        minimumHeight: configuration.upgradeButtonHeight
+                                    )
+                                )
                         }
 
                         if actionState.showsViewPlans {
