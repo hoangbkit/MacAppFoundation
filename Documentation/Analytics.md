@@ -123,7 +123,9 @@ The client stores cumulative UTC-day snapshots locally and uploads opportunistic
 - 32 KiB maximum request body
 - 1 transport retry
 
-Automatic uploads are best effort. Tracking and lifecycle calls suppress upload errors so analytics cannot block normal product behavior. Call `flush()` when an explicit upload operation should surface an error:
+Automatic uploads are best effort and run separately from tracking/lifecycle persistence. Tracking first records its local cumulative state, schedules at most one automatic upload, and returns without waiting for the network. Uploads are serialized, and completion reloads the latest persisted state before merging acceptance/backoff metadata so events recorded while a request is suspended cannot be overwritten by an older upload snapshot.
+
+Tracking and lifecycle calls therefore do not surface automatic upload errors or wait for a slow analytics server. Call `flush()` when an explicit upload operation should wait for upload completion and surface an error:
 
 ```swift
 try await analytics.flush()
