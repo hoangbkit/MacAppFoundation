@@ -57,6 +57,21 @@ final class PremiumAccessTests: XCTestCase {
         XCTAssertEqual(decision, .requiresPro(feature: feature))
     }
 
+    @MainActor
+    func testProPlanButtonAcceptsCustomHeight() {
+        let purchases = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: ["pro"]),
+            simulated: true
+        )
+
+        _ = ProPlanButton(
+            purchaseManager: purchases,
+            height: 28,
+            onUpgrade: {},
+            onManagePlan: {}
+        )
+    }
+
     func testLockInfoPreservesAppOwnedCopy() {
         let info = ProLockInfo(
             title: "Pro Feature",
