@@ -411,28 +411,28 @@ public actor AppAnalyticsClient {
                 return
             }
 
-        let shouldResume: Bool
-        if let session = state.session {
-            let gap = timestamp.timeIntervalSince(session.lastActivityAt)
-            shouldResume = gap >= 0 && gap <= Limits.sessionTimeout
-        } else {
-            shouldResume = false
-        }
+            let shouldResume: Bool
+            if let session = state.session {
+                let gap = timestamp.timeIntervalSince(session.lastActivityAt)
+                shouldResume = gap >= 0 && gap <= Limits.sessionTimeout
+            } else {
+                shouldResume = false
+            }
 
-        if shouldResume, var session = state.session {
-            session.lastActivityAt = timestamp
-            session.activeSince = timestamp
-            state.session = session
-        } else {
-            let dayKey = Self.dayKey(for: timestamp)
-            var day = dayState(in: state, for: dayKey)
-            day.sessions = min(Limits.maxSessionsPerDay, day.sessions + 1)
-            state.days[dayKey] = day
-            state.session = SessionState(
-                lastActivityAt: timestamp,
-                activeSince: timestamp
-            )
-        }
+            if shouldResume, var session = state.session {
+                session.lastActivityAt = timestamp
+                session.activeSince = timestamp
+                state.session = session
+            } else {
+                let dayKey = Self.dayKey(for: timestamp)
+                var day = dayState(in: state, for: dayKey)
+                day.sessions = min(Limits.maxSessionsPerDay, day.sessions + 1)
+                state.days[dayKey] = day
+                state.session = SessionState(
+                    lastActivityAt: timestamp,
+                    activeSince: timestamp
+                )
+            }
 
             try await saveState(state)
             releaseStateAccess()
