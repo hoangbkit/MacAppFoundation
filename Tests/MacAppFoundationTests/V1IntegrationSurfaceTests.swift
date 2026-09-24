@@ -45,15 +45,29 @@ final class V1IntegrationSurfaceTests: XCTestCase {
             title: purchaseFeature.title
         )
 
+        let paywallConfiguration = ProPaywallConfiguration(
+            title: "Example Pro",
+            subtitle: "Unlock everything.",
+            termsURL: URL(string: "https://example.com/terms")!,
+            privacyURL: URL(string: "https://example.com/privacy")!
+        )
+
         _ = ProPaywallView(
             purchaseManager: manager,
-            configuration: ProPaywallConfiguration(
-                title: "Example Pro",
-                subtitle: "Unlock everything.",
-                termsURL: URL(string: "https://example.com/terms")!,
-                privacyURL: URL(string: "https://example.com/privacy")!
-            )
+            configuration: paywallConfiguration
         )
+
+        _ = MacAppFullSizeWindow(
+            "Example Pro",
+            id: "example.pro",
+            defaultWidth: 860,
+            defaultHeight: 600
+        ) {
+            ProPaywallView(
+                purchaseManager: manager,
+                configuration: paywallConfiguration
+            )
+        }
 
         _ = ProGate(
             purchaseManager: manager,
