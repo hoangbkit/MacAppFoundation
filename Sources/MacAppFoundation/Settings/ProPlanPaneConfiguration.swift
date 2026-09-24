@@ -8,7 +8,9 @@ public struct ProPlanPaneConfiguration: Sendable, Equatable {
     public let freeDescription: String
     public let proDescription: String
     public let upgradeButtonTitle: String
+    public let viewPlansButtonTitle: String
     public let manageSubscriptionTitle: String
+    public let restorePurchasesTitle: String
     public let manageSubscriptionURL: URL
     public let features: [PurchaseFeature]?
 
@@ -19,7 +21,9 @@ public struct ProPlanPaneConfiguration: Sendable, Equatable {
         freeDescription: String? = nil,
         proDescription: String? = nil,
         upgradeButtonTitle: String = "Upgrade to Pro",
+        viewPlansButtonTitle: String = "View Plans",
         manageSubscriptionTitle: String = "Manage Subscription",
+        restorePurchasesTitle: String = "Restore Purchases",
         manageSubscriptionURL: URL = URL(string: "https://apps.apple.com/account/subscriptions")!,
         features: [PurchaseFeature]? = nil
     ) {
@@ -31,7 +35,9 @@ public struct ProPlanPaneConfiguration: Sendable, Equatable {
         self.proDescription = proDescription
             ?? "You have access to \(appName) Pro features."
         self.upgradeButtonTitle = upgradeButtonTitle
+        self.viewPlansButtonTitle = viewPlansButtonTitle
         self.manageSubscriptionTitle = manageSubscriptionTitle
+        self.restorePurchasesTitle = restorePurchasesTitle
         self.manageSubscriptionURL = manageSubscriptionURL
         self.features = features
     }
