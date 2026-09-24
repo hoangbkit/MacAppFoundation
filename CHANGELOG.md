@@ -24,5 +24,6 @@ All notable changes to MacAppFoundation will be documented in this file.
 - Introductory-offer copy is less repetitive by leaving renewal policy to the shared legal disclosure below the purchase button.
 - Added `MacAppFullSizeWindow`, a reusable scene wrapper for the hidden-titlebar, full-size-content window chrome used by the demo paywall.
 - The demo Settings scene now uses a native SwiftUI `Settings` window with a top `TabView`, while reusing MAF's Appearance and Plan views.
-- The reusable Plan pane now lets active subscribers reopen available plans, keeps App Store subscription management available when relevant, exposes Restore Purchases, and lets apps configure the Upgrade to Pro button height without changing its 32pt default.
+- The reusable Plan pane now lets active subscribers reopen available plans, keeps App Store subscription management available when relevant, and exposes Restore Purchases without changing the existing plan-card design.
+- The compact title-bar ProPlanButton now supports a configurable height while preserving its existing 24pt default.
 - Analytics automatic uploads now run off the tracking critical path, serialize network uploads, and merge completion into the latest local state so a slow or unavailable server cannot overwrite events recorded while a request is in flight.
