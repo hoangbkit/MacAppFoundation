@@ -30,6 +30,7 @@ Additional concurrency hardening:
 - [x] Local load/mutate/save transactions are serialized independently from network upload time.
 - [x] Upload completion reloads the newest persisted state before merging accepted historical days, success metadata, or retry backoff.
 - [x] Deterministic blocked-network tests prove events recorded during successful, failed, and rate-limited requests survive.
+- [x] Concurrent tracking regression coverage proves serialized local state updates do not lose event counters.
 
 **Status:** implementation and deterministic regression coverage are complete. Repository CI is manual-only; the three-lane execution pass remains part of Phase 4 final validation.
 
