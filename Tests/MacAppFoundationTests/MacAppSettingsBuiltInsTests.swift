@@ -150,4 +150,16 @@ struct MacAppSettingsBuiltInsTests {
         #expect(lifetimeAndSubscription.showsManageSubscription)
     }
 
+    @Test("Plan pane upgrade button height is configurable")
+    func planPaneUpgradeButtonHeight() {
+        let defaults = ProPlanPaneConfiguration(appName: "Demo")
+        #expect(defaults.upgradeButtonHeight == 32)
+
+        let compact = ProPlanPaneConfiguration(
+            appName: "Demo",
+            upgradeButtonHeight: 26
+        )
+        #expect(compact.upgradeButtonHeight == 26)
+    }
+
 }
