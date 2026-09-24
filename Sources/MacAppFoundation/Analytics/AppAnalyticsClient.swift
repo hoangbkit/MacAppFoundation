@@ -388,7 +388,7 @@ public actor AppAnalyticsClient {
 
         if state.session?.activeSince != nil {
             try await saveState(state)
-            try? await flushIfDue(at: timestamp)
+            scheduleAutomaticFlush(at: timestamp)
             return
         }
 
