@@ -22,3 +22,4 @@ All notable changes to MacAppFoundation will be documented in this file.
 - Pro paywalls now refresh StoreKit product metadata and introductory-offer eligibility on presentation while keeping cached plans visible if the refresh fails.
 - Pro paywalls now dismiss their current presentation automatically after a successful purchase or restore, while still invoking the optional callbacks first.
 - Introductory-offer copy is less repetitive by leaving renewal policy to the shared legal disclosure below the purchase button.
+- Added `MacAppFullSizeWindow`, a reusable scene wrapper for the hidden-titlebar, full-size-content window chrome used by the demo paywall.
