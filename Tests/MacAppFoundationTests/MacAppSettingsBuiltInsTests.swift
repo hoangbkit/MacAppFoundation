@@ -93,4 +93,73 @@ struct MacAppSettingsBuiltInsTests {
         #expect(sections.map { $0.id } == [.application, .account])
         #expect(sections.flatMap { $0.panes }.map { $0.id } == [.appearance, .plan])
     }
+
+    @MainActor
+    @Test("Plan pane actions match free, subscription, lifetime, and mixed entitlements")
+    func planPaneActions() {
+        let monthly = StoreProduct(
+            id: "pro.monthly",
+            displayName: "Monthly",
+            description: "",
+            displayPrice: "$4.99",
+            price: 4.99,
+            subscriptionPeriod: .init(value: 1, unit: .month)
+        )
+        let lifetime = StoreProduct(
+            id: "pro.lifetime",
+            displayName: "Lifetime",
+            description: "",
+            displayPrice: "$79.99",
+            price: 79.99
+        )
+
+        #expect(
+            ProPlanPaneActionState(
+                hasPro: false,
+                activeProduct: nil,
+                activeSubscriptionProduct: nil
+            ) == .init(
+                showsUpgrade: true,
+                showsViewPlans: false,
+                showsManageSubscription: false
+            )
+        )
+
+        #expect(
+            ProPlanPaneActionState(
+                hasPro: true,
+                activeProduct: monthly,
+                activeSubscriptionProduct: monthly
+            ) == .init(
+                showsUpgrade: false,
+                showsViewPlans: true,
+                showsManageSubscription: true
+            )
+        )
+
+        #expect(
+            ProPlanPaneActionState(
+                hasPro: true,
+                activeProduct: lifetime,
+                activeSubscriptionProduct: nil
+            ) == .init(
+                showsUpgrade: false,
+                showsViewPlans: false,
+                showsManageSubscription: false
+            )
+        )
+
+        #expect(
+            ProPlanPaneActionState(
+                hasPro: true,
+                activeProduct: lifetime,
+                activeSubscriptionProduct: monthly
+            ) == .init(
+                showsUpgrade: false,
+                showsViewPlans: false,
+                showsManageSubscription: true
+            )
+        )
+    }
+
 }
