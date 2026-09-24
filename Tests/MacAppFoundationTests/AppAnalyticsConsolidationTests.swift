@@ -143,6 +143,7 @@ private func consolidationRequestBody(_ request: URLRequest) throws -> [String: 
     )
 
     try await client.track("generation_completed")
+    await client.waitForAutomaticUpload()
 
     let request = try #require(await transport.capturedRequests().first)
     let body = try consolidationRequestBody(request)
