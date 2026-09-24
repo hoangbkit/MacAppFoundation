@@ -212,6 +212,37 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertFalse(manager.hasPro)
     }
 
+    func testClearActivityOnlyClearsFailureState() async {
+        let service = MockPurchaseService()
+        service.purchaseOutcome = .pending
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        _ = await manager.purchase(Self.monthly)
+        manager.clearActivity()
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+
+        manager.clearActivity()
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+    }
+
+    func testClearActivityClearsFailureToIdle() async {
+        let service = MockPurchaseService()
+        service.purchaseFailure = .unknown
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        _ = await manager.purchase(Self.monthly)
+        XCTAssertEqual(manager.activity, .failed(.unknown))
+
+        manager.clearActivity()
+        XCTAssertEqual(manager.activity, .idle)
+    }
+
     func testPendingPurchaseBlocksAdditionalPurchase() async {
         let service = MockPurchaseService()
         service.purchaseOutcome = .pending
@@ -540,6 +571,7 @@ final class PurchaseManagerTests: XCTestCase {
 private final class MockPurchaseService: PurchaseServing {
     var productsResult: [StoreProduct] = []
     var purchaseOutcome: PurchaseOutcome = .userCancelled
+    var purchaseFailure: PurchaseFailure?
     var purchaseDelay: Duration = .milliseconds(0)
     var entitlements: [EntitlementRecord] = []
     var blockedFirstEntitlementResponse: [EntitlementRecord]?
@@ -571,6 +603,9 @@ private final class MockPurchaseService: PurchaseServing {
     func purchase(productID: String) async throws -> PurchaseOutcome {
         purchaseCount += 1
         try? await Task.sleep(for: purchaseDelay)
+        if let purchaseFailure {
+            throw purchaseFailure
+        }
         return purchaseOutcome
     }
 
