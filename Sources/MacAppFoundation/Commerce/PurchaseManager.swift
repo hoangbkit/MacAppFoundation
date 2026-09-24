@@ -22,6 +22,7 @@ public final class PurchaseManager {
     @ObservationIgnored private let simulatedPersistenceKey: String?
     @ObservationIgnored private var simulatedOperationDelay: Duration
     @ObservationIgnored private var updateTask: Task<Void, Never>?
+    @ObservationIgnored private var subscriptionStatusUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
     @ObservationIgnored private var hasPrepared = false
@@ -74,6 +75,7 @@ public final class PurchaseManager {
 
     deinit {
         updateTask?.cancel()
+        subscriptionStatusUpdateTask?.cancel()
         restoreTask?.cancel()
     }
 
@@ -187,6 +189,7 @@ public final class PurchaseManager {
         if !hasPrepared {
             hasPrepared = true
             startObservingTransactions()
+            startObservingSubscriptionStatus()
         }
 
         await refreshEntitlements()
@@ -656,6 +659,8 @@ public final class PurchaseManager {
         serviceGeneration &+= 1
         updateTask?.cancel()
         updateTask = nil
+        subscriptionStatusUpdateTask?.cancel()
+        subscriptionStatusUpdateTask = nil
     }
 
     private func resetObservableStateForServiceChange() {
@@ -687,6 +692,26 @@ public final class PurchaseManager {
                    pendingProductID == updatedProductID {
                     self.activity = .idle
                 }
+            }
+        }
+    }
+
+    private func startObservingSubscriptionStatus() {
+        subscriptionStatusUpdateTask?.cancel()
+        let generation = serviceGeneration
+        let service = service
+        let entitlementProductIDs = activeConfiguration.entitledProductIDs
+        let updates = service.subscriptionStatusUpdates(for: entitlementProductIDs)
+
+        subscriptionStatusUpdateTask = Task { [weak self] in
+            for await _ in updates {
+                guard !Task.isCancelled else {
+                    return
+                }
+                guard let self, generation == self.serviceGeneration else {
+                    return
+                }
+                await self.refreshEntitlements()
             }
         }
     }
