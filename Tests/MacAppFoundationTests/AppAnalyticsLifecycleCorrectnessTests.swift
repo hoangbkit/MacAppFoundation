@@ -228,8 +228,11 @@ private func phase2Event(
     )
 
     try await client.applicationDidBecomeActive(at: phase2Date("2026-09-05T23:55:00Z"))
-    try await client.applicationWillResignActive(at: phase2Date("2026-09-06T00:05:00Z"))
+    await client.waitForAutomaticUpload()
+
     clock.set(phase2Date("2026-09-06T00:05:00Z"))
+    try await client.applicationWillResignActive(at: phase2Date("2026-09-06T00:05:00Z"))
+    await client.waitForAutomaticUpload()
     try await client.flush()
 
     let request = try #require(await transport.capturedRequests().last)
