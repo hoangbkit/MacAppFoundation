@@ -115,6 +115,7 @@ private func consolidationRequestBody(_ request: URLRequest) throws -> [String: 
     )
 
     try await client.track("first_event")
+    await client.waitForAutomaticUpload()
 
     clock.set(consolidationDate("2026-09-08T12:00:00Z"))
     try await client.track("second_event")
