@@ -17,9 +17,14 @@ public struct MacAppButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let kind: Kind
+    private let minimumHeight: CGFloat
 
-    public init(_ kind: Kind = .secondary) {
+    public init(
+        _ kind: Kind = .secondary,
+        minimumHeight: CGFloat = 32
+    ) {
         self.kind = kind
+        self.minimumHeight = max(0, minimumHeight)
     }
 
     public func makeBody(configuration: Configuration) -> some View {
@@ -30,7 +35,7 @@ public struct MacAppButtonStyle: ButtonStyle {
             .lineLimit(1)
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, horizontalPadding)
-            .frame(minHeight: 32)
+            .frame(minHeight: minimumHeight)
             .background {
                 shape.fill(backgroundColor(isPressed: configuration.isPressed))
             }
