@@ -14,43 +14,62 @@ struct DemoSettingsView: View {
 
     @Environment(\.openWindow) private var openWindow
     @Environment(DemoState.self) private var demoState
+    @State private var selection: MacAppSettingsPaneID = .demoGeneral
 
     var body: some View {
-        MacAppSettingsView(
-            panes: panes,
-            initialSelection: .demoGeneral,
-            router: settingsRouter
-        )
-        .accessibilityIdentifier(DemoAccessibilityID.settings)
-    }
+        TabView(selection: $selection) {
+            DemoGeneralSettingsPane(demoState: demoState)
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+                .tag(MacAppSettingsPaneID.demoGeneral)
 
-    private var panes: [MacAppSettingsPane] {
-        [
-            MacAppSettingsPane(
-                id: .demoGeneral,
-                title: "General",
-                subtitle: "Demo behavior and showcase preferences.",
-                systemImage: "gearshape"
-            ) {
-                DemoGeneralSettingsPane(demoState: demoState)
-            },
-            .appearance(themeStore: themeStore),
-            .plan(
+            MacAppAppearanceSettingsPane(themeStore: themeStore)
+                .tabItem {
+                    Label("Appearance", systemImage: "paintpalette")
+                }
+                .tag(MacAppSettingsPaneID.appearance)
+
+            MacAppPlanSettingsPane(
                 purchaseManager: purchaseManager,
                 configuration: DemoCommerce.planConfiguration,
                 onUpgrade: {
                     openWindow(id: DemoWindowID.paywall)
                 }
-            ),
-            MacAppSettingsPane(
-                id: .demoAbout,
-                title: "About",
-                subtitle: "How the Demo composes MacAppFoundation.",
-                systemImage: "info.circle"
-            ) {
-                DemoAboutSettingsPane()
+            )
+            .tabItem {
+                Label("Plan", systemImage: "creditcard")
             }
-        ]
+            .tag(MacAppSettingsPaneID.plan)
+
+            DemoAboutSettingsPane()
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
+                }
+                .tag(MacAppSettingsPaneID.demoAbout)
+        }
+        .frame(width: 760, height: 560)
+        .accessibilityIdentifier(DemoAccessibilityID.settings)
+        .onAppear {
+            consumeRouterRequest()
+        }
+        .onChange(of: settingsRouter.requestID) { _, _ in
+            consumeRouterRequest()
+        }
+    }
+
+    private func consumeRouterRequest() {
+        guard let requestedPaneID = settingsRouter.requestedPaneID else {
+            return
+        }
+
+        switch requestedPaneID {
+        case .demoGeneral, .appearance, .plan, .demoAbout:
+            selection = requestedPaneID
+            settingsRouter.clear()
+        default:
+            break
+        }
     }
 }
 
@@ -84,10 +103,10 @@ private struct DemoGeneralSettingsPane: View {
 
                 GroupBox("Foundation ownership") {
                     VStack(alignment: .leading, spacing: 10) {
-                        LabeledContent("Settings shell", value: "MacAppFoundation")
+                        LabeledContent("Settings presentation", value: "Native SwiftUI Settings + TabView")
                         LabeledContent("Pane content", value: "Host app + MAF built-ins")
                         LabeledContent("Theme selection", value: "Shared MacAppThemeStore")
-                        LabeledContent("Window routing", value: "Host app")
+                        LabeledContent("Window routing", value: "openSettings()")
                     }
                     .foregroundStyle(theme.textPrimary)
                 }
@@ -130,8 +149,9 @@ private struct DemoAboutSettingsPane: View {
                     VStack(alignment: .leading, spacing: 9) {
                         architectureRow("One shared PurchaseManager")
                         architectureRow("One shared MacAppThemeStore across scenes")
-                        architectureRow("Flat MAF Settings sidebar for small apps")
-                        architectureRow("App-injected General and About panes")
+                        architectureRow("Native Settings scene with a SwiftUI TabView")
+                        architectureRow("MAF-owned Appearance and Plan tabs")
+                        architectureRow("App-owned General and About tabs")
                         architectureRow("Separate debug Developer Tools window")
                     }
                 }
