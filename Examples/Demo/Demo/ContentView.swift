@@ -46,7 +46,6 @@ struct ContentView: View {
     let settingsRouter: MacAppSettingsRouter
 
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
     @State private var selection: DemoSection? = .overview
 
     var body: some View {
@@ -69,7 +68,7 @@ struct ContentView: View {
                             },
                             onManagePlan: {
                                 settingsRouter.request(.plan)
-                                openSettings()
+                                openWindow(id: DemoWindowID.settings)
                             }
                         )
                     }
