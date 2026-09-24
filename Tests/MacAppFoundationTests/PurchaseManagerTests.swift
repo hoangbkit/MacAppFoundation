@@ -47,6 +47,33 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertEqual(service.observedSubscriptionStatusProductIDs, [Self.monthly.id])
     }
 
+    func testOlderEntitlementRefreshCannotOverwriteNewerState() async {
+        let service = MockPurchaseService()
+        service.blockedFirstEntitlementResponse = []
+        service.entitlements = [EntitlementRecord(productID: Self.monthly.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        let olderRefresh = Task {
+            await manager.refreshEntitlements()
+        }
+
+        while !service.isFirstEntitlementRefreshBlocked {
+            await Task.yield()
+        }
+
+        await manager.refreshEntitlements()
+        XCTAssertTrue(manager.hasPro)
+
+        service.releaseFirstEntitlementRefresh()
+        await olderRefresh.value
+
+        XCTAssertTrue(manager.hasPro)
+    }
+
     func testSubscriptionStatusUpdateRefreshesEntitlementWhileAppRemainsOpen() async throws {
         let service = MockPurchaseService()
         service.productsResult = [Self.monthly]
@@ -515,6 +542,7 @@ private final class MockPurchaseService: PurchaseServing {
     var purchaseOutcome: PurchaseOutcome = .userCancelled
     var purchaseDelay: Duration = .milliseconds(0)
     var entitlements: [EntitlementRecord] = []
+    var blockedFirstEntitlementResponse: [EntitlementRecord]?
     var productLoadCount = 0
     var purchaseCount = 0
     var syncCount = 0
@@ -525,6 +553,12 @@ private final class MockPurchaseService: PurchaseServing {
 
     private var updateContinuations: [AsyncStream<String>.Continuation] = []
     private var subscriptionStatusUpdateContinuations: [AsyncStream<String>.Continuation] = []
+    private var entitlementRequestCount = 0
+    private var firstEntitlementRefreshContinuation: CheckedContinuation<Void, Never>?
+
+    var isFirstEntitlementRefreshBlocked: Bool {
+        firstEntitlementRefreshContinuation != nil
+    }
 
     func products(for identifiers: [String]) async throws -> [StoreProduct] {
         productLoadCount += 1
@@ -541,7 +575,22 @@ private final class MockPurchaseService: PurchaseServing {
     }
 
     func currentEntitlements() async -> [EntitlementRecord] {
-        entitlements
+        entitlementRequestCount += 1
+
+        if entitlementRequestCount == 1,
+           let blockedFirstEntitlementResponse {
+            await withCheckedContinuation { continuation in
+                firstEntitlementRefreshContinuation = continuation
+            }
+            return blockedFirstEntitlementResponse
+        }
+
+        return entitlements
+    }
+
+    func releaseFirstEntitlementRefresh() {
+        firstEntitlementRefreshContinuation?.resume()
+        firstEntitlementRefreshContinuation = nil
     }
 
     func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
