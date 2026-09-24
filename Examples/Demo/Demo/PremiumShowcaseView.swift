@@ -236,7 +236,7 @@ struct UpsellShowcaseView: View {
 
 @MainActor
 struct SettingsShowcaseView: View {
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(spacing: 18) {
@@ -251,7 +251,7 @@ struct SettingsShowcaseView: View {
                 .frame(maxWidth: 520)
 
             Button("Open Settings") {
-                openSettings()
+                openWindow(id: DemoWindowID.settings)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
