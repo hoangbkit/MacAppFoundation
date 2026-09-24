@@ -10,6 +10,7 @@ protocol PurchaseServing: AnyObject {
     /// Consumers must not independently expire these records after they are returned.
     func currentEntitlements() async -> [EntitlementRecord]
     func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String>
+    func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String>
     func sync() async throws
 }
 
@@ -98,6 +99,35 @@ final class LiveStoreKitService: PurchaseServing {
                     }
 
                     await transaction.finish()
+                    continuation.yield(transaction.productID)
+                }
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    /// Observes subscription lifecycle changes without finishing transactions.
+    ///
+    /// Status changes are only a signal to refresh current entitlements. Transaction
+    /// delivery and finishing remain the responsibility of ``entitlementUpdates(for:)``.
+    func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            let task = Task {
+                for await status in Product.SubscriptionInfo.Status.updates {
+                    guard !Task.isCancelled else {
+                        break
+                    }
+
+                    guard case .verified(let transaction) = status.transaction,
+                          productIDs.contains(transaction.productID)
+                    else {
+                        continue
+                    }
+
                     continuation.yield(transaction.productID)
                 }
                 continuation.finish()
