@@ -534,6 +534,9 @@ public final class PurchaseManager {
     }
 
     public func clearActivity() {
+        guard case .failed = activity else {
+            return
+        }
         activity = .idle
     }
 
