@@ -8,6 +8,7 @@ public struct ProPlanPaneConfiguration: Sendable, Equatable {
     public let freeDescription: String
     public let proDescription: String
     public let upgradeButtonTitle: String
+    public let upgradeButtonHeight: CGFloat
     public let viewPlansButtonTitle: String
     public let manageSubscriptionTitle: String
     public let restorePurchasesTitle: String
@@ -21,6 +22,7 @@ public struct ProPlanPaneConfiguration: Sendable, Equatable {
         freeDescription: String? = nil,
         proDescription: String? = nil,
         upgradeButtonTitle: String = "Upgrade to Pro",
+        upgradeButtonHeight: CGFloat = 32,
         viewPlansButtonTitle: String = "View Plans",
         manageSubscriptionTitle: String = "Manage Subscription",
         restorePurchasesTitle: String = "Restore Purchases",
@@ -35,6 +37,7 @@ public struct ProPlanPaneConfiguration: Sendable, Equatable {
         self.proDescription = proDescription
             ?? "You have access to \(appName) Pro features."
         self.upgradeButtonTitle = upgradeButtonTitle
+        self.upgradeButtonHeight = max(0, upgradeButtonHeight)
         self.viewPlansButtonTitle = viewPlansButtonTitle
         self.manageSubscriptionTitle = manageSubscriptionTitle
         self.restorePurchasesTitle = restorePurchasesTitle
