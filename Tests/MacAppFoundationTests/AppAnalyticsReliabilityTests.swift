@@ -162,6 +162,7 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
 
     clock.advance(by: 60)
     try await client.track("second_event")
+    await client.waitForAutomaticUpload()
     #expect(await transport.requestCount() == 1)
 
     clock.advance(by: 3_541)
@@ -187,8 +188,10 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     #expect(await transport.requestCount() == 1)
 
     try await client.track("second_event")
+    await client.waitForAutomaticUpload()
     clock.advance(by: 59)
     try await client.track("third_event")
+    await client.waitForAutomaticUpload()
     #expect(await transport.requestCount() == 1)
 
     clock.advance(by: 2)
@@ -211,6 +214,7 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     )
 
     try await client.track("first_event")
+    await client.waitForAutomaticUpload()
     #expect(await transport.requestCount() == 1)
 
     do {
