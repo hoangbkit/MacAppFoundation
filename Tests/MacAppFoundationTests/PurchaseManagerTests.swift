@@ -44,6 +44,27 @@ final class PurchaseManagerTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertEqual(service.observedProductIDs, [Self.monthly.id])
+        XCTAssertEqual(service.observedSubscriptionStatusProductIDs, [Self.monthly.id])
+    }
+
+    func testSubscriptionStatusUpdateRefreshesEntitlementWhileAppRemainsOpen() async throws {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        service.entitlements = [EntitlementRecord(productID: Self.monthly.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        await manager.prepare()
+        XCTAssertTrue(manager.hasPro)
+
+        service.entitlements = []
+        service.yieldSubscriptionStatusUpdate(productID: Self.monthly.id)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(manager.hasPro)
     }
 
     func testPresentationRefreshReplacesCachedProductMetadata() async {
@@ -500,8 +521,10 @@ private final class MockPurchaseService: PurchaseServing {
     var syncFailure: PurchaseFailure?
     var productLoadingFailure: PurchaseFailure?
     var observedProductIDs: Set<String> = []
+    var observedSubscriptionStatusProductIDs: Set<String> = []
 
     private var updateContinuations: [AsyncStream<String>.Continuation] = []
+    private var subscriptionStatusUpdateContinuations: [AsyncStream<String>.Continuation] = []
 
     func products(for identifiers: [String]) async throws -> [StoreProduct] {
         productLoadCount += 1
@@ -530,6 +553,19 @@ private final class MockPurchaseService: PurchaseServing {
 
     func yieldEntitlementUpdate(productID: String) {
         for continuation in updateContinuations {
+            continuation.yield(productID)
+        }
+    }
+
+    func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
+        observedSubscriptionStatusProductIDs = productIDs
+        return AsyncStream { continuation in
+            subscriptionStatusUpdateContinuations.append(continuation)
+        }
+    }
+
+    func yieldSubscriptionStatusUpdate(productID: String) {
+        for continuation in subscriptionStatusUpdateContinuations {
             continuation.yield(productID)
         }
     }
