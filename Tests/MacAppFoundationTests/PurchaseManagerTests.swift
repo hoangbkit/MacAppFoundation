@@ -22,6 +22,197 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertEqual(service.observedProductIDs, [Self.monthly.id])
     }
 
+    func testPrepareObservesOnlyEntitlementProducts() async {
+        let bonus = StoreProduct(
+            id: "bonus",
+            displayName: "Bonus",
+            description: "",
+            displayPrice: "$1.99",
+            price: 1.99
+        )
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly, bonus]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id, bonus.id],
+                entitledProductIDs: [Self.monthly.id]
+            ),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(service.observedProductIDs, [Self.monthly.id])
+        XCTAssertEqual(service.observedSubscriptionStatusProductIDs, [Self.monthly.id])
+    }
+
+    func testOlderEntitlementRefreshCannotOverwriteNewerState() async {
+        let service = MockPurchaseService()
+        service.blockedFirstEntitlementResponse = []
+        service.entitlements = [EntitlementRecord(productID: Self.monthly.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        let olderRefresh = Task {
+            await manager.refreshEntitlements()
+        }
+
+        while !service.isFirstEntitlementRefreshBlocked {
+            await Task.yield()
+        }
+
+        await manager.refreshEntitlements()
+        XCTAssertTrue(manager.hasPro)
+
+        service.releaseFirstEntitlementRefresh()
+        await olderRefresh.value
+
+        XCTAssertTrue(manager.hasPro)
+    }
+
+    func testSubscriptionStatusUpdateRefreshesEntitlementWhileAppRemainsOpen() async throws {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        service.entitlements = [EntitlementRecord(productID: Self.monthly.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        await manager.prepare()
+        XCTAssertTrue(manager.hasPro)
+
+        service.entitlements = []
+        service.yieldSubscriptionStatusUpdate(productID: Self.monthly.id)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(manager.hasPro)
+    }
+
+    func testOlderProductLoadCannotOverwriteNewerMetadata() async {
+        let staleMonthly = Self.monthly
+        let refreshedMonthly = StoreProduct(
+            id: Self.monthly.id,
+            displayName: "Monthly",
+            description: "Monthly access",
+            displayPrice: "$5.99",
+            price: 5.99,
+            subscriptionPeriod: .init(value: 1, unit: .month)
+        )
+        let service = MockPurchaseService()
+        service.blockedFirstProductsResponse = [staleMonthly]
+        service.productsResult = [refreshedMonthly]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                productLoadAttempts: 1
+            ),
+            service: service
+        )
+
+        let olderLoad = Task {
+            await manager.loadProducts(force: true)
+        }
+
+        while !service.isFirstProductLoadBlocked {
+            await Task.yield()
+        }
+
+        await manager.loadProducts(force: true)
+        XCTAssertEqual(manager.products, [refreshedMonthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+
+        service.releaseFirstProductLoad()
+        await olderLoad.value
+
+        XCTAssertEqual(manager.products, [refreshedMonthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+    }
+
+    func testPresentationRefreshReplacesCachedProductMetadata() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        await manager.loadProducts()
+
+        let refreshedMonthly = StoreProduct(
+            id: Self.monthly.id,
+            displayName: "Monthly",
+            description: "Monthly access",
+            displayPrice: "$5.99",
+            price: 5.99,
+            subscriptionPeriod: .init(value: 1, unit: .month),
+            introductoryOffer: .init(
+                paymentMode: .freeTrial,
+                period: .init(value: 1, unit: .week),
+                displayPrice: "Free",
+                price: 0,
+                isEligible: false
+            )
+        )
+        service.productsResult = [refreshedMonthly]
+
+        await manager.refreshProductsForPresentation()
+
+        XCTAssertEqual(manager.products, [refreshedMonthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+        XCTAssertEqual(service.productLoadCount, 2)
+    }
+
+    func testPresentationRefreshKeepsCachedProductsWhenRefreshFails() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                productLoadAttempts: 1
+            ),
+            service: service
+        )
+
+        await manager.loadProducts()
+        service.productLoadingFailure = PurchaseFailure(
+            code: .networkUnavailable,
+            message: "Offline"
+        )
+
+        await manager.refreshProductsForPresentation()
+
+        XCTAssertEqual(manager.products, [Self.monthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+        XCTAssertEqual(service.productLoadCount, 2)
+    }
+
+    func testPrepareTrustsCurrentEntitlementsWithoutRecheckingExpiration() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly]
+        service.entitlements = [
+            EntitlementRecord(
+                productID: Self.monthly.id,
+                expirationDate: Date.now.addingTimeInterval(-60)
+            )
+        ]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertEqual(manager.activeProduct?.id, Self.monthly.id)
+    }
+
     func testPurchaseReturnsOutcomeAndRefreshesEntitlementAfterSuccess() async {
         let service = MockPurchaseService()
         let record = EntitlementRecord(productID: Self.monthly.id)
@@ -55,7 +246,76 @@ final class PurchaseManagerTests: XCTestCase {
 
         XCTAssertEqual(outcome, .pending)
         XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+        XCTAssertTrue(manager.isPurchasePending)
+        XCTAssertEqual(manager.pendingProductID, Self.monthly.id)
+        XCTAssertFalse(manager.isBusy)
         XCTAssertFalse(manager.hasPro)
+    }
+
+    func testClearActivityOnlyClearsFailureState() async {
+        let service = MockPurchaseService()
+        service.purchaseOutcome = .pending
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        _ = await manager.purchase(Self.monthly)
+        manager.clearActivity()
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+
+        manager.clearActivity()
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+    }
+
+    func testClearActivityClearsFailureToIdle() async {
+        let service = MockPurchaseService()
+        service.purchaseFailure = .unknown
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        _ = await manager.purchase(Self.monthly)
+        XCTAssertEqual(manager.activity, .failed(.unknown))
+
+        manager.clearActivity()
+        XCTAssertEqual(manager.activity, .idle)
+    }
+
+    func testPendingPurchaseBlocksAdditionalPurchase() async {
+        let service = MockPurchaseService()
+        service.purchaseOutcome = .pending
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        let firstOutcome = await manager.purchase(Self.monthly)
+        let secondOutcome = await manager.purchase(Self.monthly)
+
+        XCTAssertEqual(firstOutcome, .pending)
+        XCTAssertNil(secondOutcome)
+        XCTAssertEqual(service.purchaseCount, 1)
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+    }
+
+    func testRestoreDoesNotOverwritePendingPurchase() async {
+        let service = MockPurchaseService()
+        service.purchaseOutcome = .pending
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        _ = await manager.purchase(Self.monthly)
+        let restoreOutcome = await manager.restorePurchases()
+
+        XCTAssertEqual(restoreOutcome, .failed(.operationInProgress))
+        XCTAssertEqual(service.syncCount, 0)
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
     }
 
     func testUnsupportedProductTypeIsRejectedBeforeServicePurchase() async {
@@ -149,12 +409,14 @@ final class PurchaseManagerTests: XCTestCase {
         _ = await purchaseTask.value
     }
 
-    func testTransactionUpdateStillClearsPendingAskToBuy() async throws {
+    func testUnrelatedTransactionUpdateDoesNotClearPendingAskToBuy() async throws {
         let service = MockPurchaseService()
-        service.productsResult = [Self.monthly]
+        service.productsResult = [Self.monthly, Self.yearly]
         service.purchaseOutcome = .pending
         let manager = PurchaseManager(
-            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id, Self.yearly.id]
+            ),
             service: service
         )
 
@@ -162,10 +424,32 @@ final class PurchaseManagerTests: XCTestCase {
         await manager.purchase(Self.monthly)
         XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
 
-        service.yieldEntitlementUpdate()
+        service.yieldEntitlementUpdate(productID: Self.yearly.id)
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
+    }
+
+    func testMatchingTransactionUpdateClearsPendingAskToBuy() async throws {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.monthly, Self.yearly]
+        service.purchaseOutcome = .pending
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id, Self.yearly.id]
+            ),
+            service: service
+        )
+
+        await manager.prepare()
+        await manager.purchase(Self.monthly)
+        service.entitlements = [EntitlementRecord(productID: Self.monthly.id)]
+
+        service.yieldEntitlementUpdate(productID: Self.monthly.id)
         try await Task.sleep(for: .milliseconds(100))
 
         XCTAssertEqual(manager.activity, .idle)
+        XCTAssertTrue(manager.hasPro)
     }
 
     func testPreferredProductUsesConfiguredCatalogOrder() async {
@@ -224,6 +508,23 @@ final class PurchaseManagerTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertEqual(manager.activeProduct?.id, Self.lifetime.id)
+        XCTAssertEqual(manager.activeSubscriptionProduct?.id, Self.monthly.id)
+    }
+
+    func testLifetimeOnlyHasNoActiveSubscriptionProduct() async {
+        let service = MockPurchaseService()
+        service.productsResult = [Self.lifetime]
+        service.entitlements = [EntitlementRecord(productID: Self.lifetime.id)]
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.lifetime.id]),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(manager.activeProduct?.id, Self.lifetime.id)
+        XCTAssertNil(manager.activeSubscriptionProduct)
     }
 
     func testEntitlementProductsExcludeNonEntitledAndUnsupportedProducts() async {
@@ -310,41 +611,108 @@ final class PurchaseManagerTests: XCTestCase {
 private final class MockPurchaseService: PurchaseServing {
     var productsResult: [StoreProduct] = []
     var purchaseOutcome: PurchaseOutcome = .userCancelled
+    var purchaseFailure: PurchaseFailure?
     var purchaseDelay: Duration = .milliseconds(0)
     var entitlements: [EntitlementRecord] = []
+    var blockedFirstEntitlementResponse: [EntitlementRecord]?
+    var blockedFirstProductsResponse: [StoreProduct]?
     var productLoadCount = 0
     var purchaseCount = 0
     var syncCount = 0
     var syncFailure: PurchaseFailure?
+    var productLoadingFailure: PurchaseFailure?
     var observedProductIDs: Set<String> = []
+    var observedSubscriptionStatusProductIDs: Set<String> = []
 
-    private var updateContinuations: [AsyncStream<Void>.Continuation] = []
+    private var updateContinuations: [AsyncStream<String>.Continuation] = []
+    private var subscriptionStatusUpdateContinuations: [AsyncStream<String>.Continuation] = []
+    private var entitlementRequestCount = 0
+    private var firstEntitlementRefreshContinuation: CheckedContinuation<Void, Never>?
+    private var productRequestCount = 0
+    private var firstProductLoadContinuation: CheckedContinuation<Void, Never>?
+
+    var isFirstEntitlementRefreshBlocked: Bool {
+        firstEntitlementRefreshContinuation != nil
+    }
+
+    var isFirstProductLoadBlocked: Bool {
+        firstProductLoadContinuation != nil
+    }
 
     func products(for identifiers: [String]) async throws -> [StoreProduct] {
         productLoadCount += 1
+        if let productLoadingFailure {
+            throw productLoadingFailure
+        }
+
+        productRequestCount += 1
+        if productRequestCount == 1,
+           let blockedFirstProductsResponse {
+            await withCheckedContinuation { continuation in
+                firstProductLoadContinuation = continuation
+            }
+            return blockedFirstProductsResponse.filter { identifiers.contains($0.id) }
+        }
+
         return productsResult.filter { identifiers.contains($0.id) }
+    }
+
+    func releaseFirstProductLoad() {
+        firstProductLoadContinuation?.resume()
+        firstProductLoadContinuation = nil
     }
 
     func purchase(productID: String) async throws -> PurchaseOutcome {
         purchaseCount += 1
         try? await Task.sleep(for: purchaseDelay)
+        if let purchaseFailure {
+            throw purchaseFailure
+        }
         return purchaseOutcome
     }
 
     func currentEntitlements() async -> [EntitlementRecord] {
-        entitlements
+        entitlementRequestCount += 1
+
+        if entitlementRequestCount == 1,
+           let blockedFirstEntitlementResponse {
+            await withCheckedContinuation { continuation in
+                firstEntitlementRefreshContinuation = continuation
+            }
+            return blockedFirstEntitlementResponse
+        }
+
+        return entitlements
     }
 
-    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<Void> {
+    func releaseFirstEntitlementRefresh() {
+        firstEntitlementRefreshContinuation?.resume()
+        firstEntitlementRefreshContinuation = nil
+    }
+
+    func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
         observedProductIDs = productIDs
         return AsyncStream { continuation in
             updateContinuations.append(continuation)
         }
     }
 
-    func yieldEntitlementUpdate() {
+    func yieldEntitlementUpdate(productID: String) {
         for continuation in updateContinuations {
-            continuation.yield()
+            continuation.yield(productID)
+        }
+    }
+
+    func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
+        observedSubscriptionStatusProductIDs = productIDs
+        return AsyncStream { continuation in
+            subscriptionStatusUpdateContinuations.append(continuation)
+        }
+    }
+
+    func yieldSubscriptionStatusUpdate(productID: String) {
+        for continuation in subscriptionStatusUpdateContinuations {
+            continuation.yield(productID)
         }
     }
 

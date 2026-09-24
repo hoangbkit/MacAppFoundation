@@ -93,4 +93,60 @@ struct MacAppSettingsBuiltInsTests {
         #expect(sections.map { $0.id } == [.application, .account])
         #expect(sections.flatMap { $0.panes }.map { $0.id } == [.appearance, .plan])
     }
+
+    @MainActor
+    @Test("Plan pane actions match free, subscription, lifetime, and mixed entitlements")
+    func planPaneActions() {
+        let monthly = StoreProduct(
+            id: "pro.monthly",
+            displayName: "Monthly",
+            description: "",
+            displayPrice: "$4.99",
+            price: 4.99,
+            subscriptionPeriod: .init(value: 1, unit: .month)
+        )
+        let lifetime = StoreProduct(
+            id: "pro.lifetime",
+            displayName: "Lifetime",
+            description: "",
+            displayPrice: "$79.99",
+            price: 79.99
+        )
+
+        let free = ProPlanPaneActionState(
+            hasPro: false,
+            activeProduct: nil,
+            activeSubscriptionProduct: nil
+        )
+        #expect(free.showsUpgrade)
+        #expect(!free.showsViewPlans)
+        #expect(!free.showsManageSubscription)
+
+        let subscription = ProPlanPaneActionState(
+            hasPro: true,
+            activeProduct: monthly,
+            activeSubscriptionProduct: monthly
+        )
+        #expect(!subscription.showsUpgrade)
+        #expect(subscription.showsViewPlans)
+        #expect(subscription.showsManageSubscription)
+
+        let lifetimeOnly = ProPlanPaneActionState(
+            hasPro: true,
+            activeProduct: lifetime,
+            activeSubscriptionProduct: nil
+        )
+        #expect(!lifetimeOnly.showsUpgrade)
+        #expect(!lifetimeOnly.showsViewPlans)
+        #expect(!lifetimeOnly.showsManageSubscription)
+
+        let lifetimeAndSubscription = ProPlanPaneActionState(
+            hasPro: true,
+            activeProduct: lifetime,
+            activeSubscriptionProduct: monthly
+        )
+        #expect(!lifetimeAndSubscription.showsUpgrade)
+        #expect(!lifetimeAndSubscription.showsViewPlans)
+        #expect(lifetimeAndSubscription.showsManageSubscription)
+    }
 }

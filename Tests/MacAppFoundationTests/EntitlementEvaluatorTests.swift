@@ -26,6 +26,30 @@ final class EntitlementEvaluatorTests: XCTestCase {
         XCTAssertEqual(state, .inactive)
     }
 
+    func testCurrentEntitlementsTrustServiceAfterBillingPeriodExpiration() throws {
+        let expirationDate = now.addingTimeInterval(-1)
+        let state = EntitlementEvaluator.evaluateCurrentEntitlements(
+            [EntitlementRecord(productID: "pro.monthly", expirationDate: expirationDate)],
+            entitledProductIDs: entitledIDs
+        )
+
+        guard case .active(let snapshot) = state else {
+            return XCTFail("Expected StoreKit current entitlement to remain active")
+        }
+
+        XCTAssertEqual(snapshot.activeProductIDs, ["pro.monthly"])
+        XCTAssertEqual(snapshot.latestExpirationDate, expirationDate)
+    }
+
+    func testCurrentEntitlementsStillRequireConfiguredEntitlementProduct() {
+        let state = EntitlementEvaluator.evaluateCurrentEntitlements(
+            [EntitlementRecord(productID: "unmanaged.product")],
+            entitledProductIDs: entitledIDs
+        )
+
+        XCTAssertEqual(state, .inactive)
+    }
+
     func testRevokedAndUpgradedTransactionsAreInactive() {
         let records = [
             EntitlementRecord(

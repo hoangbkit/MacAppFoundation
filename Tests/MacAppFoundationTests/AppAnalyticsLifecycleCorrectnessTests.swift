@@ -123,7 +123,9 @@ private func phase2Event(
     )
 
     try await client.track("generation_completed", count: 2)
+    await client.waitForAutomaticUpload()
     try await client.track("generation_completed", count: 3)
+    await client.waitForAutomaticUpload()
 
     let requests = await transport.capturedRequests()
     #expect(requests.count == 2)
@@ -145,8 +147,11 @@ private func phase2Event(
     )
 
     try await client.track("generation_completed", dimension: "nano", count: 2)
+    await client.waitForAutomaticUpload()
     try await client.track("generation_completed", dimension: "turbo", count: 3)
+    await client.waitForAutomaticUpload()
     try await client.track("generation_completed", dimension: "nano", count: 4)
+    await client.waitForAutomaticUpload()
 
     let request = try #require(await transport.capturedRequests().last)
     let day = try phase2Day(request, day: "2026-09-05")

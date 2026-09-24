@@ -91,6 +91,7 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     )
 
     try await client.track("generation_completed", dimension: "nano", count: 2)
+    await client.waitForAutomaticUpload()
 
     let requests = await transport.capturedRequests()
     #expect(requests.count == 1)
@@ -134,6 +135,7 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     )
 
     try await client.track("generation_completed")
+    await client.waitForAutomaticUpload()
 
     let request = try #require(await transport.capturedRequests().first)
     #expect(request.value(forHTTPHeaderField: "X-App-Key") == nil)

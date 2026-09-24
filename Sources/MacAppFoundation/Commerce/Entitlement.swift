@@ -69,7 +69,26 @@ public enum EntitlementEvaluator {
         let activeRecords = records.filter { record in
             entitledProductIDs.contains(record.productID) && record.isActive(at: date)
         }
+        return state(from: activeRecords)
+    }
 
+    /// Evaluates records that the purchase service already considers current entitlements.
+    ///
+    /// Live StoreKit uses `Transaction.currentEntitlements`, which is authoritative about
+    /// whether the customer is currently entitled. In particular, MacAppFoundation must not
+    /// reject a StoreKit current entitlement only because the transaction's billing-period
+    /// expiration date has passed; that can revoke access during Billing Grace Period.
+    static func evaluateCurrentEntitlements(
+        _ records: [EntitlementRecord],
+        entitledProductIDs: Set<String>
+    ) -> EntitlementState {
+        let activeRecords = records.filter { record in
+            entitledProductIDs.contains(record.productID)
+        }
+        return state(from: activeRecords)
+    }
+
+    private static func state(from activeRecords: [EntitlementRecord]) -> EntitlementState {
         guard !activeRecords.isEmpty else {
             return .inactive
         }

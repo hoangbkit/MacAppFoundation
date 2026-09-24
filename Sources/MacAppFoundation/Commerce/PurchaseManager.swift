@@ -22,8 +22,11 @@ public final class PurchaseManager {
     @ObservationIgnored private let simulatedPersistenceKey: String?
     @ObservationIgnored private var simulatedOperationDelay: Duration
     @ObservationIgnored private var updateTask: Task<Void, Never>?
+    @ObservationIgnored private var subscriptionStatusUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
+    @ObservationIgnored private var entitlementRefreshGeneration = 0
+    @ObservationIgnored private var productLoadGeneration = 0
     @ObservationIgnored private var hasPrepared = false
 
     @ObservationIgnored private static let logger = Logger(
@@ -74,6 +77,7 @@ public final class PurchaseManager {
 
     deinit {
         updateTask?.cancel()
+        subscriptionStatusUpdateTask?.cancel()
         restoreTask?.cancel()
     }
 
@@ -98,6 +102,17 @@ public final class PurchaseManager {
             return true
         }
         return false
+    }
+
+    public var isPurchasePending: Bool {
+        activity.isPending
+    }
+
+    public var pendingProductID: String? {
+        if case .pending(let productID) = activity {
+            return productID
+        }
+        return nil
     }
 
     /// Product identifiers that currently grant Pro, including Debug simulator edits.
@@ -176,6 +191,7 @@ public final class PurchaseManager {
         if !hasPrepared {
             hasPrepared = true
             startObservingTransactions()
+            startObservingSubscriptionStatus()
         }
 
         await refreshEntitlements()
@@ -187,8 +203,8 @@ public final class PurchaseManager {
             return
         }
 
-        let generation = serviceGeneration
-        let service = service
+        productLoadGeneration &+= 1
+        let loadGeneration = productLoadGeneration
         let configuration = activeConfiguration
         guard !configuration.productIDs.isEmpty else {
             products = []
@@ -197,12 +213,77 @@ public final class PurchaseManager {
         }
 
         productLoadingState = .loading
+
+        do {
+            guard let loadedProducts = try await fetchProducts(
+                configuration: configuration,
+                productLoadGeneration: loadGeneration
+            ) else {
+                return
+            }
+            guard loadGeneration == productLoadGeneration else { return }
+
+            products = loadedProducts
+            productLoadingState = .loaded
+        } catch {
+            guard loadGeneration == productLoadGeneration else { return }
+            productLoadingState = .failed(Self.mapFailure(error))
+        }
+    }
+
+    /// Refreshes StoreKit product metadata while keeping an existing catalog usable.
+    ///
+    /// This is intended for purchase surfaces such as the Pro paywall: cached plans remain
+    /// visible while prices and introductory-offer eligibility are revalidated. If refreshing
+    /// fails, an existing catalog is retained instead of replacing it with an error state.
+    func refreshProductsForPresentation() async {
+        guard !products.isEmpty else {
+            await loadProducts(force: true)
+            return
+        }
+
+        productLoadGeneration &+= 1
+        let loadGeneration = productLoadGeneration
+        let configuration = activeConfiguration
+        guard !configuration.productIDs.isEmpty else {
+            return
+        }
+
+        // Existing products are intentionally considered usable throughout this refresh.
+        productLoadingState = .loaded
+
+        do {
+            guard let refreshedProducts = try await fetchProducts(
+                configuration: configuration,
+                productLoadGeneration: loadGeneration
+            ) else {
+                return
+            }
+            guard loadGeneration == productLoadGeneration else { return }
+
+            products = refreshedProducts
+            productLoadingState = .loaded
+        } catch {
+            guard loadGeneration == productLoadGeneration else { return }
+            // Stale-while-revalidate: keep the previously loaded products and loaded state.
+            productLoadingState = .loaded
+        }
+    }
+
+    private func fetchProducts(
+        configuration: PurchaseConfiguration,
+        productLoadGeneration: Int
+    ) async throws -> [StoreProduct]? {
+        let generation = serviceGeneration
+        let service = service
         var lastFailure = PurchaseFailure.noProductsAvailable
 
         for attempt in 1...configuration.productLoadAttempts {
             do {
                 let loadedProducts = try await service.products(for: configuration.productIDs)
-                guard generation == serviceGeneration else { return }
+                guard generation == serviceGeneration,
+                      productLoadGeneration == self.productLoadGeneration
+                else { return nil }
 
                 let orderedProducts = ProductCatalog.ordered(
                     loadedProducts,
@@ -213,11 +294,9 @@ public final class PurchaseManager {
                     throw PurchaseFailure.noProductsAvailable
                 }
 
-                products = orderedProducts
-                productLoadingState = .loaded
-                return
+                return orderedProducts
             } catch {
-                guard generation == serviceGeneration else { return }
+                guard generation == serviceGeneration else { return nil }
                 lastFailure = Self.mapFailure(error)
                 guard attempt < configuration.productLoadAttempts else {
                     break
@@ -225,12 +304,13 @@ public final class PurchaseManager {
 
                 let delay = UInt64(attempt) * 350_000_000
                 try? await Task.sleep(nanoseconds: delay)
-                guard generation == serviceGeneration else { return }
+                guard generation == serviceGeneration,
+                      productLoadGeneration == self.productLoadGeneration
+                else { return nil }
             }
         }
 
-        guard generation == serviceGeneration else { return }
-        productLoadingState = .failed(lastFailure)
+        throw lastFailure
     }
 
     public func refreshEntitlements() async {
@@ -239,13 +319,16 @@ public final class PurchaseManager {
 
     @discardableResult
     private func refreshEntitlementsWithRecords() async -> [EntitlementRecord] {
+        entitlementRefreshGeneration &+= 1
+        let refreshGeneration = entitlementRefreshGeneration
         let generation = serviceGeneration
         let service = service
         let entitledProductIDs = activeConfiguration.entitledProductIDs
         let records = await service.currentEntitlements()
         guard generation == serviceGeneration else { return [] }
+        guard refreshGeneration == entitlementRefreshGeneration else { return records }
 
-        entitlementState = EntitlementEvaluator.evaluate(
+        entitlementState = EntitlementEvaluator.evaluateCurrentEntitlements(
             records,
             entitledProductIDs: entitledProductIDs
         )
@@ -256,7 +339,7 @@ public final class PurchaseManager {
     /// Failures are exposed through ``activity`` and return `nil`.
     @discardableResult
     public func purchase(_ product: StoreProduct) async -> PurchaseOutcome? {
-        guard !isBusy else {
+        guard !isBusy, !isPurchasePending else {
             return nil
         }
 
@@ -301,7 +384,7 @@ public final class PurchaseManager {
         if let restoreTask {
             return await restoreTask.value
         }
-        guard !isPurchasing else {
+        guard !isPurchasing, !isPurchasePending else {
             return .failed(.operationInProgress)
         }
 
@@ -473,6 +556,9 @@ public final class PurchaseManager {
     }
 
     public func clearActivity() {
+        guard case .failed = activity else {
+            return
+        }
         activity = .idle
     }
 
@@ -541,7 +627,6 @@ public final class PurchaseManager {
             return
         }
         simulatedService.setPurchasedProductIDs(productIDs)
-        activity = .idle
         await refreshEntitlements()
     }
 
@@ -603,6 +688,8 @@ public final class PurchaseManager {
         serviceGeneration &+= 1
         updateTask?.cancel()
         updateTask = nil
+        subscriptionStatusUpdateTask?.cancel()
+        subscriptionStatusUpdateTask = nil
     }
 
     private func resetObservableStateForServiceChange() {
@@ -617,11 +704,11 @@ public final class PurchaseManager {
         updateTask?.cancel()
         let generation = serviceGeneration
         let service = service
-        let managedProductIDs = Set(activeConfiguration.productIDs)
-        let updates = service.entitlementUpdates(for: managedProductIDs)
+        let entitlementProductIDs = activeConfiguration.entitledProductIDs
+        let updates = service.entitlementUpdates(for: entitlementProductIDs)
 
         updateTask = Task { [weak self] in
-            for await _ in updates {
+            for await updatedProductID in updates {
                 guard !Task.isCancelled else {
                     return
                 }
@@ -630,9 +717,30 @@ public final class PurchaseManager {
                 }
                 await self.refreshEntitlements()
                 guard generation == self.serviceGeneration else { return }
-                if case .pending = self.activity {
+                if case .pending(let pendingProductID) = self.activity,
+                   pendingProductID == updatedProductID {
                     self.activity = .idle
                 }
+            }
+        }
+    }
+
+    private func startObservingSubscriptionStatus() {
+        subscriptionStatusUpdateTask?.cancel()
+        let generation = serviceGeneration
+        let service = service
+        let entitlementProductIDs = activeConfiguration.entitledProductIDs
+        let updates = service.subscriptionStatusUpdates(for: entitlementProductIDs)
+
+        subscriptionStatusUpdateTask = Task { [weak self] in
+            for await _ in updates {
+                guard !Task.isCancelled else {
+                    return
+                }
+                guard let self, generation == self.serviceGeneration else {
+                    return
+                }
+                await self.refreshEntitlements()
             }
         }
     }

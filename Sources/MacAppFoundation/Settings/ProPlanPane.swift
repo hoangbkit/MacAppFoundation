@@ -69,8 +69,20 @@ public struct ProPlanPane: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textSecondary)
 
-                    if purchaseManager.hasPro {
-                        if purchaseManager.activeProduct?.isRecurring == true {
+                    HStack(spacing: 10) {
+                        if actionState.showsUpgrade {
+                            Button(configuration.upgradeButtonTitle, action: onUpgrade)
+                                .buttonStyle(MacAppButtonStyle(.primary))
+                        }
+
+                        if actionState.showsViewPlans {
+                            Button(configuration.viewPlansButtonTitle, action: onUpgrade)
+                                .buttonStyle(.plain)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(theme.accent)
+                        }
+
+                        if actionState.showsManageSubscription {
                             Link(
                                 configuration.manageSubscriptionTitle,
                                 destination: configuration.manageSubscriptionURL
@@ -78,9 +90,24 @@ public struct ProPlanPane: View {
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(theme.accent)
                         }
-                    } else {
-                        Button(configuration.upgradeButtonTitle, action: onUpgrade)
-                            .buttonStyle(MacAppButtonStyle(.primary))
+
+                        Button {
+                            Task {
+                                _ = await purchaseManager.restorePurchases()
+                            }
+                        } label: {
+                            if purchaseManager.isRestoring {
+                                HStack(spacing: 6) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("Restoring…")
+                                }
+                            } else {
+                                Text(configuration.restorePurchasesTitle)
+                            }
+                        }
+                        .buttonStyle(MacAppButtonStyle(.quiet))
+                        .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,6 +135,14 @@ public struct ProPlanPane: View {
         .task {
             await purchaseManager.prepare()
         }
+    }
+
+    private var actionState: ProPlanPaneActionState {
+        ProPlanPaneActionState(
+            hasPro: purchaseManager.hasPro,
+            activeProduct: purchaseManager.activeProduct,
+            activeSubscriptionProduct: purchaseManager.activeSubscriptionProduct
+        )
     }
 
     private var resolvedFeatures: [PurchaseFeature] {
@@ -159,5 +194,22 @@ private struct ProPlanFeatureList: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+
+struct ProPlanPaneActionState: Equatable {
+    let showsUpgrade: Bool
+    let showsViewPlans: Bool
+    let showsManageSubscription: Bool
+
+    init(
+        hasPro: Bool,
+        activeProduct: StoreProduct?,
+        activeSubscriptionProduct: StoreProduct?
+    ) {
+        showsUpgrade = !hasPro
+        showsViewPlans = hasPro && activeProduct?.isRecurring == true
+        showsManageSubscription = activeSubscriptionProduct != nil
     }
 }

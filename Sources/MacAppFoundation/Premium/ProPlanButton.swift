@@ -10,15 +10,18 @@ public struct ProPlanButton: View {
     public static let accessibilityIdentifier = "MacAppFoundation.ProPlanButton"
 
     private let purchaseManager: PurchaseManager
+    private let height: CGFloat
     private let onUpgrade: () -> Void
     private let onManagePlan: () -> Void
 
     public init(
         purchaseManager: PurchaseManager,
+        height: CGFloat = 24,
         onUpgrade: @escaping () -> Void,
         onManagePlan: @escaping () -> Void
     ) {
         self.purchaseManager = purchaseManager
+        self.height = max(0, height)
         self.onUpgrade = onUpgrade
         self.onManagePlan = onManagePlan
     }
@@ -34,7 +37,12 @@ public struct ProPlanButton: View {
             }
             .lineLimit(1)
         }
-        .buttonStyle(ProPlanButtonStyle(isPro: purchaseManager.hasPro))
+        .buttonStyle(
+            ProPlanButtonStyle(
+                isPro: purchaseManager.hasPro,
+                height: height
+            )
+        )
         .help(purchaseManager.hasPro ? "Manage your plan" : "Unlock Pro")
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(Self.accessibilityIdentifier)
@@ -76,12 +84,14 @@ public struct ProPlanButton: View {
 
 private struct ProPlanButtonStyle: ButtonStyle {
     let isPro: Bool
+    let height: CGFloat
 
     func makeBody(configuration: Configuration) -> some View {
         ProPlanButtonStyleBody(
             label: configuration.label,
             isPro: isPro,
-            isPressed: configuration.isPressed
+            isPressed: configuration.isPressed,
+            height: height
         )
     }
 }
@@ -90,6 +100,7 @@ private struct ProPlanButtonStyleBody<Label: View>: View {
     let label: Label
     let isPro: Bool
     let isPressed: Bool
+    let height: CGFloat
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.macAppTheme) private var theme
@@ -99,7 +110,7 @@ private struct ProPlanButtonStyleBody<Label: View>: View {
     var body: some View {
         label
             .padding(.horizontal, 10)
-            .frame(height: 24)
+            .frame(height: height)
             .foregroundStyle(foregroundColor)
             .background(backgroundColor, in: Capsule())
             .overlay {

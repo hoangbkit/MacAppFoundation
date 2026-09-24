@@ -229,6 +229,11 @@ public actor AppAnalyticsClient {
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
     private let clientContext: AppAnalyticsClientContext
+    private var automaticUploadTask: Task<Void, Never>?
+    private var uploadInFlight = false
+    private var uploadWaiters: [CheckedContinuation<Void, Never>] = []
+    private var stateAccessInFlight = false
+    private var stateAccessWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(
         configuration: AppAnalyticsConfiguration,
@@ -285,43 +290,50 @@ public actor AppAnalyticsClient {
     ) async throws {
         try Self.validateEvent(name: name, dimension: dimension, count: count)
         let timestamp = now()
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: timestamp)
-        checkpointActiveSession(in: &state, at: timestamp)
+        await acquireStateAccess()
+        do {
+            var state = try await loadState()
+            pruneExpiredDays(in: &state, relativeTo: timestamp)
+            checkpointActiveSession(in: &state, at: timestamp)
 
-        let dayKey = Self.dayKey(for: timestamp)
-        var day = dayState(in: state, for: dayKey)
-        let eventKey = Self.eventKey(name: name, dimension: dimension)
+            let dayKey = Self.dayKey(for: timestamp)
+            var day = dayState(in: state, for: dayKey)
+            let eventKey = Self.eventKey(name: name, dimension: dimension)
 
-        let previousCount = day.events[eventKey]?.count ?? 0
-        let nextCount = min(Limits.maxEventCountPerDay, previousCount + count)
-        let currentTotal = day.events.values.reduce(0) { $0 + $1.count }
-        let nextTotal = currentTotal - previousCount + nextCount
-        guard nextTotal <= Limits.maxTotalEventCountPerDay else {
-            throw AppAnalyticsError.invalidEvent(
-                "A UTC day may contain at most \(Limits.maxTotalEventCountPerDay) total event occurrences."
-            )
-        }
-
-        if var event = day.events[eventKey] {
-            event.count = nextCount
-            day.events[eventKey] = event
-        } else {
-            guard day.events.count < Limits.maxEventsPerDay else {
+            let previousCount = day.events[eventKey]?.count ?? 0
+            let nextCount = min(Limits.maxEventCountPerDay, previousCount + count)
+            let currentTotal = day.events.values.reduce(0) { $0 + $1.count }
+            let nextTotal = currentTotal - previousCount + nextCount
+            guard nextTotal <= Limits.maxTotalEventCountPerDay else {
                 throw AppAnalyticsError.invalidEvent(
-                    "A UTC day may contain at most \(Limits.maxEventsPerDay) event/dimension counters."
+                    "A UTC day may contain at most \(Limits.maxTotalEventCountPerDay) total event occurrences."
                 )
             }
-            day.events[eventKey] = EventState(
-                name: name,
-                dimension: dimension,
-                count: nextCount
-            )
-        }
 
-        state.days[dayKey] = day
-        try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+            if var event = day.events[eventKey] {
+                event.count = nextCount
+                day.events[eventKey] = event
+            } else {
+                guard day.events.count < Limits.maxEventsPerDay else {
+                    throw AppAnalyticsError.invalidEvent(
+                        "A UTC day may contain at most \(Limits.maxEventsPerDay) event/dimension counters."
+                    )
+                }
+                day.events[eventKey] = EventState(
+                    name: name,
+                    dimension: dimension,
+                    count: nextCount
+                )
+            }
+
+            state.days[dayKey] = day
+            try await saveState(state)
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
+        scheduleAutomaticFlush()
     }
 
     public func trackError(
@@ -337,180 +349,351 @@ public actor AppAnalyticsClient {
         )
 
         let timestamp = now()
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: timestamp)
-        checkpointActiveSession(in: &state, at: timestamp)
+        await acquireStateAccess()
+        do {
+            var state = try await loadState()
+            pruneExpiredDays(in: &state, relativeTo: timestamp)
+            checkpointActiveSession(in: &state, at: timestamp)
 
-        let dayKey = Self.dayKey(for: timestamp)
-        var day = dayState(in: state, for: dayKey)
-        var errors = day.errors ?? [:]
-        let key = Self.errorKey(code: code, component: component, severity: severity)
-        let previousCount = errors[key]?.count ?? 0
-        let currentTotal = errors.values.reduce(0) { $0 + $1.count }
-        let nextCount = min(Limits.maxTotalErrorCountPerDay, previousCount + count)
-        let nextTotal = currentTotal - previousCount + nextCount
+            let dayKey = Self.dayKey(for: timestamp)
+            var day = dayState(in: state, for: dayKey)
+            var errors = day.errors ?? [:]
+            let key = Self.errorKey(code: code, component: component, severity: severity)
+            let previousCount = errors[key]?.count ?? 0
+            let currentTotal = errors.values.reduce(0) { $0 + $1.count }
+            let nextCount = min(Limits.maxTotalErrorCountPerDay, previousCount + count)
+            let nextTotal = currentTotal - previousCount + nextCount
 
-        guard nextTotal <= Limits.maxTotalErrorCountPerDay else {
-            throw AppAnalyticsError.invalidError(
-                "A UTC day may contain at most \(Limits.maxTotalErrorCountPerDay) total error occurrences."
-            )
-        }
-
-        if var error = errors[key] {
-            error.count = nextCount
-            errors[key] = error
-        } else {
-            guard errors.count < Limits.maxErrorsPerDay else {
+            guard nextTotal <= Limits.maxTotalErrorCountPerDay else {
                 throw AppAnalyticsError.invalidError(
-                    "A UTC day may contain at most \(Limits.maxErrorsPerDay) error counters."
+                    "A UTC day may contain at most \(Limits.maxTotalErrorCountPerDay) total error occurrences."
                 )
             }
-            errors[key] = ErrorState(
-                code: code,
-                component: component,
-                severity: severity,
-                count: nextCount
-            )
-        }
 
-        day.errors = errors
-        state.days[dayKey] = day
-        try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+            if var error = errors[key] {
+                error.count = nextCount
+                errors[key] = error
+            } else {
+                guard errors.count < Limits.maxErrorsPerDay else {
+                    throw AppAnalyticsError.invalidError(
+                        "A UTC day may contain at most \(Limits.maxErrorsPerDay) error counters."
+                    )
+                }
+                errors[key] = ErrorState(
+                    code: code,
+                    component: component,
+                    severity: severity,
+                    count: nextCount
+                )
+            }
+
+            day.errors = errors
+            state.days[dayKey] = day
+            try await saveState(state)
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
+        scheduleAutomaticFlush()
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: timestamp)
+        await acquireStateAccess()
+        do {
+            var state = try await loadState()
+            pruneExpiredDays(in: &state, relativeTo: timestamp)
 
-        if state.session?.activeSince != nil {
+            if state.session?.activeSince != nil {
+                try await saveState(state)
+                releaseStateAccess()
+                scheduleAutomaticFlush()
+                return
+            }
+
+            let shouldResume: Bool
+            if let session = state.session {
+                let gap = timestamp.timeIntervalSince(session.lastActivityAt)
+                shouldResume = gap >= 0 && gap <= Limits.sessionTimeout
+            } else {
+                shouldResume = false
+            }
+
+            if shouldResume, var session = state.session {
+                session.lastActivityAt = timestamp
+                session.activeSince = timestamp
+                state.session = session
+            } else {
+                let dayKey = Self.dayKey(for: timestamp)
+                var day = dayState(in: state, for: dayKey)
+                day.sessions = min(Limits.maxSessionsPerDay, day.sessions + 1)
+                state.days[dayKey] = day
+                state.session = SessionState(
+                    lastActivityAt: timestamp,
+                    activeSince: timestamp
+                )
+            }
+
             try await saveState(state)
-            try? await flushIfDue(at: timestamp)
-            return
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
         }
-
-        let shouldResume: Bool
-        if let session = state.session {
-            let gap = timestamp.timeIntervalSince(session.lastActivityAt)
-            shouldResume = gap >= 0 && gap <= Limits.sessionTimeout
-        } else {
-            shouldResume = false
-        }
-
-        if shouldResume, var session = state.session {
-            session.lastActivityAt = timestamp
-            session.activeSince = timestamp
-            state.session = session
-        } else {
-            let dayKey = Self.dayKey(for: timestamp)
-            var day = dayState(in: state, for: dayKey)
-            day.sessions = min(Limits.maxSessionsPerDay, day.sessions + 1)
-            state.days[dayKey] = day
-            state.session = SessionState(
-                lastActivityAt: timestamp,
-                activeSince: timestamp
-            )
-        }
-
-        try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+        scheduleAutomaticFlush()
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: timestamp)
-        if state.session?.activeSince != nil {
-            checkpointActiveSession(in: &state, at: timestamp)
-            if var session = state.session {
-                session.lastActivityAt = timestamp
-                session.activeSince = nil
-                state.session = session
+        await acquireStateAccess()
+        do {
+            var state = try await loadState()
+            pruneExpiredDays(in: &state, relativeTo: timestamp)
+            if state.session?.activeSince != nil {
+                checkpointActiveSession(in: &state, at: timestamp)
+                if var session = state.session {
+                    session.lastActivityAt = timestamp
+                    session.activeSince = nil
+                    state.session = session
+                }
             }
+            try await saveState(state)
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
         }
-        try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+        scheduleAutomaticFlush()
     }
 
     public func flush() async throws {
-        try await flush(at: now(), force: true)
+        if let automaticUploadTask {
+            await automaticUploadTask.value
+        }
+
+        await acquireUploadSlot()
+        defer { releaseUploadSlot() }
+        try await performFlush(at: now(), force: true)
     }
 
     public func resetLocalState() async throws {
-        try await stateStore.remove()
+        await acquireStateAccess()
+        do {
+            try await stateStore.remove()
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
     }
 
     func pendingDayCount() async throws -> Int {
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: now())
-        return state.days.count
+        await acquireStateAccess()
+        do {
+            var state = try await loadState()
+            pruneExpiredDays(in: &state, relativeTo: now())
+            let count = state.days.count
+            releaseStateAccess()
+            return count
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
     }
 
-    private func flushIfDue(at timestamp: Date) async throws {
-        try await flush(at: timestamp, force: false)
+    func waitForAutomaticUpload() async {
+        while let automaticUploadTask {
+            await automaticUploadTask.value
+        }
     }
 
-    private func flush(at timestamp: Date, force: Bool) async throws {
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: timestamp)
-        checkpointActiveSession(in: &state, at: timestamp)
+    private func scheduleAutomaticFlush() {
+        guard automaticUploadTask == nil else { return }
 
-        guard !state.days.isEmpty else {
-            state.nextUploadAttemptAt = nil
-            try await saveState(state)
+        automaticUploadTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runAutomaticFlush()
+        }
+    }
+
+    private func runAutomaticFlush() async {
+        await acquireUploadSlot()
+        try? await performFlush(at: now(), force: false)
+        releaseUploadSlot()
+        automaticUploadTask = nil
+    }
+
+    private func acquireStateAccess() async {
+        if !stateAccessInFlight {
+            stateAccessInFlight = true
             return
         }
 
-        if !force {
-            if let nextUploadAttemptAt = state.nextUploadAttemptAt,
-               timestamp < nextUploadAttemptAt {
-                try await saveState(state)
-                return
-            }
-            if let lastUploadAt = state.lastUploadAt,
-               timestamp.timeIntervalSince(lastUploadAt) < configuration.uploadInterval {
-                try await saveState(state)
-                return
-            }
+        await withCheckedContinuation { continuation in
+            stateAccessWaiters.append(continuation)
+        }
+    }
+
+    private func releaseStateAccess() {
+        guard stateAccessInFlight else { return }
+
+        if stateAccessWaiters.isEmpty {
+            stateAccessInFlight = false
+            return
         }
 
-        try Self.validateConfiguration(configuration)
-        let currentDay = Self.dayKey(for: timestamp)
-        if state.days[currentDay] != nil {
-            state.days[currentDay] = dayState(in: state, for: currentDay)
+        let next = stateAccessWaiters.removeFirst()
+        next.resume()
+    }
+
+    private func acquireUploadSlot() async {
+        if !uploadInFlight {
+            uploadInFlight = true
+            return
         }
+
+        await withCheckedContinuation { continuation in
+            uploadWaiters.append(continuation)
+        }
+    }
+
+    private func releaseUploadSlot() {
+        guard uploadInFlight else { return }
+
+        if uploadWaiters.isEmpty {
+            uploadInFlight = false
+            return
+        }
+
+        let next = uploadWaiters.removeFirst()
+        next.resume()
+    }
+
+    private func performFlush(at timestamp: Date, force: Bool) async throws {
+        guard let prepared = try await prepareUpload(at: timestamp, force: force) else {
+            return
+        }
+
+        let currentDay = prepared.currentDay
+        let batches = prepared.batches
         let installationID = try await installationID()
-        let batches = try makeBatches(from: state)
-        guard !batches.isEmpty else {
-            try await saveState(state)
-            return
-        }
-
-        // Checkpoint/prune mutations must survive a failed or cancelled network attempt.
-        try await saveState(state)
+        var acceptedHistoricalDays: Set<String> = []
 
         do {
             for batch in batches {
                 try Task.checkCancellation()
                 try await send(batch, installationID: installationID)
-                for day in batch.days where day.day != currentDay {
-                    state.days.removeValue(forKey: day.day)
-                }
+                acceptedHistoricalDays.formUnion(
+                    batch.days.lazy.map(\.day).filter { $0 != currentDay }
+                )
             }
         } catch {
-            if let retryDate = Self.automaticRetryDate(for: error, relativeTo: timestamp) {
-                if state.nextUploadAttemptAt.map({ $0 < retryDate }) ?? true {
-                    state.nextUploadAttemptAt = retryDate
-                }
-            }
-            // Preserve the last durable cumulative snapshot and any successfully accepted
-            // historical batches without replacing the original network/cancellation error.
-            try? await saveState(state)
+            let completionTimestamp = now()
+            let retryDate = Self.automaticRetryDate(
+                for: error,
+                relativeTo: completionTimestamp
+            )
+            try? await mergeUploadResult(
+                acceptedHistoricalDays: acceptedHistoricalDays,
+                completedAt: completionTimestamp,
+                retryDate: retryDate,
+                succeeded: false
+            )
             throw error
         }
 
-        state.lastUploadAt = timestamp
-        state.nextUploadAttemptAt = nil
-        try await saveState(state)
+        try await mergeUploadResult(
+            acceptedHistoricalDays: acceptedHistoricalDays,
+            completedAt: now(),
+            retryDate: nil,
+            succeeded: true
+        )
+    }
+
+    private func prepareUpload(
+        at timestamp: Date,
+        force: Bool
+    ) async throws -> (batches: [Batch], currentDay: String)? {
+        await acquireStateAccess()
+        do {
+            var snapshot = try await loadState()
+            pruneExpiredDays(in: &snapshot, relativeTo: timestamp)
+            checkpointActiveSession(in: &snapshot, at: timestamp)
+
+            guard !snapshot.days.isEmpty else {
+                snapshot.nextUploadAttemptAt = nil
+                try await saveState(snapshot)
+                releaseStateAccess()
+                return nil
+            }
+
+            if !force {
+                if let nextUploadAttemptAt = snapshot.nextUploadAttemptAt,
+                   timestamp < nextUploadAttemptAt {
+                    try await saveState(snapshot)
+                    releaseStateAccess()
+                    return nil
+                }
+                if let lastUploadAt = snapshot.lastUploadAt,
+                   timestamp.timeIntervalSince(lastUploadAt) < configuration.uploadInterval {
+                    try await saveState(snapshot)
+                    releaseStateAccess()
+                    return nil
+                }
+            }
+
+            try Self.validateConfiguration(configuration)
+            let currentDay = Self.dayKey(for: timestamp)
+            if snapshot.days[currentDay] != nil {
+                snapshot.days[currentDay] = dayState(in: snapshot, for: currentDay)
+            }
+
+            let batches = try makeBatches(from: snapshot)
+            guard !batches.isEmpty else {
+                try await saveState(snapshot)
+                releaseStateAccess()
+                return nil
+            }
+
+            // Persist checkpoint/prune mutations before any network suspension. The returned
+            // batches are immutable upload input and the local-state gate is released here.
+            try await saveState(snapshot)
+            releaseStateAccess()
+            return (batches, currentDay)
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
+    }
+
+    private func mergeUploadResult(
+        acceptedHistoricalDays: Set<String>,
+        completedAt timestamp: Date,
+        retryDate: Date?,
+        succeeded: Bool
+    ) async throws {
+        await acquireStateAccess()
+        do {
+            var latest = try await loadState()
+            pruneExpiredDays(in: &latest, relativeTo: timestamp)
+
+            for day in acceptedHistoricalDays {
+                latest.days.removeValue(forKey: day)
+            }
+
+            if succeeded {
+                latest.lastUploadAt = timestamp
+                latest.nextUploadAttemptAt = nil
+            } else if let retryDate,
+                      latest.nextUploadAttemptAt.map({ $0 < retryDate }) ?? true {
+                latest.nextUploadAttemptAt = retryDate
+            }
+
+            try await saveState(latest)
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
     }
 
     private func send(_ batch: Batch, installationID: String) async throws {

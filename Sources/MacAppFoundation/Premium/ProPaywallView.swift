@@ -81,9 +81,7 @@ public struct ProPaywallView: View {
         .background(theme.canvas)
         .tint(theme.accent)
         .task {
-            if purchaseManager.products.isEmpty {
-                await purchaseManager.loadProducts(force: true)
-            }
+            await purchaseManager.refreshProductsForPresentation()
             await purchaseManager.refreshEntitlements()
             selectDefaultPlanIfNeeded()
         }
@@ -222,7 +220,7 @@ public struct ProPaywallView: View {
         let isSelected = selectedProductID == product.id
 
         return Button {
-            guard !purchaseManager.isBusy else { return }
+            guard !purchaseManager.isBusy, !purchaseManager.isPurchasePending else { return }
             withAnimation(.snappy) {
                 selectedProductID = product.id
             }
@@ -289,13 +287,16 @@ public struct ProPaywallView: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(purchaseManager.isBusy)
+        .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var purchaseButton: some View {
         Button {
-            guard let product = selectedProduct, !purchaseManager.isBusy else { return }
+            guard let product = selectedProduct,
+                  !purchaseManager.isBusy,
+                  !purchaseManager.isPurchasePending
+            else { return }
 
             Task {
                 let outcome = await purchaseManager.purchase(product)
@@ -308,6 +309,7 @@ public struct ProPaywallView: View {
 
                 if let outcome, case .success = outcome {
                     onPurchased?(product)
+                    dismiss()
                 }
             }
         } label: {
@@ -322,7 +324,11 @@ public struct ProPaywallView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(PaywallButtonStyle(.primary))
-        .disabled(selectedProduct == nil || purchaseManager.isBusy)
+        .disabled(
+            selectedProduct == nil
+                || purchaseManager.isBusy
+                || purchaseManager.isPurchasePending
+        )
     }
 
     private var bottomBar: some View {
@@ -339,7 +345,7 @@ public struct ProPaywallView: View {
                 }
             }
             .buttonStyle(PaywallButtonStyle(.secondary))
-            .disabled(purchaseManager.isBusy)
+            .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
 
             if configuration.showsRedeemCode {
                 Button("Redeem Code") {
@@ -447,6 +453,9 @@ public struct ProPaywallView: View {
         if purchaseManager.isPurchasing {
             return "Purchasing…"
         }
+        if purchaseManager.isPurchasePending {
+            return "Pending Approval"
+        }
         guard let selectedProduct else {
             return configuration.purchaseButtonTitle
         }
@@ -480,6 +489,7 @@ public struct ProPaywallView: View {
             case .restored:
                 restoreMessage = "Purchases restored."
                 onRestored?()
+                dismiss()
             case .nothingToRestore:
                 restoreMessage = "No previous purchases were found."
             case .failed(let failure):

@@ -105,7 +105,12 @@ struct MacAppFoundationDemoApp: App {
                 .macAppTheme(themeStore)
         }
 
-        Window("Demo Pro", id: DemoWindowID.paywall) {
+        MacAppFullSizeWindow(
+            "Demo Pro",
+            id: DemoWindowID.paywall,
+            defaultWidth: 860,
+            defaultHeight: 600
+        ) {
             ProPaywallView(
                 purchaseManager: purchases,
                 configuration: DemoCommerce.paywallConfiguration,
@@ -116,16 +121,8 @@ struct MacAppFoundationDemoApp: App {
                     demoState.record("Restored purchases")
                 }
             )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .top) {
-                MacAppWindowDragRegion(background: .clear)
-            }
-            .macAppFullSizeWindowChrome()
             .macAppTheme(themeStore)
         }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 860, height: 600)
-        .windowResizability(.contentSize)
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
             DemoUpsellWindow(purchaseManager: purchases)
@@ -162,7 +159,6 @@ struct MacAppFoundationDemoApp: App {
             .environment(demoState)
             .macAppTheme(themeStore)
         }
-        .windowStyle(.hiddenTitleBar)
     }
 
     #if DEBUG

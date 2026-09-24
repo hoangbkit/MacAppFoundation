@@ -412,6 +412,7 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
     )
 
     try await validClient.track("generation_completed")
+    await validClient.waitForAutomaticUpload()
     let validRequest = try #require(await validTransport.capturedRequests().first)
     let validDay = try #require(phase3Days(validRequest).first)
     #expect(validRequest.value(forHTTPHeaderField: "X-App-Version") == validVersion)
@@ -427,6 +428,7 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
     )
 
     try await invalidClient.track("generation_completed")
+    await invalidClient.waitForAutomaticUpload()
     let invalidRequest = try #require(await invalidTransport.capturedRequests().first)
     let invalidDay = try #require(phase3Days(invalidRequest).first)
     #expect(invalidRequest.value(forHTTPHeaderField: "X-App-Version") == nil)
@@ -566,11 +568,13 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
     )
 
     try await client.track("generation_completed", count: 3)
+    await client.waitForAutomaticUpload()
     let firstRequest = try #require(await transport.capturedRequests().first)
     let firstID = try #require(firstRequest.value(forHTTPHeaderField: "X-Installation-ID"))
 
     try await client.resetLocalState()
     try await client.track("generation_completed")
+    await client.waitForAutomaticUpload()
 
     let secondRequest = try #require(await transport.capturedRequests().last)
     let secondID = try #require(secondRequest.value(forHTTPHeaderField: "X-Installation-ID"))
@@ -595,6 +599,7 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
         now: { timestamp }
     )
     try await first.track("first_event")
+    await first.waitForAutomaticUpload()
 
     let second = AppAnalyticsClient(
         configuration: configuration,
@@ -603,6 +608,7 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
         now: { timestamp }
     )
     try await second.track("second_event")
+    await second.waitForAutomaticUpload()
 
     let firstRequest = try #require(await firstTransport.capturedRequests().first)
     let secondRequest = try #require(await secondTransport.capturedRequests().first)
@@ -633,6 +639,8 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
     async let firstTrack: Void = first.track("first_event")
     async let secondTrack: Void = second.track("second_event")
     _ = try await (firstTrack, secondTrack)
+    await first.waitForAutomaticUpload()
+    await second.waitForAutomaticUpload()
 
     let firstRequest = try #require(await firstTransport.capturedRequests().first)
     let secondRequest = try #require(await secondTransport.capturedRequests().first)

@@ -101,7 +101,7 @@ final class PurchasePlanTests: XCTestCase {
         XCTAssertEqual(product.purchaseActionTitle(defaultTitle: "Continue"), "Start Free Trial")
         XCTAssertEqual(
             product.introductoryOfferDisclosure,
-            "7 days free, then $39.99/year. Renews automatically until cancelled."
+            "7 days free, then $39.99/year."
         )
     }
 
