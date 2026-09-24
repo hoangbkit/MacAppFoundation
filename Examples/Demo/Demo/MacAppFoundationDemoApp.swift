@@ -5,6 +5,7 @@ enum DemoWindowID {
     static let main = "demo.main"
     static let onboarding = "demo.onboarding"
     static let paywall = "demo.paywall"
+    static let settings = "demo.settings"
     static let upsell = "demo.upsell"
 }
 
@@ -150,7 +151,13 @@ struct MacAppFoundationDemoApp: App {
         )
         #endif
 
-        Settings {
+        MacAppFullSizeWindow(
+            "Settings",
+            id: DemoWindowID.settings,
+            defaultWidth: 940,
+            defaultHeight: 660,
+            showsDefaultDragRegion: false
+        ) {
             DemoSettingsView(
                 purchaseManager: purchases,
                 themeStore: themeStore,
@@ -159,7 +166,6 @@ struct MacAppFoundationDemoApp: App {
             .environment(demoState)
             .macAppTheme(themeStore)
         }
-        .windowStyle(.hiddenTitleBar)
     }
 
     #if DEBUG
