@@ -26,6 +26,7 @@ public final class PurchaseManager {
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
     @ObservationIgnored private var entitlementRefreshGeneration = 0
+    @ObservationIgnored private var productLoadGeneration = 0
     @ObservationIgnored private var hasPrepared = false
 
     @ObservationIgnored private static let logger = Logger(
@@ -202,6 +203,8 @@ public final class PurchaseManager {
             return
         }
 
+        productLoadGeneration &+= 1
+        let loadGeneration = productLoadGeneration
         let configuration = activeConfiguration
         guard !configuration.productIDs.isEmpty else {
             products = []
@@ -212,12 +215,18 @@ public final class PurchaseManager {
         productLoadingState = .loading
 
         do {
-            guard let loadedProducts = try await fetchProducts(configuration: configuration) else {
+            guard let loadedProducts = try await fetchProducts(
+                configuration: configuration,
+                productLoadGeneration: loadGeneration
+            ) else {
                 return
             }
+            guard loadGeneration == productLoadGeneration else { return }
+
             products = loadedProducts
             productLoadingState = .loaded
         } catch {
+            guard loadGeneration == productLoadGeneration else { return }
             productLoadingState = .failed(Self.mapFailure(error))
         }
     }
@@ -233,6 +242,8 @@ public final class PurchaseManager {
             return
         }
 
+        productLoadGeneration &+= 1
+        let loadGeneration = productLoadGeneration
         let configuration = activeConfiguration
         guard !configuration.productIDs.isEmpty else {
             return
@@ -242,19 +253,26 @@ public final class PurchaseManager {
         productLoadingState = .loaded
 
         do {
-            guard let refreshedProducts = try await fetchProducts(configuration: configuration) else {
+            guard let refreshedProducts = try await fetchProducts(
+                configuration: configuration,
+                productLoadGeneration: loadGeneration
+            ) else {
                 return
             }
+            guard loadGeneration == productLoadGeneration else { return }
+
             products = refreshedProducts
             productLoadingState = .loaded
         } catch {
+            guard loadGeneration == productLoadGeneration else { return }
             // Stale-while-revalidate: keep the previously loaded products and loaded state.
             productLoadingState = .loaded
         }
     }
 
     private func fetchProducts(
-        configuration: PurchaseConfiguration
+        configuration: PurchaseConfiguration,
+        productLoadGeneration: Int
     ) async throws -> [StoreProduct]? {
         let generation = serviceGeneration
         let service = service
@@ -263,7 +281,9 @@ public final class PurchaseManager {
         for attempt in 1...configuration.productLoadAttempts {
             do {
                 let loadedProducts = try await service.products(for: configuration.productIDs)
-                guard generation == serviceGeneration else { return nil }
+                guard generation == serviceGeneration,
+                      productLoadGeneration == self.productLoadGeneration
+                else { return nil }
 
                 let orderedProducts = ProductCatalog.ordered(
                     loadedProducts,
@@ -284,7 +304,9 @@ public final class PurchaseManager {
 
                 let delay = UInt64(attempt) * 350_000_000
                 try? await Task.sleep(nanoseconds: delay)
-                guard generation == serviceGeneration else { return nil }
+                guard generation == serviceGeneration,
+                      productLoadGeneration == self.productLoadGeneration
+                else { return nil }
             }
         }
 
