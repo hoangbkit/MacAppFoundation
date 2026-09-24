@@ -26,6 +26,11 @@ public final class PurchaseManager {
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
     @ObservationIgnored private var entitlementRefreshGeneration = 0
+    @ObservationIgnored private var completedEntitlementRefreshGeneration = 0
+    @ObservationIgnored private var latestEntitlementRecords: [EntitlementRecord] = []
+    @ObservationIgnored private var entitlementRefreshWaiters: [
+        Int: [CheckedContinuation<[EntitlementRecord], Never>]
+    ] = [:]
     @ObservationIgnored private var productLoadGeneration = 0
     @ObservationIgnored private var hasPrepared = false
 
@@ -326,13 +331,66 @@ public final class PurchaseManager {
         let entitledProductIDs = activeConfiguration.entitledProductIDs
         let records = await service.currentEntitlements()
         guard generation == serviceGeneration else { return [] }
-        guard refreshGeneration == entitlementRefreshGeneration else { return records }
+
+        guard refreshGeneration == entitlementRefreshGeneration else {
+            return await waitForEntitlementRefresh(
+                atLeast: entitlementRefreshGeneration
+            )
+        }
 
         entitlementState = EntitlementEvaluator.evaluateCurrentEntitlements(
             records,
             entitledProductIDs: entitledProductIDs
         )
+        completeEntitlementRefresh(
+            generation: refreshGeneration,
+            records: records
+        )
         return records
+    }
+
+    private func waitForEntitlementRefresh(
+        atLeast generation: Int
+    ) async -> [EntitlementRecord] {
+        if completedEntitlementRefreshGeneration >= generation {
+            return latestEntitlementRecords
+        }
+
+        return await withCheckedContinuation { continuation in
+            entitlementRefreshWaiters[generation, default: []].append(continuation)
+        }
+    }
+
+    private func completeEntitlementRefresh(
+        generation: Int,
+        records: [EntitlementRecord]
+    ) {
+        completedEntitlementRefreshGeneration = max(
+            completedEntitlementRefreshGeneration,
+            generation
+        )
+        latestEntitlementRecords = records
+
+        let completedWaiterGenerations = entitlementRefreshWaiters.keys.filter {
+            $0 <= completedEntitlementRefreshGeneration
+        }
+        for waiterGeneration in completedWaiterGenerations {
+            let continuations = entitlementRefreshWaiters.removeValue(
+                forKey: waiterGeneration
+            ) ?? []
+            for continuation in continuations {
+                continuation.resume(returning: records)
+            }
+        }
+    }
+
+    private func cancelEntitlementRefreshWaiters() {
+        let continuations = entitlementRefreshWaiters.values.flatMap { $0 }
+        entitlementRefreshWaiters.removeAll()
+        latestEntitlementRecords = []
+        for continuation in continuations {
+            continuation.resume(returning: [])
+        }
     }
 
     /// Attempts a purchase and returns the actual StoreKit/simulator outcome.
@@ -690,6 +748,7 @@ public final class PurchaseManager {
         updateTask = nil
         subscriptionStatusUpdateTask?.cancel()
         subscriptionStatusUpdateTask = nil
+        cancelEntitlementRefreshWaiters()
     }
 
     private func resetObservableStateForServiceChange() {
