@@ -236,7 +236,7 @@ struct UpsellShowcaseView: View {
 
 @MainActor
 struct SettingsShowcaseView: View {
-    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 18) {
@@ -245,13 +245,13 @@ struct SettingsShowcaseView: View {
                 .foregroundStyle(Color.accentColor)
             Text("App-owned Settings")
                 .font(.title.bold())
-            Text("The demo uses a native General / Plan / About Settings scene. Only the Plan content comes from MacAppFoundation.")
+            Text("The demo uses a native General / Appearance / Plan / About Settings scene. Appearance and Plan content come from MacAppFoundation.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 520)
 
             Button("Open Settings") {
-                openWindow(id: DemoWindowID.settings)
+                openSettings()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
