@@ -309,6 +309,7 @@ public struct ProPaywallView: View {
 
                 if let outcome, case .success = outcome {
                     onPurchased?(product)
+                    dismiss()
                 }
             }
         } label: {
@@ -488,6 +489,7 @@ public struct ProPaywallView: View {
             case .restored:
                 restoreMessage = "Purchases restored."
                 onRestored?()
+                dismiss()
             case .nothingToRestore:
                 restoreMessage = "No previous purchases were found."
             case .failed(let failure):
