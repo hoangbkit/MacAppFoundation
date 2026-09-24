@@ -412,6 +412,7 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
     )
 
     try await validClient.track("generation_completed")
+    await validClient.waitForAutomaticUpload()
     let validRequest = try #require(await validTransport.capturedRequests().first)
     let validDay = try #require(phase3Days(validRequest).first)
     #expect(validRequest.value(forHTTPHeaderField: "X-App-Version") == validVersion)
@@ -427,6 +428,7 @@ private func phase3EventCounters(_ count: Int, prefix: String = "event") -> [(St
     )
 
     try await invalidClient.track("generation_completed")
+    await invalidClient.waitForAutomaticUpload()
     let invalidRequest = try #require(await invalidTransport.capturedRequests().first)
     let invalidDay = try #require(phase3Days(invalidRequest).first)
     #expect(invalidRequest.value(forHTTPHeaderField: "X-App-Version") == nil)
