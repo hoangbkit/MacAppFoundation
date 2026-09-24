@@ -646,3 +646,27 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     #expect(names.contains("concurrent_first"))
     #expect(names.contains("concurrent_second"))
 }
+
+
+@Test func explicitFlushWaitsForAutomaticUploadThenRunsSerializedForcedFlush() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .success)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await client.track("first_event")
+    await transport.waitForRequestCount(1)
+
+    let flushTask = Task {
+        try await client.flush()
+    }
+
+    #expect(await transport.requestCount() == 1)
+    await transport.releaseFirstRequest()
+    try await flushTask.value
+
+    #expect(await transport.requestCount() == 2)
+}
