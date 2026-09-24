@@ -94,6 +94,46 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertFalse(manager.hasPro)
     }
 
+    func testOlderProductLoadCannotOverwriteNewerMetadata() async {
+        let staleMonthly = Self.monthly
+        let refreshedMonthly = StoreProduct(
+            id: Self.monthly.id,
+            displayName: "Monthly",
+            description: "Monthly access",
+            displayPrice: "$5.99",
+            price: 5.99,
+            subscriptionPeriod: .init(value: 1, unit: .month)
+        )
+        let service = MockPurchaseService()
+        service.blockedFirstProductsResponse = [staleMonthly]
+        service.productsResult = [refreshedMonthly]
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                productLoadAttempts: 1
+            ),
+            service: service
+        )
+
+        let olderLoad = Task {
+            await manager.loadProducts(force: true)
+        }
+
+        while !service.isFirstProductLoadBlocked {
+            await Task.yield()
+        }
+
+        await manager.loadProducts(force: true)
+        XCTAssertEqual(manager.products, [refreshedMonthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+
+        service.releaseFirstProductLoad()
+        await olderLoad.value
+
+        XCTAssertEqual(manager.products, [refreshedMonthly])
+        XCTAssertEqual(manager.productLoadingState, .loaded)
+    }
+
     func testPresentationRefreshReplacesCachedProductMetadata() async {
         let service = MockPurchaseService()
         service.productsResult = [Self.monthly]
@@ -575,6 +615,7 @@ private final class MockPurchaseService: PurchaseServing {
     var purchaseDelay: Duration = .milliseconds(0)
     var entitlements: [EntitlementRecord] = []
     var blockedFirstEntitlementResponse: [EntitlementRecord]?
+    var blockedFirstProductsResponse: [StoreProduct]?
     var productLoadCount = 0
     var purchaseCount = 0
     var syncCount = 0
@@ -587,9 +628,15 @@ private final class MockPurchaseService: PurchaseServing {
     private var subscriptionStatusUpdateContinuations: [AsyncStream<String>.Continuation] = []
     private var entitlementRequestCount = 0
     private var firstEntitlementRefreshContinuation: CheckedContinuation<Void, Never>?
+    private var productRequestCount = 0
+    private var firstProductLoadContinuation: CheckedContinuation<Void, Never>?
 
     var isFirstEntitlementRefreshBlocked: Bool {
         firstEntitlementRefreshContinuation != nil
+    }
+
+    var isFirstProductLoadBlocked: Bool {
+        firstProductLoadContinuation != nil
     }
 
     func products(for identifiers: [String]) async throws -> [StoreProduct] {
@@ -597,7 +644,22 @@ private final class MockPurchaseService: PurchaseServing {
         if let productLoadingFailure {
             throw productLoadingFailure
         }
+
+        productRequestCount += 1
+        if productRequestCount == 1,
+           let blockedFirstProductsResponse {
+            await withCheckedContinuation { continuation in
+                firstProductLoadContinuation = continuation
+            }
+            return blockedFirstProductsResponse.filter { identifiers.contains($0.id) }
+        }
+
         return productsResult.filter { identifiers.contains($0.id) }
+    }
+
+    func releaseFirstProductLoad() {
+        firstProductLoadContinuation?.resume()
+        firstProductLoadContinuation = nil
     }
 
     func purchase(productID: String) async throws -> PurchaseOutcome {
