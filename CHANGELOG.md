@@ -12,6 +12,7 @@ All notable changes to MacAppFoundation will be documented in this file.
 - Prevent duplicate purchase attempts while a StoreKit purchase is pending approval.
 - Keep unrelated transaction updates from clearing the pending state of another product.
 - Limit StoreKit transaction observation to products that actually grant Pro, leaving non-Pro catalog transactions for their owning subsystem.
+- Refresh Pro entitlement state when StoreKit subscription status changes, so grace-period, billing-retry, expiration, and revocation transitions are reflected while the app remains open.
 
 ### Changed
 
