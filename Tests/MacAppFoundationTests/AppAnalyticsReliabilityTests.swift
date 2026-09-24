@@ -121,18 +121,20 @@ private actor BlockingAnalyticsTransport: AppAnalyticsTransport {
     }
 
     private let firstOutcome: FirstOutcome
+    private let blockedRequestIndex: Int
     private var requests: [URLRequest] = []
     private var firstRequestReleased = false
 
-    init(firstOutcome: FirstOutcome) {
+    init(firstOutcome: FirstOutcome, blockedRequestIndex: Int = 1) {
         self.firstOutcome = firstOutcome
+        self.blockedRequestIndex = blockedRequestIndex
     }
 
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         requests.append(request)
         let requestIndex = requests.count
 
-        if requestIndex == 1 {
+        if requestIndex == blockedRequestIndex {
             while !firstRequestReleased {
                 await Task.yield()
             }
@@ -669,4 +671,54 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     try await flushTask.value
 
     #expect(await transport.requestCount() == 2)
+}
+
+
+@Test func delayedAutomaticFlushUsesExecutionTimeAcrossUTCMidnight() async throws {
+    let clock = AnalyticsReliabilityClock(
+        analyticsReliabilityDate("2026-09-05T23:59:00Z")
+    )
+    let transport = BlockingAnalyticsTransport(
+        firstOutcome: .success,
+        blockedRequestIndex: 2
+    )
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { clock.now() }
+    )
+
+    // Establish the first successful automatic upload.
+    try await client.track("seed_event")
+    await client.waitForAutomaticUpload()
+    #expect(await transport.requestCount() == 1)
+
+    // Hold an explicit upload so the next automatic upload is queued behind it.
+    let blockingFlush = Task {
+        try await client.flush()
+    }
+    await transport.waitForRequestCount(2)
+
+    // This schedules an automatic flush while the clock is still on September 5.
+    try await client.track("before_midnight")
+
+    // A newer event is persisted on September 6 before that automatic flush can start.
+    clock.set(analyticsReliabilityDate("2026-09-06T00:01:00Z"))
+    try await client.track("after_midnight")
+
+    await transport.releaseFirstRequest()
+    try await blockingFlush.value
+    await client.waitForAutomaticUpload()
+
+    let request = try #require(await transport.capturedRequests().last)
+    let days = try analyticsReliabilityDays(request)
+    #expect(days.compactMap { $0["day"] as? String } == ["2026-09-05", "2026-09-06"])
+
+    let allEvents = days.flatMap { day in
+        (day["events"] as? [[String: Any]]) ?? []
+    }
+    let names = Set(allEvents.compactMap { $0["name"] as? String })
+    #expect(names.contains("before_midnight"))
+    #expect(names.contains("after_midnight"))
 }
