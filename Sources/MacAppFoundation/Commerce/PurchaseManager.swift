@@ -25,6 +25,7 @@ public final class PurchaseManager {
     @ObservationIgnored private var subscriptionStatusUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
+    @ObservationIgnored private var entitlementRefreshGeneration = 0
     @ObservationIgnored private var hasPrepared = false
 
     @ObservationIgnored private static let logger = Logger(
@@ -296,11 +297,14 @@ public final class PurchaseManager {
 
     @discardableResult
     private func refreshEntitlementsWithRecords() async -> [EntitlementRecord] {
+        entitlementRefreshGeneration &+= 1
+        let refreshGeneration = entitlementRefreshGeneration
         let generation = serviceGeneration
         let service = service
         let entitledProductIDs = activeConfiguration.entitledProductIDs
         let records = await service.currentEntitlements()
         guard generation == serviceGeneration else { return [] }
+        guard refreshGeneration == entitlementRefreshGeneration else { return records }
 
         entitlementState = EntitlementEvaluator.evaluateCurrentEntitlements(
             records,
