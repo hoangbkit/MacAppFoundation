@@ -77,7 +77,9 @@ public struct ProPlanPane: View {
 
                         if actionState.showsViewPlans {
                             Button(configuration.viewPlansButtonTitle, action: onUpgrade)
-                                .buttonStyle(MacAppButtonStyle(.secondary))
+                                .buttonStyle(.plain)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(theme.accent)
                         }
 
                         if actionState.showsManageSubscription {
