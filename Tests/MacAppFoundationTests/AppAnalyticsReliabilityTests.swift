@@ -620,3 +620,29 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
         #expect(names.contains("concurrent_\(index)"))
     }
 }
+
+
+@Test func concurrentTrackingPreservesBothLocalMutations() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .success)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 10 * 24 * 60 * 60),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    async let first: Void = client.track("concurrent_first")
+    async let second: Void = client.track("concurrent_second")
+    _ = try await (first, second)
+
+    await transport.waitForRequestCount(1)
+    await transport.releaseFirstRequest()
+    await client.waitForAutomaticUpload()
+
+    try await client.flush()
+    let request = try #require(await transport.capturedRequests().last)
+    let events = try #require(analyticsReliabilityDays(request)[0]["events"] as? [[String: Any]])
+    let names = Set(events.compactMap { $0["name"] as? String })
+    #expect(names.contains("concurrent_first"))
+    #expect(names.contains("concurrent_second"))
+}
