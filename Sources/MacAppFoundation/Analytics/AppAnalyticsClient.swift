@@ -229,6 +229,9 @@ public actor AppAnalyticsClient {
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
     private let clientContext: AppAnalyticsClientContext
+    private var automaticUploadTask: Task<Void, Never>?
+    private var uploadInFlight = false
+    private var uploadWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(
         configuration: AppAnalyticsConfiguration,
@@ -321,7 +324,7 @@ public actor AppAnalyticsClient {
 
         state.days[dayKey] = day
         try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+        scheduleAutomaticFlush(at: timestamp)
     }
 
     public func trackError(
@@ -376,7 +379,7 @@ public actor AppAnalyticsClient {
         day.errors = errors
         state.days[dayKey] = day
         try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+        scheduleAutomaticFlush(at: timestamp)
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
@@ -413,7 +416,7 @@ public actor AppAnalyticsClient {
         }
 
         try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+        scheduleAutomaticFlush(at: timestamp)
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
@@ -428,11 +431,17 @@ public actor AppAnalyticsClient {
             }
         }
         try await saveState(state)
-        try? await flushIfDue(at: timestamp)
+        scheduleAutomaticFlush(at: timestamp)
     }
 
     public func flush() async throws {
-        try await flush(at: now(), force: true)
+        if let automaticUploadTask {
+            await automaticUploadTask.value
+        }
+
+        await acquireUploadSlot()
+        defer { releaseUploadSlot() }
+        try await performFlush(at: now(), force: true)
     }
 
     public func resetLocalState() async throws {
@@ -445,72 +454,146 @@ public actor AppAnalyticsClient {
         return state.days.count
     }
 
-    private func flushIfDue(at timestamp: Date) async throws {
-        try await flush(at: timestamp, force: false)
+    func waitForAutomaticUpload() async {
+        while let automaticUploadTask {
+            await automaticUploadTask.value
+        }
     }
 
-    private func flush(at timestamp: Date, force: Bool) async throws {
-        var state = try await loadState()
-        pruneExpiredDays(in: &state, relativeTo: timestamp)
-        checkpointActiveSession(in: &state, at: timestamp)
+    private func scheduleAutomaticFlush(at timestamp: Date) {
+        guard automaticUploadTask == nil else { return }
 
-        guard !state.days.isEmpty else {
-            state.nextUploadAttemptAt = nil
-            try await saveState(state)
+        automaticUploadTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runAutomaticFlush(at: timestamp)
+        }
+    }
+
+    private func runAutomaticFlush(at timestamp: Date) async {
+        await acquireUploadSlot()
+        try? await performFlush(at: timestamp, force: false)
+        releaseUploadSlot()
+        automaticUploadTask = nil
+    }
+
+    private func acquireUploadSlot() async {
+        if !uploadInFlight {
+            uploadInFlight = true
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            uploadWaiters.append(continuation)
+        }
+    }
+
+    private func releaseUploadSlot() {
+        guard uploadInFlight else { return }
+
+        if uploadWaiters.isEmpty {
+            uploadInFlight = false
+            return
+        }
+
+        let next = uploadWaiters.removeFirst()
+        next.resume()
+    }
+
+    private func performFlush(at timestamp: Date, force: Bool) async throws {
+        var snapshot = try await loadState()
+        pruneExpiredDays(in: &snapshot, relativeTo: timestamp)
+        checkpointActiveSession(in: &snapshot, at: timestamp)
+
+        guard !snapshot.days.isEmpty else {
+            snapshot.nextUploadAttemptAt = nil
+            try await saveState(snapshot)
             return
         }
 
         if !force {
-            if let nextUploadAttemptAt = state.nextUploadAttemptAt,
+            if let nextUploadAttemptAt = snapshot.nextUploadAttemptAt,
                timestamp < nextUploadAttemptAt {
-                try await saveState(state)
+                try await saveState(snapshot)
                 return
             }
-            if let lastUploadAt = state.lastUploadAt,
+            if let lastUploadAt = snapshot.lastUploadAt,
                timestamp.timeIntervalSince(lastUploadAt) < configuration.uploadInterval {
-                try await saveState(state)
+                try await saveState(snapshot)
                 return
             }
         }
 
         try Self.validateConfiguration(configuration)
         let currentDay = Self.dayKey(for: timestamp)
-        if state.days[currentDay] != nil {
-            state.days[currentDay] = dayState(in: state, for: currentDay)
+        if snapshot.days[currentDay] != nil {
+            snapshot.days[currentDay] = dayState(in: snapshot, for: currentDay)
         }
-        let installationID = try await installationID()
-        let batches = try makeBatches(from: state)
+
+        let batches = try makeBatches(from: snapshot)
         guard !batches.isEmpty else {
-            try await saveState(state)
+            try await saveState(snapshot)
             return
         }
 
-        // Checkpoint/prune mutations must survive a failed or cancelled network attempt.
-        try await saveState(state)
+        // Persist checkpoint/prune mutations before any network suspension. From this point
+        // onward the snapshot is immutable upload input; completion merges into latest state.
+        try await saveState(snapshot)
+        let installationID = try await installationID()
+        var acceptedHistoricalDays: Set<String> = []
 
         do {
             for batch in batches {
                 try Task.checkCancellation()
                 try await send(batch, installationID: installationID)
-                for day in batch.days where day.day != currentDay {
-                    state.days.removeValue(forKey: day.day)
-                }
+                acceptedHistoricalDays.formUnion(
+                    batch.days.lazy.map(\.day).filter { $0 != currentDay }
+                )
             }
         } catch {
-            if let retryDate = Self.automaticRetryDate(for: error, relativeTo: timestamp) {
-                if state.nextUploadAttemptAt.map({ $0 < retryDate }) ?? true {
-                    state.nextUploadAttemptAt = retryDate
-                }
-            }
-            // Preserve the last durable cumulative snapshot and any successfully accepted
-            // historical batches without replacing the original network/cancellation error.
-            try? await saveState(state)
+            let completionTimestamp = now()
+            let retryDate = Self.automaticRetryDate(
+                for: error,
+                relativeTo: completionTimestamp
+            )
+            try? await mergeUploadResult(
+                acceptedHistoricalDays: acceptedHistoricalDays,
+                completedAt: completionTimestamp,
+                retryDate: retryDate,
+                succeeded: false
+            )
             throw error
         }
 
-        state.lastUploadAt = timestamp
-        state.nextUploadAttemptAt = nil
-        try await saveState(state)
+        try await mergeUploadResult(
+            acceptedHistoricalDays: acceptedHistoricalDays,
+            completedAt: now(),
+            retryDate: nil,
+            succeeded: true
+        )
+    }
+
+    private func mergeUploadResult(
+        acceptedHistoricalDays: Set<String>,
+        completedAt timestamp: Date,
+        retryDate: Date?,
+        succeeded: Bool
+    ) async throws {
+        var latest = try await loadState()
+        pruneExpiredDays(in: &latest, relativeTo: timestamp)
+
+        for day in acceptedHistoricalDays {
+            latest.days.removeValue(forKey: day)
+        }
+
+        if succeeded {
+            latest.lastUploadAt = timestamp
+            latest.nextUploadAttemptAt = nil
+        } else if let retryDate,
+                  latest.nextUploadAttemptAt.map({ $0 < retryDate }) ?? true {
+            latest.nextUploadAttemptAt = retryDate
+        }
+
+        try await saveState(latest)
     }
 
     private func send(_ batch: Batch, installationID: String) async throws {
