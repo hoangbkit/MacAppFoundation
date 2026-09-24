@@ -333,7 +333,7 @@ public actor AppAnalyticsClient {
             releaseStateAccess()
             throw error
         }
-        scheduleAutomaticFlush(at: timestamp)
+        scheduleAutomaticFlush()
     }
 
     public func trackError(
@@ -395,7 +395,7 @@ public actor AppAnalyticsClient {
             releaseStateAccess()
             throw error
         }
-        scheduleAutomaticFlush(at: timestamp)
+        scheduleAutomaticFlush()
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
@@ -407,7 +407,7 @@ public actor AppAnalyticsClient {
             if state.session?.activeSince != nil {
                 try await saveState(state)
                 releaseStateAccess()
-                scheduleAutomaticFlush(at: timestamp)
+                scheduleAutomaticFlush()
                 return
             }
 
@@ -440,7 +440,7 @@ public actor AppAnalyticsClient {
             releaseStateAccess()
             throw error
         }
-        scheduleAutomaticFlush(at: timestamp)
+        scheduleAutomaticFlush()
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
@@ -462,7 +462,7 @@ public actor AppAnalyticsClient {
             releaseStateAccess()
             throw error
         }
-        scheduleAutomaticFlush(at: timestamp)
+        scheduleAutomaticFlush()
     }
 
     public func flush() async throws {
@@ -506,18 +506,18 @@ public actor AppAnalyticsClient {
         }
     }
 
-    private func scheduleAutomaticFlush(at timestamp: Date) {
+    private func scheduleAutomaticFlush() {
         guard automaticUploadTask == nil else { return }
 
         automaticUploadTask = Task { [weak self] in
             guard let self else { return }
-            await self.runAutomaticFlush(at: timestamp)
+            await self.runAutomaticFlush()
         }
     }
 
-    private func runAutomaticFlush(at timestamp: Date) async {
+    private func runAutomaticFlush() async {
         await acquireUploadSlot()
-        try? await performFlush(at: timestamp, force: false)
+        try? await performFlush(at: now(), force: false)
         releaseUploadSlot()
         automaticUploadTask = nil
     }
