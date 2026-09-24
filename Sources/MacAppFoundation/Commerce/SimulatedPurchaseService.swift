@@ -114,6 +114,14 @@ final class SimulatedPurchaseService: PurchaseServing {
         }
     }
 
+    func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
+        // The lightweight simulator models entitlement changes through transaction updates.
+        // It does not currently model StoreKit subscription lifecycle states.
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
     func sync() async throws {
         await waitForSimulationDelay()
         if let syncFailure {
