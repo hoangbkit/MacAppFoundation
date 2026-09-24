@@ -113,6 +113,117 @@ private actor ScriptedAnalyticsTransport: AppAnalyticsTransport {
     func requestCount() -> Int { requests.count }
 }
 
+private actor BlockingAnalyticsTransport: AppAnalyticsTransport {
+    enum FirstOutcome: Sendable {
+        case success
+        case serviceUnavailable
+        case rateLimited
+    }
+
+    private let firstOutcome: FirstOutcome
+    private var requests: [URLRequest] = []
+    private var firstRequestReleased = false
+
+    init(firstOutcome: FirstOutcome) {
+        self.firstOutcome = firstOutcome
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requests.append(request)
+        let requestIndex = requests.count
+
+        if requestIndex == 1 {
+            while !firstRequestReleased {
+                await Task.yield()
+            }
+
+            switch firstOutcome {
+            case .success:
+                return try successResponse(for: request)
+            case .serviceUnavailable:
+                return try serverResponse(
+                    for: request,
+                    status: 503,
+                    code: "service_disabled",
+                    message: "Unavailable.",
+                    retryAfter: nil
+                )
+            case .rateLimited:
+                return try serverResponse(
+                    for: request,
+                    status: 429,
+                    code: "rate_limited",
+                    message: "Slow down.",
+                    retryAfter: "60"
+                )
+            }
+        }
+
+        return try successResponse(for: request)
+    }
+
+    func releaseFirstRequest() {
+        firstRequestReleased = true
+    }
+
+    func waitForRequestCount(_ expected: Int) async {
+        while requests.count < expected {
+            await Task.yield()
+        }
+    }
+
+    func requestCount() -> Int { requests.count }
+    func capturedRequests() -> [URLRequest] { requests }
+
+    private func successResponse(for request: URLRequest) throws -> (Data, HTTPURLResponse) {
+        let body = try analyticsReliabilityRequestBody(request)
+        let requestID = try #require(body["requestId"] as? String)
+        let days = try #require(body["days"] as? [[String: Any]])
+        let acceptedDays = days.compactMap { $0["day"] as? String }
+        let payload: [String: Any] = [
+            "ok": true,
+            "requestId": requestID,
+            "acceptedDays": acceptedDays,
+        ]
+        return (
+            try JSONSerialization.data(withJSONObject: payload),
+            HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+        )
+    }
+
+    private func serverResponse(
+        for request: URLRequest,
+        status: Int,
+        code: String,
+        message: String,
+        retryAfter: String?
+    ) throws -> (Data, HTTPURLResponse) {
+        var detail: [String: Any] = [
+            "code": code,
+            "message": message,
+        ]
+        if let retryAfter {
+            detail["retryAfter"] = retryAfter
+        }
+        let payload: [String: Any] = ["error": detail]
+        let headers = retryAfter.map { ["Retry-After": $0] }
+        return (
+            try JSONSerialization.data(withJSONObject: payload),
+            HTTPURLResponse(
+                url: request.url!,
+                statusCode: status,
+                httpVersion: nil,
+                headerFields: headers
+            )!
+        )
+    }
+}
+
 private func analyticsReliabilityConfiguration(
     uploadInterval: TimeInterval = 21_600,
     transportRetryCount: Int = 0
@@ -375,4 +486,107 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     let request = try #require(await transport.capturedRequests().last)
     let events = try #require(analyticsReliabilityDays(request)[0]["events"] as? [[String: Any]])
     #expect(events.count == 2)
+}
+
+
+@Test func automaticAnalyticsUploadDoesNotBlockTrackingAndCoalescesWhileInFlight() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .success)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await client.track("first_event")
+    await transport.waitForRequestCount(1)
+
+    try await client.track("second_event")
+    try await client.track("third_event")
+    #expect(await transport.requestCount() == 1)
+
+    await transport.releaseFirstRequest()
+    await client.waitForAutomaticUpload()
+
+    try await client.flush()
+    let requests = await transport.capturedRequests()
+    #expect(requests.count == 2)
+
+    let events = try #require(analyticsReliabilityDays(requests[1])[0]["events"] as? [[String: Any]])
+    let names = Set(events.compactMap { $0["name"] as? String })
+    #expect(names == ["first_event", "second_event", "third_event"])
+}
+
+@Test func successfulInFlightUploadCannotOverwriteNewerAnalyticsState() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .success)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await client.track("before_upload")
+    await transport.waitForRequestCount(1)
+    try await client.track("during_upload")
+
+    await transport.releaseFirstRequest()
+    await client.waitForAutomaticUpload()
+    try await client.flush()
+
+    let request = try #require(await transport.capturedRequests().last)
+    let events = try #require(analyticsReliabilityDays(request)[0]["events"] as? [[String: Any]])
+    #expect(events.contains { $0["name"] as? String == "before_upload" })
+    #expect(events.contains { $0["name"] as? String == "during_upload" })
+}
+
+@Test func failedInFlightUploadPreservesEventsRecordedWhileRequestWasSuspended() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .serviceUnavailable)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await client.track("before_failure")
+    await transport.waitForRequestCount(1)
+    try await client.track("during_failure")
+
+    await transport.releaseFirstRequest()
+    await client.waitForAutomaticUpload()
+    #expect(try await client.pendingDayCount() == 1)
+
+    try await client.flush()
+    let request = try #require(await transport.capturedRequests().last)
+    let events = try #require(analyticsReliabilityDays(request)[0]["events"] as? [[String: Any]])
+    #expect(events.contains { $0["name"] as? String == "before_failure" })
+    #expect(events.contains { $0["name"] as? String == "during_failure" })
+}
+
+@Test func rateLimitBackoffMergePreservesEventsRecordedDuringUpload() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .rateLimited)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await client.track("before_rate_limit")
+    await transport.waitForRequestCount(1)
+    try await client.track("during_rate_limit")
+
+    await transport.releaseFirstRequest()
+    await client.waitForAutomaticUpload()
+
+    try await client.track("while_backed_off")
+    await client.waitForAutomaticUpload()
+    #expect(await transport.requestCount() == 1)
+
+    try await client.flush()
+    let request = try #require(await transport.capturedRequests().last)
+    let events = try #require(analyticsReliabilityDays(request)[0]["events"] as? [[String: Any]])
+    let names = Set(events.compactMap { $0["name"] as? String })
+    #expect(names == ["before_rate_limit", "during_rate_limit", "while_backed_off"])
 }
