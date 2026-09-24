@@ -150,7 +150,7 @@ final class PurchaseSimulationTests: XCTestCase {
         XCTAssertEqual(manager.activity, .pending(productID: Self.monthly.id))
         XCTAssertFalse(manager.hasPro)
 
-        manager.clearActivity()
+        await manager.resetSimulatedPurchases()
         manager.setSimulatedPurchaseResult(.userCancelled, for: Self.monthly.id)
         let cancelledOutcome = await manager.purchase(Self.monthly)
         XCTAssertEqual(cancelledOutcome, .userCancelled)
