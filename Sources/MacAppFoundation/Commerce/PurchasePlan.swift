@@ -164,7 +164,7 @@ public extension StoreProduct {
         guard let offer = eligibleIntroductoryOffer,
               let recurringPriceDescription
         else { return nil }
-        return "\(offer.headline), then \(recurringPriceDescription). Renews automatically until cancelled."
+        return "\(offer.headline), then \(recurringPriceDescription)."
     }
 }
 
