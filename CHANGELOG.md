@@ -25,3 +25,4 @@ All notable changes to MacAppFoundation will be documented in this file.
 - Added `MacAppFullSizeWindow`, a reusable scene wrapper for the hidden-titlebar, full-size-content window chrome used by the demo paywall.
 - The demo Settings scene now uses a native SwiftUI `Settings` window with a top `TabView`, while reusing MAF's Appearance and Plan views.
 - The reusable Plan pane now lets active subscribers reopen available plans, keeps App Store subscription management available when relevant, and exposes Restore Purchases without changing the existing plan-card design.
+- Analytics automatic uploads now run off the tracking critical path, serialize network uploads, and merge completion into the latest local state so a slow or unavailable server cannot overwrite events recorded while a request is in flight.
