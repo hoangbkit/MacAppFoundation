@@ -425,10 +425,12 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     for index in 0..<40 {
         try await client.track("day_one_\(index)")
     }
+    await client.waitForAutomaticUpload()
     clock.set(analyticsReliabilityDate("2026-09-04T10:00:00Z"))
     for index in 0..<40 {
         try await client.track("day_two_\(index)")
     }
+    await client.waitForAutomaticUpload()
     clock.set(analyticsReliabilityDate("2026-09-05T10:00:00Z"))
     for index in 0..<40 {
         try await client.track("day_three_\(index)")
