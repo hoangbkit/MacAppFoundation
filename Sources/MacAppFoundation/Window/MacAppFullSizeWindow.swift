@@ -11,6 +11,7 @@ public struct MacAppFullSizeWindow<Content: View>: Scene {
     private let id: String
     private let defaultWidth: CGFloat
     private let defaultHeight: CGFloat
+    private let showsDefaultDragRegion: Bool
     private let content: Content
 
     public init(
@@ -18,12 +19,14 @@ public struct MacAppFullSizeWindow<Content: View>: Scene {
         id: String,
         defaultWidth: CGFloat,
         defaultHeight: CGFloat,
+        showsDefaultDragRegion: Bool = true,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.id = id
         self.defaultWidth = defaultWidth
         self.defaultHeight = defaultHeight
+        self.showsDefaultDragRegion = showsDefaultDragRegion
         self.content = content()
     }
 
@@ -32,7 +35,9 @@ public struct MacAppFullSizeWindow<Content: View>: Scene {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .top) {
-                    MacAppWindowDragRegion(background: .clear)
+                    if showsDefaultDragRegion {
+                        MacAppWindowDragRegion(background: .clear)
+                    }
                 }
                 .macAppFullSizeWindowChrome()
         }
