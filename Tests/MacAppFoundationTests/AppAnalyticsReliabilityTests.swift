@@ -614,3 +614,33 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     #expect(names.contains("concurrent_first"))
     #expect(names.contains("concurrent_second"))
 }
+
+
+@Test func concurrentTrackingSerializesLocalStateUpdates() async throws {
+    let transport = ScriptedAnalyticsTransport()
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 86_400),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        for index in 0..<20 {
+            group.addTask {
+                try await client.track("concurrent_\(index)")
+            }
+        }
+        try await group.waitForAll()
+    }
+
+    try await client.flush()
+    let request = try #require(await transport.capturedRequests().last)
+    let events = try #require(analyticsReliabilityDays(request)[0]["events"] as? [[String: Any]])
+    let names = Set(events.compactMap { $0["name"] as? String })
+
+    #expect(names.count == 20)
+    for index in 0..<20 {
+        #expect(names.contains("concurrent_\(index)"))
+    }
+}
