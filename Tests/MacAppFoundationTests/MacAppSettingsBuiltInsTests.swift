@@ -113,53 +113,41 @@ struct MacAppSettingsBuiltInsTests {
             price: 79.99
         )
 
-        #expect(
-            ProPlanPaneActionState(
-                hasPro: false,
-                activeProduct: nil,
-                activeSubscriptionProduct: nil
-            ) == .init(
-                showsUpgrade: true,
-                showsViewPlans: false,
-                showsManageSubscription: false
-            )
+        let free = ProPlanPaneActionState(
+            hasPro: false,
+            activeProduct: nil,
+            activeSubscriptionProduct: nil
         )
+        #expect(free.showsUpgrade)
+        #expect(!free.showsViewPlans)
+        #expect(!free.showsManageSubscription)
 
-        #expect(
-            ProPlanPaneActionState(
-                hasPro: true,
-                activeProduct: monthly,
-                activeSubscriptionProduct: monthly
-            ) == .init(
-                showsUpgrade: false,
-                showsViewPlans: true,
-                showsManageSubscription: true
-            )
+        let subscription = ProPlanPaneActionState(
+            hasPro: true,
+            activeProduct: monthly,
+            activeSubscriptionProduct: monthly
         )
+        #expect(!subscription.showsUpgrade)
+        #expect(subscription.showsViewPlans)
+        #expect(subscription.showsManageSubscription)
 
-        #expect(
-            ProPlanPaneActionState(
-                hasPro: true,
-                activeProduct: lifetime,
-                activeSubscriptionProduct: nil
-            ) == .init(
-                showsUpgrade: false,
-                showsViewPlans: false,
-                showsManageSubscription: false
-            )
+        let lifetimeOnly = ProPlanPaneActionState(
+            hasPro: true,
+            activeProduct: lifetime,
+            activeSubscriptionProduct: nil
         )
+        #expect(!lifetimeOnly.showsUpgrade)
+        #expect(!lifetimeOnly.showsViewPlans)
+        #expect(!lifetimeOnly.showsManageSubscription)
 
-        #expect(
-            ProPlanPaneActionState(
-                hasPro: true,
-                activeProduct: lifetime,
-                activeSubscriptionProduct: monthly
-            ) == .init(
-                showsUpgrade: false,
-                showsViewPlans: false,
-                showsManageSubscription: true
-            )
+        let lifetimeAndSubscription = ProPlanPaneActionState(
+            hasPro: true,
+            activeProduct: lifetime,
+            activeSubscriptionProduct: monthly
         )
+        #expect(!lifetimeAndSubscription.showsUpgrade)
+        #expect(!lifetimeAndSubscription.showsViewPlans)
+        #expect(lifetimeAndSubscription.showsManageSubscription)
     }
 
 }
