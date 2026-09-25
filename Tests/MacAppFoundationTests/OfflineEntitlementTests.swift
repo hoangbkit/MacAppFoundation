@@ -210,6 +210,62 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(rolledBackLifetime.accessState.source, .verifiedCache)
     }
 
+    func testForwardThenBackwardClockCannotReviveExpiredSubscriptionCache() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let expiration = now.addingTimeInterval(86_400)
+        let store = InMemoryEntitlementStore()
+        let context = Self.context(account: "account-a")
+        let configuration = Self.configuration(productIDs: [Self.monthly.id])
+
+        let onlineManager = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [
+                    Self.subscriptionRecord(
+                        context: context,
+                        expirationDate: expiration,
+                        state: .subscribed
+                    )
+                ],
+                products: [Self.monthly]
+            ),
+            entitlementStore: store,
+            now: { now }
+        )
+        await onlineManager.prepare()
+
+        let afterExpiry = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [],
+                products: [Self.monthly],
+                defaultLatestLookup: .unavailable
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(2 * 86_400) }
+        )
+        await afterExpiry.prepare()
+        XCTAssertEqual(afterExpiry.accessState, .unresolved)
+
+        let rolledBackBeforeExpiry = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [],
+                products: [Self.monthly],
+                defaultLatestLookup: .unavailable
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(12 * 60 * 60) }
+        )
+        await rolledBackBeforeExpiry.prepare()
+
+        XCTAssertFalse(rolledBackBeforeExpiry.hasPro)
+        XCTAssertEqual(rolledBackBeforeExpiry.accessState, .unresolved)
+    }
+
     func testExplicitLifetimeRevocationInvalidatesCache() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let store = InMemoryEntitlementStore()
