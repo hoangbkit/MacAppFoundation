@@ -331,14 +331,15 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(nextLaunch.accessState, .checking)
     }
 
-    func testAccountScopedCacheIsNotReusedAcrossAppleAccounts() async {
+    func testFreeAccountIdentityPreventsPaidAccountCacheReuseOffline() async throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let store = InMemoryEntitlementStore()
         let accountA = Self.context(account: "account-a")
         let accountB = Self.context(account: "account-b")
+        let configuration = Self.configuration(productIDs: [Self.lifetime.id])
 
         let managerA = PurchaseManager(
-            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            configuration: configuration,
             service: OfflineTestPurchaseService(
                 context: accountA,
                 entitlements: [Self.lifetimeRecord(context: accountA)],
@@ -349,8 +350,10 @@ final class OfflineEntitlementTests: XCTestCase {
         )
         await managerA.prepare()
 
+        XCTAssertNotNil(try store.data(for: accountA.storageAccount))
+
         let managerB = PurchaseManager(
-            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            configuration: configuration,
             service: OfflineTestPurchaseService(
                 context: accountB,
                 entitlements: [],
@@ -361,16 +364,35 @@ final class OfflineEntitlementTests: XCTestCase {
             now: { now.addingTimeInterval(60) }
         )
 
-        XCTAssertFalse(managerB.hasPro)
-        XCTAssertEqual(managerB.accessState, .checking)
-
         await managerB.prepare()
 
         XCTAssertFalse(managerB.hasPro)
         XCTAssertEqual(managerB.accessState, .inactive)
+        XCTAssertEqual(
+            try store.persistedIdentity(for: accountB)?.appTransactionID,
+            accountB.appTransactionID
+        )
+        XCTAssertNotNil(try store.data(for: accountA.storageAccount))
+
+        let offlineRelaunch = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: nil,
+                entitlements: [],
+                products: [Self.lifetime],
+                defaultLatestLookup: .unavailable
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(120) }
+        )
+
+        await offlineRelaunch.prepare()
+
+        XCTAssertFalse(offlineRelaunch.hasPro)
+        XCTAssertEqual(offlineRelaunch.accessState, .inactive)
     }
 
-    func testOfflineRelaunchUsesSingleFallbackWhenAccountContextIsUnavailable() async {
+    func testOfflineRelaunchUsesLastVerifiedIdentityWhenAccountContextIsUnavailable() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let store = InMemoryEntitlementStore()
         let context = Self.context(account: "account-a")
@@ -407,26 +429,43 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
     }
 
-    func testMultipleCachedAccountsRemainUnresolvedWithoutVerifiedAccountContext() async {
+    func testMultipleCachedAccountsUseLastVerifiedIdentityOffline() async throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let store = InMemoryEntitlementStore()
         let accountA = Self.context(account: "account-a")
         let accountB = Self.context(account: "account-b")
         let configuration = Self.configuration(productIDs: [Self.lifetime.id])
 
-        for context in [accountA, accountB] {
-            let manager = PurchaseManager(
-                configuration: configuration,
-                service: OfflineTestPurchaseService(
-                    context: context,
-                    entitlements: [Self.lifetimeRecord(context: context)],
-                    products: [Self.lifetime]
-                ),
-                entitlementStore: store,
-                now: { now }
-            )
-            await manager.prepare()
-        }
+        let managerA = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: accountA,
+                entitlements: [Self.lifetimeRecord(context: accountA)],
+                products: [Self.lifetime]
+            ),
+            entitlementStore: store,
+            now: { now }
+        )
+        await managerA.prepare()
+
+        let managerB = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: accountB,
+                entitlements: [Self.lifetimeRecord(context: accountB)],
+                products: [Self.lifetime]
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(60) }
+        )
+        await managerB.prepare()
+
+        XCTAssertNotNil(try store.data(for: accountA.storageAccount))
+        XCTAssertNotNil(try store.data(for: accountB.storageAccount))
+        XCTAssertEqual(
+            try store.persistedIdentity(for: accountB)?.appTransactionID,
+            accountB.appTransactionID
+        )
 
         let offlineManager = PurchaseManager(
             configuration: configuration,
@@ -437,13 +476,13 @@ final class OfflineEntitlementTests: XCTestCase {
                 defaultLatestLookup: .unavailable
             ),
             entitlementStore: store,
-            now: { now.addingTimeInterval(60) }
+            now: { now.addingTimeInterval(120) }
         )
 
         await offlineManager.prepare()
 
-        XCTAssertFalse(offlineManager.hasPro)
-        XCTAssertEqual(offlineManager.accessState, .unresolved)
+        XCTAssertTrue(offlineManager.hasPro)
+        XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
     }
 
     func testDisabledOfflinePolicyDoesNotRequestAccountContext() async {
@@ -801,16 +840,24 @@ private final class InMemoryEntitlementStore: VerifiedEntitlementStoring {
         values[account]
     }
 
-    func allData() throws -> [(account: String, data: Data)] {
-        values.map { (account: $0.key, data: $0.value) }
-    }
-
     func set(_ data: Data, for account: String) throws {
         values[account] = data
     }
 
     func removeData(for account: String) throws {
         values.removeValue(forKey: account)
+    }
+
+    func persistedIdentity(
+        for context: PurchaseEntitlementContext
+    ) throws -> PersistedPurchaseIdentity? {
+        guard let data = try data(for: context.identityStorageAccount) else {
+            return nil
+        }
+        return try JSONDecoder().decode(
+            PersistedPurchaseIdentity.self,
+            from: data
+        )
     }
 }
 
