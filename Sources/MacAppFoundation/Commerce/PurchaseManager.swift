@@ -488,9 +488,16 @@ public final class PurchaseManager {
         )
 
         guard let reconciled = reconciliation.cache else {
+            if reconciliation.hadUnavailableLookup, let existingCache {
+                return EntitlementAccessResolution(
+                    state: .unresolved,
+                    cacheMutation: .write(existingCache.touched(at: now()))
+                )
+            }
+
             return EntitlementAccessResolution(
-                state: reconciliation.hadUnavailableLookup ? .unresolved : .inactive,
-                cacheMutation: reconciliation.hadUnavailableLookup ? .none : .remove
+                state: .inactive,
+                cacheMutation: .remove
             )
         }
 
