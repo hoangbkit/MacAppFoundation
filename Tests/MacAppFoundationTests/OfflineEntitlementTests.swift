@@ -551,7 +551,7 @@ final class OfflineEntitlementTests: XCTestCase {
 
     private static func context(account: String) -> PurchaseEntitlementContext {
         PurchaseEntitlementContext(
-            bundleID: "com.example.test",
+            bundleID: Bundle.main.bundleIdentifier ?? "com.example.test",
             environment: .production,
             appTransactionID: account
         )
@@ -617,6 +617,10 @@ private final class InMemoryEntitlementStore: VerifiedEntitlementStoring {
         values[account]
     }
 
+    func allData() throws -> [(account: String, data: Data)] {
+        values.map { (account: $0.key, data: $0.value) }
+    }
+
     func set(_ data: Data, for account: String) throws {
         values[account] = data
     }
@@ -666,7 +670,7 @@ private final class OfflineTestPurchaseService: PurchaseServing {
         entitlements
     }
 
-    func entitlementContext() -> PurchaseEntitlementContext? {
+    func entitlementContext() async -> PurchaseEntitlementContext? {
         context
     }
 
