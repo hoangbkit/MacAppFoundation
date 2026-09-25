@@ -377,14 +377,17 @@ public final class PurchaseManager {
             configuration.offlineEntitlements.verifiedCachePolicy != nil
             && shouldUseVerifiedCacheForCurrentService
 
-        let verifiedContext = usesOfflineCache
-            ? await service.entitlementContext()
-            : nil
         let records = await service.currentEntitlements()
         let recordContext = usesOfflineCache
             ? Self.context(from: records)
             : nil
-        let newlyVerifiedContext = verifiedContext ?? recordContext
+        let verifiedContext: PurchaseEntitlementContext?
+        if usesOfflineCache, recordContext == nil {
+            verifiedContext = await service.entitlementContext()
+        } else {
+            verifiedContext = nil
+        }
+        let newlyVerifiedContext = recordContext ?? verifiedContext
         let persistedContext = usesOfflineCache && newlyVerifiedContext == nil
             ? loadLastVerifiedContext()
             : nil
