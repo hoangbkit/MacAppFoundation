@@ -39,8 +39,8 @@ final class OfflineEntitlementTests: XCTestCase {
             now: { now.addingTimeInterval(60) }
         )
 
-        XCTAssertTrue(offlineManager.hasPro)
-        XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
+        XCTAssertFalse(offlineManager.hasPro)
+        XCTAssertEqual(offlineManager.accessState, .checking)
 
         await offlineManager.prepare()
 
@@ -84,12 +84,13 @@ final class OfflineEntitlementTests: XCTestCase {
             now: { now.addingTimeInterval(1_800) }
         )
 
-        XCTAssertTrue(offlineManager.hasPro)
-        XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
+        XCTAssertFalse(offlineManager.hasPro)
+        XCTAssertEqual(offlineManager.accessState, .checking)
 
         await offlineManager.prepare()
 
         XCTAssertTrue(offlineManager.hasPro)
+        XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
         XCTAssertEqual(offlineManager.entitlementState, .inactive)
     }
 
@@ -128,7 +129,7 @@ final class OfflineEntitlementTests: XCTestCase {
         )
 
         XCTAssertFalse(offlineManager.hasPro)
-        XCTAssertEqual(offlineManager.accessState, .unresolved)
+        XCTAssertEqual(offlineManager.accessState, .checking)
 
         await offlineManager.prepare()
 
@@ -173,6 +174,8 @@ final class OfflineEntitlementTests: XCTestCase {
         )
 
         XCTAssertFalse(rolledBackSubscription.hasPro)
+        XCTAssertEqual(rolledBackSubscription.accessState, .checking)
+        await rolledBackSubscription.prepare()
         XCTAssertEqual(rolledBackSubscription.accessState, .unresolved)
 
         let lifetimeStore = InMemoryEntitlementStore()
@@ -200,6 +203,9 @@ final class OfflineEntitlementTests: XCTestCase {
             now: { rolledBack }
         )
 
+        XCTAssertFalse(rolledBackLifetime.hasPro)
+        XCTAssertEqual(rolledBackLifetime.accessState, .checking)
+        await rolledBackLifetime.prepare()
         XCTAssertTrue(rolledBackLifetime.hasPro)
         XCTAssertEqual(rolledBackLifetime.accessState.source, .verifiedCache)
     }
@@ -245,7 +251,8 @@ final class OfflineEntitlementTests: XCTestCase {
             now: { now.addingTimeInterval(60) }
         )
 
-        XCTAssertTrue(manager.hasPro)
+        XCTAssertFalse(manager.hasPro)
+        XCTAssertEqual(manager.accessState, .checking)
 
         await manager.prepare()
 
@@ -398,6 +405,9 @@ final class OfflineEntitlementTests: XCTestCase {
             now: { now.addingTimeInterval(1_800) }
         )
 
+        XCTAssertFalse(offlineManager.hasPro)
+        XCTAssertEqual(offlineManager.accessState, .checking)
+        await offlineManager.prepare()
         XCTAssertTrue(offlineManager.hasPro)
         XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
     }
@@ -448,6 +458,9 @@ final class OfflineEntitlementTests: XCTestCase {
             entitlementStore: store,
             now: { now.addingTimeInterval(50) }
         )
+        XCTAssertFalse(withinWindow.hasPro)
+        XCTAssertEqual(withinWindow.accessState, .checking)
+        await withinWindow.prepare()
         XCTAssertTrue(withinWindow.hasPro)
 
         let afterWindow = PurchaseManager(
@@ -461,6 +474,9 @@ final class OfflineEntitlementTests: XCTestCase {
             entitlementStore: store,
             now: { now.addingTimeInterval(200) }
         )
+        XCTAssertFalse(afterWindow.hasPro)
+        XCTAssertEqual(afterWindow.accessState, .checking)
+        await afterWindow.prepare()
         XCTAssertFalse(afterWindow.hasPro)
         XCTAssertEqual(afterWindow.accessState, .unresolved)
     }
