@@ -1206,7 +1206,6 @@ public final class PurchaseManager {
         entitlementState = .checking
         activity = .idle
         entitlementContext = service.entitlementContext()
-        verifiedEntitlementCache = nil
         hydrateAccessFromCache()
     }
 
