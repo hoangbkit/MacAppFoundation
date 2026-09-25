@@ -166,6 +166,10 @@ public struct ProGateButton<Label: View>: View {
 
     public var body: some View {
         Button {
+            guard purchaseManager.accessState.isResolved else {
+                return
+            }
+
             switch decision {
             case .allowed:
                 onAction()
@@ -179,11 +183,14 @@ public struct ProGateButton<Label: View>: View {
         } label: {
             HStack(spacing: 6) {
                 label
-                if case .requiresPro = decision, let badgeStyle {
+                if purchaseManager.accessState.isResolved,
+                   case .requiresPro = decision,
+                   let badgeStyle {
                     ProBadge(style: badgeStyle)
                 }
             }
         }
+        .disabled(!purchaseManager.accessState.isResolved)
         .popover(isPresented: $showsLockPopover) {
             if let lockInfo {
                 ProLockPopover(info: lockInfo) {
