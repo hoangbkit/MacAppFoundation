@@ -447,7 +447,6 @@ enum OfflineEntitlementResolver {
 @MainActor
 protocol VerifiedEntitlementStoring: AnyObject {
     func data(for account: String) throws -> Data?
-    func allData() throws -> [(account: String, data: Data)]
     func set(_ data: Data, for account: String) throws
     func removeData(for account: String) throws
 }
@@ -479,33 +478,6 @@ final class KeychainVerifiedEntitlementStore: VerifiedEntitlementStoring {
             throw VerifiedEntitlementStoreError.unavailable
         }
         return data
-    }
-
-    func allData() throws -> [(account: String, data: Data)] {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecReturnAttributes as String: true,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitAll,
-        ]
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return [] }
-        guard status == errSecSuccess,
-              let items = result as? [[String: Any]]
-        else {
-            throw VerifiedEntitlementStoreError.unavailable
-        }
-
-        return items.compactMap { item in
-            guard let account = item[kSecAttrAccount as String] as? String,
-                  let data = item[kSecValueData as String] as? Data
-            else {
-                return nil
-            }
-            return (account: account, data: data)
-        }
     }
 
     func set(_ data: Data, for account: String) throws {
