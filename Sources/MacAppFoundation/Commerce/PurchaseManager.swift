@@ -52,7 +52,6 @@ public final class PurchaseManager {
     @ObservationIgnored private var hasPrepared = false
     @ObservationIgnored private var entitlementStore: (any VerifiedEntitlementStoring)?
     @ObservationIgnored private var entitlementContext: PurchaseEntitlementContext?
-    @ObservationIgnored private var verifiedEntitlementCache: VerifiedEntitlementCache?
     @ObservationIgnored private let now: () -> Date
 
     @ObservationIgnored private static let logger = Logger(
@@ -95,7 +94,6 @@ public final class PurchaseManager {
             self.entitlementStore = nil
         }
         self.entitlementContext = service.entitlementContext()
-        self.verifiedEntitlementCache = nil
         hydrateAccessFromCache()
     }
 
@@ -119,7 +117,6 @@ public final class PurchaseManager {
             ? nil
             : entitlementStore
         self.entitlementContext = service.entitlementContext()
-        self.verifiedEntitlementCache = nil
         hydrateAccessFromCache()
     }
 
@@ -713,17 +710,14 @@ public final class PurchaseManager {
               let context = entitlementContext
         else {
             accessState = .checking
-            verifiedEntitlementCache = nil
             return
         }
 
         guard let cache = loadVerifiedCache(context: context) else {
             accessState = .checking
-            verifiedEntitlementCache = nil
             return
         }
 
-        verifiedEntitlementCache = cache
         accessState = OfflineEntitlementResolver.accessState(
             cache: cache,
             context: context,
@@ -777,13 +771,11 @@ public final class PurchaseManager {
                     data,
                     for: context.storageAccount
                 )
-                verifiedEntitlementCache = cache
 
             case .remove:
                 try entitlementStore.removeData(
                     for: context.storageAccount
                 )
-                verifiedEntitlementCache = nil
             }
         } catch {
             Self.logger.warning(
