@@ -93,8 +93,8 @@ public final class PurchaseManager {
         } else {
             self.entitlementStore = nil
         }
-        self.entitlementContext = service.entitlementContext()
-        hydrateAccessFromCache()
+        self.entitlementContext = nil
+        hydrateAccessFromStartupCache()
     }
 
     /// Internal service injection used by deterministic package tests.
@@ -116,8 +116,8 @@ public final class PurchaseManager {
         self.entitlementStore = configuration.offlineEntitlements.verifiedCachePolicy == nil
             ? nil
             : entitlementStore
-        self.entitlementContext = service.entitlementContext()
-        hydrateAccessFromCache()
+        self.entitlementContext = nil
+        hydrateAccessFromStartupCache()
     }
 
     deinit {
@@ -375,8 +375,11 @@ public final class PurchaseManager {
         let service = service
         let configuration = activeConfiguration
         let entitledProductIDs = configuration.entitledProductIDs
-        let context = service.entitlementContext()
+        let verifiedContext = await service.entitlementContext()
         let records = await service.currentEntitlements()
+        let context = verifiedContext
+            ?? Self.context(from: records)
+            ?? entitlementContext
         guard generation == serviceGeneration else { return [] }
 
         guard refreshGeneration == entitlementRefreshGeneration else {
@@ -705,25 +708,112 @@ public final class PurchaseManager {
         return true
     }
 
-    private func hydrateAccessFromCache() {
+    private func hydrateAccessFromStartupCache() {
         guard let policy = activeConfiguration.offlineEntitlements.verifiedCachePolicy,
-              let context = entitlementContext
+              let entitlementStore,
+              shouldUseVerifiedCacheForCurrentService
         else {
             accessState = .checking
+            entitlementContext = nil
             return
         }
 
-        guard let cache = loadVerifiedCache(context: context) else {
+        do {
+            let bundleID = Bundle.main.bundleIdentifier
+            let candidates = try entitlementStore.allData().compactMap { item -> VerifiedEntitlementCache? in
+                guard let cache = try? JSONDecoder().decode(
+                    VerifiedEntitlementCache.self,
+                    from: item.data
+                ),
+                cache.schemaVersion == VerifiedEntitlementCache.currentSchemaVersion
+                else {
+                    return nil
+                }
+
+                if let bundleID, cache.bundleID != bundleID {
+                    return nil
+                }
+
+                #if !DEBUG
+                guard cache.environment == .production else {
+                    return nil
+                }
+                #endif
+
+                return cache
+            }
+
+            let uniqueCandidates = Dictionary(
+                candidates.map { ($0.appTransactionID, $0) },
+                uniquingKeysWith: { _, newer in newer }
+            ).values
+
+            guard uniqueCandidates.count == 1,
+                  let cache = uniqueCandidates.first
+            else {
+                accessState = .checking
+                entitlementContext = nil
+                return
+            }
+
+            let context = PurchaseEntitlementContext(
+                bundleID: cache.bundleID,
+                environment: cache.environment,
+                appTransactionID: cache.appTransactionID
+            )
+            entitlementContext = context
+            accessState = OfflineEntitlementResolver.accessState(
+                cache: cache,
+                context: context,
+                policy: policy,
+                now: now()
+            )
+        } catch {
             accessState = .checking
-            return
+            entitlementContext = nil
+            Self.logger.warning(
+                "Verified entitlement startup cache could not be discovered; live StoreKit verification remains authoritative."
+            )
+        }
+    }
+
+    private var shouldUseVerifiedCacheForCurrentService: Bool {
+        #if DEBUG
+        if service is SimulatedPurchaseService {
+            return false
+        }
+        #endif
+        return true
+    }
+
+    private static func context(
+        from records: [EntitlementRecord]
+    ) -> PurchaseEntitlementContext? {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let identified = records.compactMap { record -> PurchaseEntitlementContext? in
+            guard let appTransactionID = record.appTransactionID,
+                  record.environment != .unknown
+            else {
+                return nil
+            }
+
+            return PurchaseEntitlementContext(
+                bundleID: bundleID,
+                environment: record.environment,
+                appTransactionID: appTransactionID
+            )
         }
 
-        accessState = OfflineEntitlementResolver.accessState(
-            cache: cache,
-            context: context,
-            policy: policy,
-            now: now()
-        )
+        guard let first = identified.first,
+              identified.allSatisfy({
+                  $0.appTransactionID == first.appTransactionID
+                      && $0.environment == first.environment
+              })
+        else {
+            return nil
+        }
+
+        return first
     }
 
     private func loadVerifiedCache(
@@ -1205,8 +1295,8 @@ public final class PurchaseManager {
         productLoadingState = .idle
         entitlementState = .checking
         activity = .idle
-        entitlementContext = service.entitlementContext()
-        hydrateAccessFromCache()
+        entitlementContext = nil
+        hydrateAccessFromStartupCache()
     }
 
     private func startObservingTransactions() {
