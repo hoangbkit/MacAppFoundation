@@ -2,7 +2,7 @@
 
 `MacAppFoundation` includes a lightweight first-party analytics client for the native `/v1/analytics/batch` contract in `analytics-server`.
 
-It is intentionally small: apps explicitly record product events while the foundation handles stable installation identity, foreground session accounting, local cumulative counters, bounded offline storage, and batched uploads.
+It is intentionally small: apps explicitly record app-specific product events while the foundation handles stable installation identity, foreground session accounting, local cumulative counters, bounded offline storage, and batched uploads. MacAppFoundation-owned surfaces may also record their own bounded events when an analytics client is present.
 
 ## Server requirements
 
@@ -49,6 +49,8 @@ ContentView()
     .managesAnalytics(analytics)
 ```
 
+`managesAnalytics` also exposes that same client to MacAppFoundation-owned descendant views through an optional SwiftUI environment value. Apps that do not call `managesAnalytics` keep the environment empty; commerce and paywall behavior continue normally with no analytics traffic.
+
 On macOS, lifecycle tracking uses `NSApplication.didBecomeActiveNotification` and `NSApplication.willResignActiveNotification`. It is application-level rather than window-level, so moving between windows inside the same app does not end a session.
 
 ## Events
@@ -62,6 +64,30 @@ try await analytics.track("purchase_started", dimension: "yearly")
 ```
 
 Event names must be lowercase snake case. Dimensions use the server-safe character set and are intended for bounded categories such as model, plan, feature, or export type. Do not put free-form user content, prompts, filenames, email addresses, or other high-cardinality/private values in dimensions.
+
+### Automatic Pro paywall events
+
+When a `ProPaywallView` is inside a hierarchy managed by `.managesAnalytics(analytics)`, it automatically records the following commerce funnel events. If no analytics client is present, every event is silently skipped.
+
+| Event | Dimension |
+| --- | --- |
+| `paywall_viewed` | none |
+| `paywall_closed` | none |
+| `paywall_plan_selected` | `monthly`, `yearly`, `lifetime`, or `recurring` |
+| `purchase_started` | plan |
+| `purchase_succeeded` | plan |
+| `purchase_pending` | plan |
+| `purchase_cancelled` | plan |
+| `purchase_failed` | `<plan>:<failure_code>` |
+| `restore_started` | none |
+| `restore_succeeded` | none |
+| `restore_nothing_to_restore` | none |
+| `restore_failed` | stable failure code |
+| `offer_code_opened` | none |
+| `offer_code_succeeded` | none |
+| `offer_code_failed` | stable failure code or `unknown` |
+
+Automatic default-plan selection does not emit `paywall_plan_selected`; only an explicit user selection does. Analytics is best effort and never changes, delays, or fails a StoreKit operation. Prices, transaction identifiers, receipts, localized product names, arbitrary error text, and other user-specific commerce data are not recorded.
 
 
 ## Native context
