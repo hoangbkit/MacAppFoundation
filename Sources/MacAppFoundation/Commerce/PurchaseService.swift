@@ -9,7 +9,7 @@ protocol PurchaseServing: AnyObject {
     /// Returns only records the backing store currently considers entitled.
     /// Consumers must not independently expire these records after they are returned.
     func currentEntitlements() async -> [EntitlementRecord]
-    func entitlementContext() -> PurchaseEntitlementContext?
+    func entitlementContext() async -> PurchaseEntitlementContext?
     func latestEntitlement(for productID: String) async -> LatestEntitlementLookup
     func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String>
     func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String>
@@ -17,7 +17,7 @@ protocol PurchaseServing: AnyObject {
 }
 
 extension PurchaseServing {
-    func entitlementContext() -> PurchaseEntitlementContext? {
+    func entitlementContext() async -> PurchaseEntitlementContext? {
         nil
     }
 
@@ -93,17 +93,24 @@ final class LiveStoreKitService: PurchaseServing {
         return records
     }
 
-    func entitlementContext() -> PurchaseEntitlementContext? {
-        switch AppTransaction.shared {
-        case .verified(let appTransaction):
-            return PurchaseEntitlementContext(
-                bundleID: appTransaction.bundleID,
-                environment: Self.makeEnvironment(appTransaction.environment),
-                appTransactionID: appTransaction.appTransactionID
-            )
-        case .unverified(_, let error):
-            Self.logger.warning(
-                "Unable to verify AppTransaction for entitlement cache: \(String(describing: error), privacy: .public)"
+    func entitlementContext() async -> PurchaseEntitlementContext? {
+        do {
+            switch try await AppTransaction.shared {
+            case .verified(let appTransaction):
+                return PurchaseEntitlementContext(
+                    bundleID: appTransaction.bundleID,
+                    environment: Self.makeEnvironment(appTransaction.environment),
+                    appTransactionID: appTransaction.appTransactionID
+                )
+            case .unverified(_, let error):
+                Self.logger.warning(
+                    "Unable to verify AppTransaction for entitlement cache: \(String(describing: error), privacy: .public)"
+                )
+                return nil
+            }
+        } catch {
+            Self.logger.notice(
+                "AppTransaction is unavailable; verified offline entitlement fallback may be used."
             )
             return nil
         }
