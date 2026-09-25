@@ -94,7 +94,6 @@ public final class PurchaseManager {
             self.entitlementStore = nil
         }
         self.entitlementContext = nil
-        hydrateAccessFromStartupCache()
     }
 
     /// Internal service injection used by deterministic package tests.
@@ -117,7 +116,6 @@ public final class PurchaseManager {
             ? nil
             : entitlementStore
         self.entitlementContext = nil
-        hydrateAccessFromStartupCache()
     }
 
     deinit {
@@ -377,8 +375,16 @@ public final class PurchaseManager {
         let entitledProductIDs = configuration.entitledProductIDs
         let verifiedContext = await service.entitlementContext()
         let records = await service.currentEntitlements()
+        let recordContext = Self.context(from: records)
+
+        if verifiedContext == nil,
+           recordContext == nil,
+           entitlementContext == nil {
+            hydrateUnambiguousFallbackCache()
+        }
+
         let context = verifiedContext
-            ?? Self.context(from: records)
+            ?? recordContext
             ?? entitlementContext
         guard generation == serviceGeneration else { return [] }
 
@@ -708,7 +714,7 @@ public final class PurchaseManager {
         return true
     }
 
-    private func hydrateAccessFromStartupCache() {
+    private func hydrateUnambiguousFallbackCache() {
         guard let policy = activeConfiguration.offlineEntitlements.verifiedCachePolicy,
               let entitlementStore,
               shouldUseVerifiedCacheForCurrentService
@@ -1296,7 +1302,6 @@ public final class PurchaseManager {
         entitlementState = .checking
         activity = .idle
         entitlementContext = nil
-        hydrateAccessFromStartupCache()
     }
 
     private func startObservingTransactions() {
