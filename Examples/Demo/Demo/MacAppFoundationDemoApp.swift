@@ -34,7 +34,7 @@ struct MacAppFoundationDemoApp: App {
         analytics = AppAnalyticsClient(
             configuration: AppAnalyticsConfiguration(
                 appID: "maf",
-                appKey: Bundle.main.bundleIdentifier,
+                appKey: Bundle.main.bundleIdentifier ?? "com.hoangbkit.maf",
                 baseURL: URL(string: "https://analytics.133043.xyz")!
             )
         )
@@ -113,6 +113,7 @@ struct MacAppFoundationDemoApp: App {
             DemoOnboardingView(onboarding: onboarding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .macAppTheme(themeStore)
+                .managesAnalytics(analytics)
         }
 
         MacAppFullSizeWindow(
@@ -139,6 +140,7 @@ struct MacAppFoundationDemoApp: App {
             DemoUpsellWindow(purchaseManager: purchases)
                 .environment(demoState)
                 .macAppTheme(themeStore)
+                .managesAnalytics(analytics)
         }
         .defaultSize(width: 560, height: 520)
         .windowResizability(.contentSize)
