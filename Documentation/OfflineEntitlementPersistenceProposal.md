@@ -11,7 +11,8 @@ Chosen implementation decisions:
 - `hasPro` derives from effective access
 - verified offline persistence is opt-in and disabled by default
 - verified cache data is stored in Keychain
-- cache identity is scoped by bundle ID, StoreKit environment, and `appTransactionID`
+- entitlement caches are scoped by bundle ID, StoreKit environment, and `appTransactionID`
+- the last verified StoreKit account identity is persisted separately, including for Free accounts
 - directly purchased Lifetime access is durable offline
 - subscriptions are bounded by their verified expiration or grace-period expiration
 - family-shared non-consumables use a bounded offline window
@@ -136,9 +137,13 @@ Conceptually:
 
 bundle ID + StoreKit environment + appTransactionID -> verified entitlement cache
 
-If account identity cannot be established during an offline launch, MAF should avoid silently binding a cache to a different account.
+Persist the last verified StoreKit account identity separately from entitlement caches, including when that account has no Pro entitlement.
 
-The first launch after upgrading from a version that did not persist account-scoped identity needs explicit migration behavior and tests.
+When live account identity cannot be established during an offline launch, MAF should use that last verified identity to select only the matching account cache. It must never scan paid caches and choose another account merely because that cache is the only paid one available.
+
+This prevents a previously paid Account A from unlocking an offline launch after the user has switched to a verified Free Account B.
+
+The first launch after upgrading from a version that did not persist account-scoped identity still needs explicit migration behavior and tests.
 
 ## Storage
 
@@ -558,7 +563,8 @@ The implementation resolves the former ready-to-build questions as follows:
 
 - effective access uses the additive `PurchaseAccessState` API
 - persistence is opt-in through `PurchaseConfiguration.offlineEntitlements`
-- cache namespace uses bundle ID + StoreKit environment + `appTransactionID`
+- entitlement cache namespace uses bundle ID + StoreKit environment + `appTransactionID`
+- last verified StoreKit identity is persisted independently from entitlement state, so Free account switches survive relaunch
 - directly purchased Lifetime access remains usable offline until authoritative revocation is observed
 - recurring access is bounded by verified expiration/grace data and guarded against wall-clock rollback
 - Family Sharing uses a bounded offline window, configurable by policy
