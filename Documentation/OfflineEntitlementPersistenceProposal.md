@@ -2,7 +2,21 @@
 
 ## Status
 
-Proposal only. No implementation is included in this change.
+Implemented on this branch. This document remains the design rationale and risk checklist for the implementation.
+
+Chosen implementation decisions:
+
+- live StoreKit state remains available as `PurchaseManager.entitlementState`
+- effective authorization is exposed as `PurchaseManager.accessState`
+- `hasPro` derives from effective access
+- verified offline persistence is opt-in and disabled by default
+- verified cache data is stored in Keychain
+- cache identity is scoped by bundle ID, StoreKit environment, and `appTransactionID`
+- directly purchased Lifetime access is durable offline
+- subscriptions are bounded by their verified expiration or grace-period expiration
+- family-shared non-consumables use a bounded offline window
+- ambiguous empty entitlement results are reconciled with `Transaction.latest(for:)`
+- current sellable product IDs are independent from historical entitlement-granting IDs
 
 Target: MacAppFoundation commerce layer  
 Base: develop  
@@ -538,20 +552,20 @@ Implementation should verify current SDK semantics and availability for:
 
 Do not rely solely on this proposal text when coding against a future SDK.
 
-## Definition of ready-to-build
+## Resolved implementation decisions
 
-Do not start implementation until these are agreed:
+The implementation resolves the former ready-to-build questions as follows:
 
-- public API shape for effective access state
-- persistence opt-in configuration
-- cache namespace and account identity strategy
-- directly purchased Lifetime offline policy
-- subscription offline validity policy
-- Family Sharing cache policy
-- definition of definitive versus ambiguous inactive state
-- whether hasPro changes semantics or a new property is introduced
-- storage mechanism
-- historical entitlement-ID behavior
+- effective access uses the additive `PurchaseAccessState` API
+- persistence is opt-in through `PurchaseConfiguration.offlineEntitlements`
+- cache namespace uses bundle ID + StoreKit environment + `appTransactionID`
+- directly purchased Lifetime access remains usable offline until authoritative revocation is observed
+- recurring access is bounded by verified expiration/grace data and guarded against wall-clock rollback
+- Family Sharing uses a bounded offline window, configurable by policy
+- empty current entitlement results use latest-transaction reconciliation; unavailable verification remains unresolved rather than fabricating Free
+- `hasPro` reflects effective access while `entitlementState` continues to expose live StoreKit state
+- cache storage uses Keychain
+- historical entitlement IDs may exist outside the current sellable product catalog
 
 ## Definition of done for a future implementation
 
