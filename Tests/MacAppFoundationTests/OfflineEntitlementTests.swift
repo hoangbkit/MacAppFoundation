@@ -543,6 +543,48 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
     }
 
+    func testVerifiedEntitlementSkipsSeparateAccountContextLookup() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [Self.lifetimeRecord(context: context)],
+            products: [Self.lifetime]
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            now: { now }
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(service.entitlementContextCallCount, 0)
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertEqual(manager.accessState.source, .storeKit)
+    }
+
+    func testEmptyCurrentEntitlementsUseAccountContextLookup() async {
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .notPurchased
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore()
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(service.entitlementContextCallCount, 1)
+        XCTAssertEqual(manager.accessState, .inactive)
+    }
+
     func testDisabledOfflinePolicyDoesNotRequestAccountContext() async {
         let service = OfflineTestPurchaseService(
             context: Self.context(account: "account-a"),
