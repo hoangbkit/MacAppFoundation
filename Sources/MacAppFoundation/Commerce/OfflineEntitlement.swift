@@ -345,6 +345,9 @@ enum OfflineEntitlementResolver {
             if record.ownership == .purchased {
                 return true
             }
+            guard !clockRolledBack else {
+                return false
+            }
             guard let expiration = offlineExpiration(
                 record,
                 cache: cache,
