@@ -121,6 +121,53 @@ struct PurchaseEntitlementContext: Sendable, Equatable {
     var storageAccount: String {
         "\(bundleID)|\(environment.rawValue)|\(appTransactionID)"
     }
+
+    var identityStorageAccount: String {
+        Self.identityStorageAccount(
+            bundleID: bundleID,
+            environment: environment
+        )
+    }
+
+    static func identityStorageAccount(
+        bundleID: String,
+        environment: PurchaseStoreEnvironment
+    ) -> String {
+        "__maf.last-verified-context|\(bundleID)|\(environment.rawValue)"
+    }
+}
+
+struct PersistedPurchaseIdentity: Codable, Sendable, Equatable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let bundleID: String
+    let environment: PurchaseStoreEnvironment
+    let appTransactionID: String
+    let verifiedAt: Date
+
+    init(context: PurchaseEntitlementContext, verifiedAt: Date) {
+        schemaVersion = Self.currentSchemaVersion
+        bundleID = context.bundleID
+        environment = context.environment
+        appTransactionID = context.appTransactionID
+        self.verifiedAt = verifiedAt
+    }
+
+    var context: PurchaseEntitlementContext {
+        PurchaseEntitlementContext(
+            bundleID: bundleID,
+            environment: environment,
+            appTransactionID: appTransactionID
+        )
+    }
+
+    func isValid(forBundleID bundleID: String) -> Bool {
+        schemaVersion == Self.currentSchemaVersion
+            && self.bundleID == bundleID
+            && environment != .unknown
+            && !appTransactionID.isEmpty
+    }
 }
 
 enum LatestEntitlementLookup: Sendable, Equatable {
