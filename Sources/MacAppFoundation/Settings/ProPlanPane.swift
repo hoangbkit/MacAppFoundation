@@ -43,7 +43,7 @@ public struct ProPlanPane: View {
 
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .center, spacing: 10) {
-                        Text(purchaseManager.hasPro ? configuration.proTitle : configuration.freeTitle)
+                        Text(planTitle)
                             .font(.system(size: 30, weight: .bold, design: .rounded))
                             .foregroundStyle(theme.textPrimary)
 
@@ -61,11 +61,7 @@ public struct ProPlanPane: View {
                         }
                     }
 
-                    Text(
-                        purchaseManager.hasPro
-                            ? configuration.proDescription
-                            : configuration.freeDescription
-                    )
+                    Text(planDescription)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textSecondary)
 
@@ -139,6 +135,7 @@ public struct ProPlanPane: View {
 
     private var actionState: ProPlanPaneActionState {
         ProPlanPaneActionState(
+            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
             activeProduct: purchaseManager.activeProduct,
             activeSubscriptionProduct: purchaseManager.activeSubscriptionProduct
@@ -147,6 +144,22 @@ public struct ProPlanPane: View {
 
     private var resolvedFeatures: [PurchaseFeature] {
         configuration.features ?? purchaseManager.features
+    }
+
+    private var planTitle: String {
+        if !purchaseManager.accessState.isResolved {
+            return "Checking…"
+        }
+        return purchaseManager.hasPro ? configuration.proTitle : configuration.freeTitle
+    }
+
+    private var planDescription: String {
+        if !purchaseManager.accessState.isResolved {
+            return "Verifying your App Store entitlement."
+        }
+        return purchaseManager.hasPro
+            ? configuration.proDescription
+            : configuration.freeDescription
     }
 
     private var currentPlanLabel: String {
@@ -204,12 +217,13 @@ struct ProPlanPaneActionState: Equatable {
     let showsManageSubscription: Bool
 
     init(
+        isResolved: Bool = true,
         hasPro: Bool,
         activeProduct: StoreProduct?,
         activeSubscriptionProduct: StoreProduct?
     ) {
-        showsUpgrade = !hasPro
-        showsViewPlans = hasPro && activeProduct?.isRecurring == true
-        showsManageSubscription = activeSubscriptionProduct != nil
+        showsUpgrade = isResolved && !hasPro
+        showsViewPlans = isResolved && hasPro && activeProduct?.isRecurring == true
+        showsManageSubscription = isResolved && activeSubscriptionProduct != nil
     }
 }
