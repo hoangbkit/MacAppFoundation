@@ -41,6 +41,57 @@ final class EntitlementEvaluatorTests: XCTestCase {
         XCTAssertEqual(snapshot.latestExpirationDate, expirationDate)
     }
 
+    func testGracePeriodExtendsRecurringEntitlement() {
+        let state = EntitlementEvaluator.evaluate(
+            [
+                EntitlementRecord(
+                    productID: "pro.monthly",
+                    expirationDate: now.addingTimeInterval(-60),
+                    gracePeriodExpirationDate: now.addingTimeInterval(3_600),
+                    productKind: .autoRenewable,
+                    subscriptionState: .inGracePeriod
+                )
+            ],
+            entitledProductIDs: entitledIDs,
+            at: now
+        )
+
+        XCTAssertTrue(state.isActive)
+    }
+
+    func testBillingRetryWithoutGraceIsInactive() {
+        let state = EntitlementEvaluator.evaluate(
+            [
+                EntitlementRecord(
+                    productID: "pro.monthly",
+                    expirationDate: now.addingTimeInterval(3_600),
+                    productKind: .autoRenewable,
+                    subscriptionState: .inBillingRetryPeriod
+                )
+            ],
+            entitledProductIDs: entitledIDs,
+            at: now
+        )
+
+        XCTAssertEqual(state, .inactive)
+    }
+
+    func testCurrentEntitlementsDefensivelyRejectRevokedRecord() {
+        let state = EntitlementEvaluator.evaluateCurrentEntitlements(
+            [
+                EntitlementRecord(
+                    productID: "pro.lifetime",
+                    revocationDate: now,
+                    productKind: .nonConsumable,
+                    ownership: .purchased
+                )
+            ],
+            entitledProductIDs: entitledIDs
+        )
+
+        XCTAssertEqual(state, .inactive)
+    }
+
     func testCurrentEntitlementsStillRequireConfiguredEntitlementProduct() {
         let state = EntitlementEvaluator.evaluateCurrentEntitlements(
             [EntitlementRecord(productID: "unmanaged.product")],
