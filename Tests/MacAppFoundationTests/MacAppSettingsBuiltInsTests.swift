@@ -113,6 +113,16 @@ struct MacAppSettingsBuiltInsTests {
             price: 79.99
         )
 
+        let unresolved = ProPlanPaneActionState(
+            isResolved: false,
+            hasPro: false,
+            activeProduct: nil,
+            activeSubscriptionProduct: nil
+        )
+        #expect(!unresolved.showsUpgrade)
+        #expect(!unresolved.showsViewPlans)
+        #expect(!unresolved.showsManageSubscription)
+
         let free = ProPlanPaneActionState(
             hasPro: false,
             activeProduct: nil,
