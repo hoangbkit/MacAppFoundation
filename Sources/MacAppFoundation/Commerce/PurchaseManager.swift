@@ -757,7 +757,9 @@ public final class PurchaseManager {
             }
 
             let uniqueCandidates = Dictionary(
-                candidates.map { ($0.appTransactionID, $0) },
+                candidates.map {
+                    ("\($0.environment.rawValue)|\($0.appTransactionID)", $0)
+                },
                 uniquingKeysWith: { _, newer in newer }
             ).values
 
@@ -1307,6 +1309,7 @@ public final class PurchaseManager {
         products = []
         productLoadingState = .idle
         entitlementState = .checking
+        accessState = .checking
         activity = .idle
         entitlementContext = nil
     }
