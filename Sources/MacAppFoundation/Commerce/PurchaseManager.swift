@@ -373,7 +373,9 @@ public final class PurchaseManager {
         let service = service
         let configuration = activeConfiguration
         let entitledProductIDs = configuration.entitledProductIDs
-        let usesOfflineCache = configuration.offlineEntitlements.verifiedCachePolicy != nil
+        let usesOfflineCache =
+            configuration.offlineEntitlements.verifiedCachePolicy != nil
+            && shouldUseVerifiedCacheForCurrentService
 
         let verifiedContext = usesOfflineCache
             ? await service.entitlementContext()
@@ -439,7 +441,9 @@ public final class PurchaseManager {
         service: any PurchaseServing,
         configuration: PurchaseConfiguration
     ) async -> EntitlementAccessResolution {
-        guard let policy = configuration.offlineEntitlements.verifiedCachePolicy else {
+        guard let policy = configuration.offlineEntitlements.verifiedCachePolicy,
+              shouldUseVerifiedCacheForCurrentService
+        else {
             return EntitlementAccessResolution(
                 state: Self.liveAccessState(from: liveState),
                 cacheMutation: .none
