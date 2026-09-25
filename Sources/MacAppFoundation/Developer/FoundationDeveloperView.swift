@@ -94,7 +94,8 @@ public struct FoundationDeveloperView: View {
                 )
             )
 
-            LabeledContent("Entitlement", value: entitlementTitle)
+            LabeledContent("Live entitlement", value: entitlementTitle)
+            LabeledContent("Effective access", value: accessTitle)
             LabeledContent("Product state", value: productLoadingTitle)
 
             NavigationLink {
@@ -310,6 +311,21 @@ public struct FoundationDeveloperView: View {
         }
     }
 
+    private var accessTitle: String {
+        switch purchaseManager.accessState {
+        case .checking:
+            return "Checking"
+        case .unresolved:
+            return "Unresolved"
+        case .inactive:
+            return "Free"
+        case .active(let source, let snapshot):
+            let productIDs = snapshot.activeProductIDs.sorted().joined(separator: ", ")
+            let sourceLabel = source == .storeKit ? "StoreKit" : "Verified cache"
+            return "\(productIDs) · \(sourceLabel)"
+        }
+    }
+
     private var simulatedEntitlementTitle: String {
         let ids = purchaseManager.simulatedPurchasedProductIDs
         guard !ids.isEmpty else { return "Free" }
@@ -353,7 +369,8 @@ public struct FoundationDeveloperView: View {
         Bundle: \(info.bundleIdentifier)
         System: \(ProcessInfo.processInfo.operatingSystemVersionString)
         Purchase mode: \(purchaseModeTitle)
-        Entitlement: \(entitlementTitle)
+        Live entitlement: \(entitlementTitle)
+        Effective access: \(accessTitle)
         Product state: \(productLoadingTitle)
         Purchase activity: \(purchaseActivityTitle)
         Preferred product: \(purchaseManager.preferredProduct?.id ?? "None")
