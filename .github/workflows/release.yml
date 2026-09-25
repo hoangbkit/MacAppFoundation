@@ -1,0 +1,118 @@
+name: Demo Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mycli-demo-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release Demo
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Select Xcode 26.3
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Demo project
+        working-directory: Examples/Demo
+        run: xcodegen generate --spec project.yml
+
+      - name: Set build release tag
+        id: release
+        shell: bash
+        run: |
+          tag="mycli-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Build release: $tag"
+
+      - name: Build unsigned universal macOS Demo
+        shell: bash
+        working-directory: Examples/Demo
+        run: |
+          MAC_DERIVED="$RUNNER_TEMP/MAF-macOS"
+          SOURCE_PACKAGES="$RUNNER_TEMP/MAF-SourcePackages"
+          ARTIFACTS="$GITHUB_WORKSPACE/artifacts"
+
+          args=(
+            -project MacAppFoundationDemo.xcodeproj
+            -scheme MacAppFoundationDemo
+            -configuration Release
+            -sdk macosx
+            -destination "platform=macOS"
+            -derivedDataPath "$MAC_DERIVED"
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES"
+            ARCHS="arm64 x86_64"
+            ONLY_ACTIVE_ARCH=NO
+            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_REQUIRED=NO
+            ASSETCATALOG_COMPILER_APPICON_NAME=
+            EXCLUDED_SOURCE_FILE_NAMES=AppIcon.icon
+            build
+          )
+          xcodebuild "${args[@]}"
+
+          MAC_APP="$MAC_DERIVED/Build/Products/Release/MAF.app"
+          test -d "$MAC_APP"
+
+          MAC_EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$MAC_APP/Contents/Info.plist")"
+          MAC_ARCHS="$(lipo -archs "$MAC_APP/Contents/MacOS/$MAC_EXECUTABLE")"
+          echo "macOS architectures: $MAC_ARCHS"
+          [[ " $MAC_ARCHS " == *" arm64 "* ]] || { echo "error: arm64 slice missing" >&2; exit 1; }
+          [[ " $MAC_ARCHS " == *" x86_64 "* ]] || { echo "error: x86_64 slice missing" >&2; exit 1; }
+
+          mkdir -p "$ARTIFACTS"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$MAC_APP" \
+            "$ARTIFACTS/MacAppFoundationDemo-macOS-universal-unsigned-${{ steps.release.outputs.tag }}.zip"
+
+          rm -rf "$MAC_DERIVED"
+
+      - name: Verify release archive
+        shell: bash
+        run: |
+          ls -lh artifacts
+
+          archive="artifacts/MacAppFoundationDemo-macOS-universal-unsigned-${{ steps.release.outputs.tag }}.zip"
+          test -f "$archive"
+
+          bytes="$(stat -f%z "$archive")"
+          if (( bytes >= 2147483648 )); then
+            echo "error: $archive is too large for a GitHub Release asset" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_SHA: ${{ steps.release.outputs.release_sha }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" artifacts/*.zip \
+            --target "$RELEASE_SHA" \
+            --title "$RELEASE_TAG" \
+            --prerelease \
+            --generate-notes

@@ -36,10 +36,12 @@ XcodeGen 2.45.4+ is required.
 - separate Developer Tools window opened from `CommandMenu("Developer")`
 - developer replays, actions, toggles, values, and custom destinations
 - full simulated-plan editor, entitlement forcing, failures, latency, trials, and introductory offers through Developer Tools
-- dedicated Analytics section for runtime server URL, App ID, optional App Key, custom event, and custom error testing
-- real outbound analytics requests through `AppAnalyticsClient` with no hardcoded Demo App ID or App Key
+- one shared app-scoped `AppAnalyticsClient` reused across Demo scenes through `.managesAnalytics`
+- Demo analytics configured for app ID `maf` at `analytics.133043.xyz`, using `Bundle.main.bundleIdentifier` (`com.hoangbkit.maf`) as the native app key
+- dedicated Analytics section for custom event, custom error, flush, and local-state testing against that same shared client
+- automatic `ProPaywallView` commerce funnel events through the shared analytics environment
 
-The Demo deliberately applies the same `MacAppThemeStore` to the main window, onboarding, paywall, upsell, Developer Tools, and Settings roots. This demonstrates the required multi-scene integration pattern: SwiftUI scene environments do not automatically cross scene boundaries, but all scenes stay synchronized when they share the same observable store.
+The Demo deliberately applies the same `MacAppThemeStore` and shared analytics client to the main window, onboarding, paywall, upsell, Developer Tools, and Settings roots. This demonstrates the required multi-scene integration pattern: SwiftUI scene environments do not automatically cross scene boundaries, so each scene root receives the same shared dependencies.
 
 The Appearance pane exposes every built-in in catalog order:
 

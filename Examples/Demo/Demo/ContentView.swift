@@ -44,6 +44,7 @@ private enum DemoSection: String, CaseIterable, Identifiable {
 struct ContentView: View {
     let purchaseManager: PurchaseManager
     let settingsRouter: MacAppSettingsRouter
+    let analytics: AppAnalyticsClient
 
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
@@ -93,7 +94,7 @@ struct ContentView: View {
         case .settings:
             SettingsShowcaseView()
         case .analytics:
-            AnalyticsShowcaseView()
+            AnalyticsShowcaseView(analytics: analytics)
         case .developer:
             DeveloperToolsShowcaseView()
         }

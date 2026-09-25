@@ -1,11 +1,10 @@
+import Foundation
 import MacAppFoundation
 import SwiftUI
 
 @MainActor
 struct AnalyticsShowcaseView: View {
-    @State private var serverURL = "https://analytics.133043.xyz"
-    @State private var appID = ""
-    @State private var appKey = ""
+    let analytics: AppAnalyticsClient
 
     @State private var eventName = ""
     @State private var eventDimension = ""
@@ -26,31 +25,20 @@ struct AnalyticsShowcaseView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Analytics")
                         .font(.system(size: 30, weight: .bold))
-                    Text("Exercise the real AppAnalyticsClient against any analytics-server app. App ID and app key are entered at runtime and are not hardcoded by the Demo.")
+                    Text("Exercise the same app-scoped AppAnalyticsClient used by the Demo and its MacAppFoundation-owned surfaces.")
                         .foregroundStyle(.secondary)
                 }
 
                 GroupBox("Connection") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        LabeledContent("Server URL") {
-                            TextField("https://analytics.example.com", text: $serverURL)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(minWidth: 360)
-                        }
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("Server", value: "analytics.133043.xyz")
+                        LabeledContent("App ID", value: "maf")
+                        LabeledContent(
+                            "App Key",
+                            value: Bundle.main.bundleIdentifier ?? "Unavailable"
+                        )
 
-                        LabeledContent("App ID") {
-                            TextField("required", text: $appID)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(minWidth: 360)
-                        }
-
-                        LabeledContent("App Key") {
-                            SecureField("optional", text: $appKey)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(minWidth: 360)
-                        }
-
-                        Text("Leave App Key empty to test keyless native ingestion. The Demo does not persist the app key; App ID still scopes the SDK local analytics state and installation identity.")
+                        Text("The Demo uses its bundle identifier as the native app key and shares this one analytics client across the app.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -87,7 +75,7 @@ struct AnalyticsShowcaseView: View {
                             }
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(isSending || trimmed(appID).isEmpty || trimmed(eventName).isEmpty)
+                        .disabled(isSending || trimmed(eventName).isEmpty)
                     }
                     .padding(6)
                 }
@@ -134,7 +122,6 @@ struct AnalyticsShowcaseView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(
                             isSending
-                                || trimmed(appID).isEmpty
                                 || trimmed(errorCode).isEmpty
                                 || trimmed(errorComponent).isEmpty
                         )
@@ -144,14 +131,14 @@ struct AnalyticsShowcaseView: View {
 
                 GroupBox("Local Test State") {
                     HStack {
-                        Text("Clear the local cumulative snapshot for the currently entered App ID.")
+                        Text("Clear the Demo app's local cumulative analytics snapshot.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Button("Reset Local State", role: .destructive) {
                             Task { await resetLocalState() }
                         }
-                        .disabled(isSending || trimmed(appID).isEmpty)
+                        .disabled(isSending)
                     }
                     .padding(6)
                 }
@@ -180,38 +167,35 @@ struct AnalyticsShowcaseView: View {
 
     private func sendEvent() async {
         await perform {
-            let client = try makeClient()
             let dimension = trimmed(eventDimension)
-            try await client.track(
+            try await analytics.track(
                 trimmed(eventName),
                 dimension: dimension.isEmpty ? nil : dimension,
                 count: eventCount
             )
-            try await client.flush()
+            try await analytics.flush()
             return "Event '\(trimmed(eventName))' accepted by the analytics server."
         }
     }
 
     private func sendError() async {
         await perform {
-            let client = try makeClient()
             let severity: AppAnalyticsErrorSeverity = errorSeverity == "fatal" ? .fatal : .error
-            try await client.trackError(
+            try await analytics.trackError(
                 trimmed(errorCode),
                 component: trimmed(errorComponent),
                 severity: severity,
                 count: errorCount
             )
-            try await client.flush()
+            try await analytics.flush()
             return "Error '\(trimmed(errorCode))' accepted by the analytics server."
         }
     }
 
     private func resetLocalState() async {
         await perform {
-            let client = try makeClient()
-            try await client.resetLocalState()
-            return "Local analytics state reset for '\(trimmed(appID))'."
+            try await analytics.resetLocalState()
+            return "Local analytics state reset for 'maf'."
         }
     }
 
@@ -227,29 +211,6 @@ struct AnalyticsShowcaseView: View {
             statusMessage = error.localizedDescription
             statusIsError = true
         }
-    }
-
-    private func makeClient() throws -> AppAnalyticsClient {
-        let id = trimmed(appID)
-        guard !id.isEmpty else {
-            throw AppAnalyticsError.invalidConfiguration("App ID is required.")
-        }
-
-        let urlText = trimmed(serverURL)
-        guard let url = URL(string: urlText), url.host != nil else {
-            throw AppAnalyticsError.invalidConfiguration("Server URL is invalid.")
-        }
-
-        let key = trimmed(appKey)
-        return AppAnalyticsClient(
-            configuration: AppAnalyticsConfiguration(
-                appID: id,
-                appKey: key.isEmpty ? nil : key,
-                baseURL: url,
-                stateStorageKey: "macappfoundation.demo.analytics.test.\(id)",
-                transportRetryCount: 0
-            )
-        )
     }
 
     private func trimmed(_ value: String) -> String {
