@@ -55,6 +55,15 @@ public enum PurchaseAccessState: Sendable, Equatable {
         return false
     }
 
+    public var isResolved: Bool {
+        switch self {
+        case .inactive, .active:
+            return true
+        case .checking, .unresolved:
+            return false
+        }
+    }
+
     public var snapshot: EntitlementSnapshot? {
         guard case .active(_, let snapshot) = self else { return nil }
         return snapshot
