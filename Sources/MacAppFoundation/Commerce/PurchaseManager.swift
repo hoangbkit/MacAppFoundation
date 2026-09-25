@@ -464,13 +464,7 @@ public final class PurchaseManager {
             )
         }
 
-        guard let existingCache = loadVerifiedCache(context: context) else {
-            return EntitlementAccessResolution(
-                state: .inactive,
-                cacheMutation: .none
-            )
-        }
-
+        let existingCache = loadVerifiedCache(context: context)
         let reconciliation = await reconciledCache(
             liveRecords: [],
             existingCache: existingCache,
@@ -560,6 +554,23 @@ public final class PurchaseManager {
                     }
                 }
             }
+        } else if liveRecords.isEmpty {
+            for productID in entitledProductIDs.sorted() {
+                switch await service.latestEntitlement(for: productID) {
+                case .verified(let record):
+                    if let persistedRecord = freshReconciledRecord(
+                        latestRecord: record,
+                        context: context,
+                        now: date
+                    ) {
+                        persisted.append(persistedRecord)
+                    }
+                case .notPurchased:
+                    continue
+                case .unavailable:
+                    hadUnavailableLookup = true
+                }
+            }
         }
 
         guard !persisted.isEmpty else {
@@ -585,26 +596,52 @@ public final class PurchaseManager {
             )
         }
 
-        let liveRecordByID = Dictionary(
-            uniqueKeysWithValues: eligibleLiveRecords.map { ($0.productID, $0) }
-        )
-        let cacheRecords = uniquePersisted.compactMap { liveRecordByID[$0.productID] }
-        guard !cacheRecords.isEmpty else {
-            return ReconciledCacheResult(
-                cache: nil,
-                hadUnavailableLookup: hadUnavailableLookup
-            )
-        }
-
         return ReconciledCacheResult(
             cache: VerifiedEntitlementCache(
                 context: context,
                 verifiedAt: date,
-                records: cacheRecords,
-                entitledProductIDs: entitledProductIDs
+                entitlements: uniquePersisted
             ),
             hadUnavailableLookup: hadUnavailableLookup
         )
+    }
+
+    private func freshReconciledRecord(
+        latestRecord: EntitlementRecord,
+        context: PurchaseEntitlementContext,
+        now: Date
+    ) -> PersistedEntitlementRecord? {
+        guard recordMatchesContext(latestRecord, context: context),
+              latestRecord.revocationDate == nil,
+              !latestRecord.isUpgraded
+        else {
+            return nil
+        }
+
+        switch latestRecord.productKind {
+        case .nonConsumable:
+            guard latestRecord.ownership == .purchased else {
+                return nil
+            }
+            return PersistedEntitlementRecord(
+                latestRecord,
+                verifiedAt: now
+            )
+
+        case .autoRenewable:
+            guard latestRecord.subscriptionState?.isExplicitlyInactive != true,
+                  latestRecord.isActive(at: now)
+            else {
+                return nil
+            }
+            return PersistedEntitlementRecord(
+                latestRecord,
+                verifiedAt: now
+            )
+
+        case .unsupported, .unknown:
+            return nil
+        }
     }
 
     private func reconciledRecord(
