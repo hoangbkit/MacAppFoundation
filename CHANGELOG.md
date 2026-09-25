@@ -2,6 +2,14 @@
 
 All notable changes to MacAppFoundation will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- `.managesAnalytics` now shares its optional app-scoped analytics client with MacAppFoundation-owned descendant views.
+- `ProPaywallView` automatically records bounded paywall, purchase, restore, and offer-code funnel events when analytics is available, while remaining fully functional and silent when analytics is not configured.
+
+
 ## 1.2.0 - 2026-09-24
 
 ### Fixed
