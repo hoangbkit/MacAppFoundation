@@ -4,6 +4,25 @@ import XCTest
 
 @MainActor
 final class PurchaseSimulationTests: XCTestCase {
+    func testOfflineCacheOptInDoesNotChangeSimulatedFreeSemantics() async {
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(
+                productIDs: [Self.monthly.id],
+                productLoadAttempts: 1,
+                offlineEntitlements: .verifiedCache(.init())
+            ),
+            simulated: true,
+            simulatedProducts: [Self.monthly],
+            simulatedOperationDelay: .milliseconds(0)
+        )
+
+        await manager.prepare()
+
+        XCTAssertFalse(manager.hasPro)
+        XCTAssertEqual(manager.entitlementState, .inactive)
+        XCTAssertEqual(manager.accessState, .inactive)
+    }
+
     func testSimulatedCatalogCanChangeWithoutMutatingLiveConfiguration() async {
         let manager = makeManager()
         await manager.prepare()
