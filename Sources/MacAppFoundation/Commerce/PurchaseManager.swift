@@ -566,7 +566,11 @@ public final class PurchaseManager {
                         persisted.append(replacement)
                     }
                 case .notPurchased:
-                    continue
+                    if cachedRecord.productKind == .nonConsumable,
+                       cachedRecord.ownership == .purchased {
+                        hadUnavailableLookup = true
+                        persisted.append(cachedRecord)
+                    }
                 case .unavailable:
                     hadUnavailableLookup = true
                     if OfflineEntitlementResolver.cachedRecordIsStillUsable(
