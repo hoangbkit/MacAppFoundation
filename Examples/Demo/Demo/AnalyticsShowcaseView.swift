@@ -186,7 +186,7 @@ struct AnalyticsShowcaseView: View {
                 severity: severity,
                 count: errorCount
             )
-            try await client.flush()
+            try await analytics.flush()
             return "Error '\(trimmed(errorCode))' accepted by the analytics server."
         }
     }
