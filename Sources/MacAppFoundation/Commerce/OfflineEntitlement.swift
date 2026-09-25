@@ -182,6 +182,20 @@ struct VerifiedEntitlementCache: Codable, Sendable, Equatable {
             .map { PersistedEntitlementRecord($0, verifiedAt: verifiedAt) }
     }
 
+    init(
+        context: PurchaseEntitlementContext,
+        verifiedAt: Date,
+        entitlements: [PersistedEntitlementRecord]
+    ) {
+        schemaVersion = Self.currentSchemaVersion
+        bundleID = context.bundleID
+        environment = context.environment
+        appTransactionID = context.appTransactionID
+        self.verifiedAt = verifiedAt
+        lastObservedAt = verifiedAt
+        self.entitlements = entitlements
+    }
+
     func matches(_ context: PurchaseEntitlementContext) -> Bool {
         schemaVersion == Self.currentSchemaVersion
             && bundleID == context.bundleID
