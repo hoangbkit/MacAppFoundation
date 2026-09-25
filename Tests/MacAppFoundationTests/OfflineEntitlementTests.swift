@@ -600,6 +600,21 @@ final class OfflineEntitlementTests: XCTestCase {
         )
         await onlineManager.prepare()
 
+        let rolledBack = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [],
+                products: [Self.lifetime],
+                defaultLatestLookup: .unavailable
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(-3_600) }
+        )
+        await rolledBack.prepare()
+        XCTAssertFalse(rolledBack.hasPro)
+        XCTAssertEqual(rolledBack.accessState, .unresolved)
+
         let withinWindow = PurchaseManager(
             configuration: configuration,
             service: OfflineTestPurchaseService(
