@@ -373,11 +373,18 @@ public final class PurchaseManager {
         let service = service
         let configuration = activeConfiguration
         let entitledProductIDs = configuration.entitledProductIDs
-        let verifiedContext = await service.entitlementContext()
-        let records = await service.currentEntitlements()
-        let recordContext = Self.context(from: records)
+        let usesOfflineCache = configuration.offlineEntitlements.verifiedCachePolicy != nil
 
-        if verifiedContext == nil,
+        let verifiedContext = usesOfflineCache
+            ? await service.entitlementContext()
+            : nil
+        let records = await service.currentEntitlements()
+        let recordContext = usesOfflineCache
+            ? Self.context(from: records)
+            : nil
+
+        if usesOfflineCache,
+           verifiedContext == nil,
            recordContext == nil,
            entitlementContext == nil {
             hydrateUnambiguousFallbackCache()
