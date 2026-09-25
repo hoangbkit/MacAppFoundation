@@ -131,8 +131,9 @@ struct PersistedEntitlementRecord: Codable, Sendable, Equatable {
     let revocationDate: Date?
     let isUpgraded: Bool
     let subscriptionState: EntitlementSubscriptionState?
+    let verifiedAt: Date
 
-    init(_ record: EntitlementRecord) {
+    init(_ record: EntitlementRecord, verifiedAt: Date) {
         productID = record.productID
         productKind = record.productKind
         ownership = record.ownership
@@ -143,6 +144,7 @@ struct PersistedEntitlementRecord: Codable, Sendable, Equatable {
         revocationDate = record.revocationDate
         isUpgraded = record.isUpgraded
         subscriptionState = record.subscriptionState
+        self.verifiedAt = verifiedAt
     }
 }
 
@@ -177,7 +179,7 @@ struct VerifiedEntitlementCache: Codable, Sendable, Equatable {
                     && !$0.isUpgraded
                     && ($0.productKind == .autoRenewable || $0.productKind == .nonConsumable)
             }
-            .map(PersistedEntitlementRecord.init)
+            .map { PersistedEntitlementRecord($0, verifiedAt: verifiedAt) }
     }
 
     func matches(_ context: PurchaseEntitlementContext) -> Bool {
@@ -185,6 +187,22 @@ struct VerifiedEntitlementCache: Codable, Sendable, Equatable {
             && bundleID == context.bundleID
             && environment == context.environment
             && appTransactionID == context.appTransactionID
+    }
+
+    func replacingEntitlements(
+        _ entitlements: [PersistedEntitlementRecord],
+        verifiedAt date: Date,
+        observedAt: Date
+    ) -> VerifiedEntitlementCache {
+        VerifiedEntitlementCache(
+            schemaVersion: schemaVersion,
+            bundleID: bundleID,
+            environment: environment,
+            appTransactionID: appTransactionID,
+            verifiedAt: max(verifiedAt, date),
+            lastObservedAt: max(lastObservedAt, observedAt),
+            entitlements: entitlements
+        )
     }
 
     func touched(at date: Date) -> VerifiedEntitlementCache {
@@ -342,7 +360,7 @@ enum OfflineEntitlementResolver {
         switch record.productKind {
         case .nonConsumable:
             guard record.ownership != .purchased else { return nil }
-            return cache.verifiedAt.addingTimeInterval(
+            return record.verifiedAt.addingTimeInterval(
                 policy.sharedLifetimeMaxOfflineInterval
             )
         case .autoRenewable:
