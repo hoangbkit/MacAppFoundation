@@ -266,6 +266,64 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(rolledBackBeforeExpiry.accessState, .unresolved)
     }
 
+    func testMissingLatestTransactionDoesNotDestroyVerifiedLifetimeCache() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = InMemoryEntitlementStore()
+        let context = Self.context(account: "account-a")
+        let configuration = Self.configuration(productIDs: [Self.lifetime.id])
+
+        let onlineManager = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [Self.lifetimeRecord(context: context)],
+                products: [Self.lifetime]
+            ),
+            entitlementStore: store,
+            now: { now }
+        )
+        await onlineManager.prepare()
+
+        XCTAssertNotNil(try store.data(for: context.storageAccount))
+
+        let contradictoryManager = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [],
+                products: [Self.lifetime],
+                defaultLatestLookup: .notPurchased
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(60) }
+        )
+        await contradictoryManager.prepare()
+
+        XCTAssertEqual(contradictoryManager.entitlementState, .inactive)
+        XCTAssertTrue(contradictoryManager.hasPro)
+        XCTAssertEqual(
+            contradictoryManager.accessState.source,
+            .verifiedCache
+        )
+        XCTAssertNotNil(try store.data(for: context.storageAccount))
+
+        let offlineRelaunch = PurchaseManager(
+            configuration: configuration,
+            service: OfflineTestPurchaseService(
+                context: nil,
+                entitlements: [],
+                products: [Self.lifetime],
+                defaultLatestLookup: .unavailable
+            ),
+            entitlementStore: store,
+            now: { now.addingTimeInterval(120) }
+        )
+        await offlineRelaunch.prepare()
+
+        XCTAssertTrue(offlineRelaunch.hasPro)
+        XCTAssertEqual(offlineRelaunch.accessState.source, .verifiedCache)
+    }
+
     func testExplicitLifetimeRevocationInvalidatesCache() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let store = InMemoryEntitlementStore()
