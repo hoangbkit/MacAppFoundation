@@ -11,6 +11,7 @@ public struct ProPaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
     @Environment(\.macAppTheme) private var theme
+    @Environment(\.appAnalytics) private var analytics
 
     private let purchaseManager: PurchaseManager
     private let configuration: ProPaywallConfiguration
@@ -22,6 +23,8 @@ public struct ProPaywallView: View {
     @State private var alertMessage: String?
     @State private var restoreMessage: String?
     @State private var isOfferCodeRedemptionPresented = false
+    @State private var didTrackPaywallView = false
+    @State private var didCompleteCommerce = false
 
     public init(
         purchaseManager: PurchaseManager,
@@ -81,6 +84,11 @@ public struct ProPaywallView: View {
         .background(theme.canvas)
         .tint(theme.accent)
         .task {
+            if !didTrackPaywallView {
+                didTrackPaywallView = true
+                track(ProPaywallAnalytics.paywallViewed)
+            }
+
             await purchaseManager.refreshProductsForPresentation()
             await purchaseManager.refreshEntitlements()
             selectDefaultPlanIfNeeded()
@@ -88,13 +96,20 @@ public struct ProPaywallView: View {
         .onChange(of: purchaseManager.products) { _, _ in
             selectDefaultPlanIfNeeded()
         }
+        .onDisappear {
+            if !didCompleteCommerce {
+                track(ProPaywallAnalytics.paywallClosed)
+            }
+        }
         .offerCodeRedemption(isPresented: $isOfferCodeRedemptionPresented) { result in
             switch result {
             case .success:
+                track(ProPaywallAnalytics.offerCodeSucceeded)
                 Task {
                     await purchaseManager.refreshEntitlements()
                 }
             case .failure(let error):
+                track(ProPaywallAnalytics.offerCodeFailed(error))
                 presentError(error)
             }
         }
@@ -221,6 +236,9 @@ public struct ProPaywallView: View {
 
         return Button {
             guard !purchaseManager.isBusy, !purchaseManager.isPurchasePending else { return }
+            if selectedProductID != product.id {
+                track(ProPaywallAnalytics.planSelected(product))
+            }
             withAnimation(.snappy) {
                 selectedProductID = product.id
             }
@@ -298,18 +316,30 @@ public struct ProPaywallView: View {
                   !purchaseManager.isPurchasePending
             else { return }
 
+            track(ProPaywallAnalytics.purchaseStarted(product))
+
             Task {
                 let outcome = await purchaseManager.purchase(product)
 
                 if case .failed(let failure) = purchaseManager.activity {
+                    track(ProPaywallAnalytics.purchaseFailed(product, failure: failure))
                     alertMessage = failure.message
                     purchaseManager.clearActivity()
                     return
                 }
 
-                if let outcome, case .success = outcome {
+                guard let outcome else { return }
+
+                switch outcome {
+                case .success:
+                    didCompleteCommerce = true
+                    track(ProPaywallAnalytics.purchaseSucceeded(product))
                     onPurchased?(product)
                     dismiss()
+                case .pending:
+                    track(ProPaywallAnalytics.purchasePending(product))
+                case .userCancelled:
+                    track(ProPaywallAnalytics.purchaseCancelled(product))
                 }
             }
         } label: {
@@ -349,6 +379,7 @@ public struct ProPaywallView: View {
 
             if configuration.showsRedeemCode {
                 Button("Redeem Code") {
+                    track(ProPaywallAnalytics.offerCodeOpened)
                     isOfferCodeRedemptionPresented = true
                 }
                 .buttonStyle(PaywallButtonStyle(.text))
@@ -483,16 +514,21 @@ public struct ProPaywallView: View {
     private func restorePurchases() {
         guard !purchaseManager.isBusy else { return }
         restoreMessage = nil
+        track(ProPaywallAnalytics.restoreStarted)
 
         Task {
             switch await purchaseManager.restorePurchases() {
             case .restored:
+                didCompleteCommerce = true
+                track(ProPaywallAnalytics.restoreSucceeded)
                 restoreMessage = "Purchases restored."
                 onRestored?()
                 dismiss()
             case .nothingToRestore:
+                track(ProPaywallAnalytics.restoreNothingToRestore)
                 restoreMessage = "No previous purchases were found."
             case .failed(let failure):
+                track(ProPaywallAnalytics.restoreFailed(failure))
                 restoreMessage = failure.message
                 purchaseManager.clearActivity()
             }
@@ -563,6 +599,17 @@ public struct ProPaywallView: View {
                 }
             }
         )
+    }
+
+    private func track(_ event: ProPaywallAnalyticsEvent) {
+        guard let analytics else { return }
+
+        Task {
+            try? await analytics.track(
+                event.name,
+                dimension: event.dimension
+            )
+        }
     }
 
     private func presentError(_ error: Error) {
