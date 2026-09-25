@@ -2,10 +2,13 @@ import Foundation
 
 /// Configuration shared by the StoreKit engine and reusable purchase UI.
 public struct PurchaseConfiguration: Sendable, Equatable {
-    /// Product identifiers in the order they should be presented.
+    /// Product identifiers in the order they should be presented for sale.
     public let productIDs: [String]
 
-    /// Managed product identifiers that unlock the app entitlement.
+    /// Product identifiers that grant the app entitlement.
+    ///
+    /// This set may include historical products that are no longer merchandised
+    /// through `productIDs`.
     public let entitledProductIDs: Set<String>
 
     /// Product selected by default when the catalog is loaded.
@@ -17,19 +20,26 @@ public struct PurchaseConfiguration: Sendable, Equatable {
     /// Number of catalog loading attempts before surfacing an error.
     public let productLoadAttempts: Int
 
+    /// Optional offline entitlement continuity policy.
+    ///
+    /// Disabled by default so existing consumers retain their current live-only
+    /// StoreKit authorization semantics until they explicitly opt in.
+    public let offlineEntitlements: OfflineEntitlementPolicy
+
     public init(
         productIDs: [String],
         entitledProductIDs: Set<String>? = nil,
         preferredProductID: String? = nil,
         features: [PurchaseFeature] = [],
-        productLoadAttempts: Int = 3
+        productLoadAttempts: Int = 3,
+        offlineEntitlements: OfflineEntitlementPolicy = .disabled
     ) {
         let normalizedProductIDs = Self.uniqueNonEmptyValues(productIDs)
         let managedProductIDs = Set(normalizedProductIDs)
         let normalizedEntitledIDs = Set(
             (entitledProductIDs ?? managedProductIDs)
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty && managedProductIDs.contains($0) }
+                .filter { !$0.isEmpty }
         )
 
         self.productIDs = normalizedProductIDs
@@ -40,6 +50,7 @@ public struct PurchaseConfiguration: Sendable, Equatable {
         }
         self.features = Self.uniqueFeatures(features)
         self.productLoadAttempts = max(1, productLoadAttempts)
+        self.offlineEntitlements = offlineEntitlements
     }
 
     private static func uniqueNonEmptyValues(_ values: [String]) -> [String] {
