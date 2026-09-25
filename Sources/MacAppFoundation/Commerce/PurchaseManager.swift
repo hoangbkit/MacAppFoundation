@@ -384,16 +384,13 @@ public final class PurchaseManager {
         let recordContext = usesOfflineCache
             ? Self.context(from: records)
             : nil
+        let newlyVerifiedContext = verifiedContext ?? recordContext
+        let persistedContext = usesOfflineCache && newlyVerifiedContext == nil
+            ? loadLastVerifiedContext()
+            : nil
 
-        if usesOfflineCache,
-           verifiedContext == nil,
-           recordContext == nil,
-           entitlementContext == nil {
-            hydrateUnambiguousFallbackCache()
-        }
-
-        let context = verifiedContext
-            ?? recordContext
+        let context = newlyVerifiedContext
+            ?? persistedContext
             ?? entitlementContext
         guard generation == serviceGeneration else { return [] }
 
@@ -420,6 +417,10 @@ public final class PurchaseManager {
             return await waitForEntitlementRefresh(
                 atLeast: entitlementRefreshGeneration
             )
+        }
+
+        if let newlyVerifiedContext {
+            persistVerifiedContext(newlyVerifiedContext)
         }
 
         entitlementState = liveState
@@ -732,74 +733,71 @@ public final class PurchaseManager {
         return true
     }
 
-    private func hydrateUnambiguousFallbackCache() {
-        guard let policy = activeConfiguration.offlineEntitlements.verifiedCachePolicy,
-              let entitlementStore,
-              shouldUseVerifiedCacheForCurrentService
-        else {
-            accessState = .checking
-            entitlementContext = nil
-            return
-        }
+    private func persistVerifiedContext(
+        _ context: PurchaseEntitlementContext
+    ) {
+        guard let entitlementStore else { return }
 
         do {
-            let bundleID = Bundle.main.bundleIdentifier
-            let candidates = try entitlementStore.allData().compactMap { item -> VerifiedEntitlementCache? in
-                guard let cache = try? JSONDecoder().decode(
-                    VerifiedEntitlementCache.self,
-                    from: item.data
-                ),
-                cache.schemaVersion == VerifiedEntitlementCache.currentSchemaVersion
+            let identity = PersistedPurchaseIdentity(
+                context: context,
+                verifiedAt: now()
+            )
+            let data = try JSONEncoder().encode(identity)
+            try entitlementStore.set(
+                data,
+                for: context.identityStorageAccount
+            )
+        } catch {
+            Self.logger.warning(
+                "Verified StoreKit account identity could not be persisted; live entitlement state is unchanged."
+            )
+        }
+    }
+
+    private func loadLastVerifiedContext() -> PurchaseEntitlementContext? {
+        guard let entitlementStore,
+              let bundleID = Bundle.main.bundleIdentifier
+        else {
+            return nil
+        }
+
+        #if DEBUG
+        let environments: [PurchaseStoreEnvironment] = [
+            .xcode,
+            .sandbox,
+            .production,
+        ]
+        #else
+        let environments: [PurchaseStoreEnvironment] = [.production]
+        #endif
+
+        do {
+            let identities = try environments.compactMap {
+                environment -> PersistedPurchaseIdentity? in
+                let account = PurchaseEntitlementContext.identityStorageAccount(
+                    bundleID: bundleID,
+                    environment: environment
+                )
+                guard let data = try entitlementStore.data(for: account),
+                      let identity = try? JSONDecoder().decode(
+                          PersistedPurchaseIdentity.self,
+                          from: data
+                      ),
+                      identity.isValid(forBundleID: bundleID),
+                      identity.environment == environment
                 else {
                     return nil
                 }
-
-                if let bundleID, cache.bundleID != bundleID {
-                    return nil
-                }
-
-                #if !DEBUG
-                guard cache.environment == .production else {
-                    return nil
-                }
-                #endif
-
-                return cache
+                return identity
             }
 
-            let uniqueCandidates = Dictionary(
-                candidates.map {
-                    ("\($0.environment.rawValue)|\($0.appTransactionID)", $0)
-                },
-                uniquingKeysWith: { _, newer in newer }
-            ).values
-
-            guard uniqueCandidates.count == 1,
-                  let cache = uniqueCandidates.first
-            else {
-                accessState = .checking
-                entitlementContext = nil
-                return
-            }
-
-            let context = PurchaseEntitlementContext(
-                bundleID: cache.bundleID,
-                environment: cache.environment,
-                appTransactionID: cache.appTransactionID
-            )
-            entitlementContext = context
-            accessState = OfflineEntitlementResolver.accessState(
-                cache: cache,
-                context: context,
-                policy: policy,
-                now: now()
-            )
+            return identities.max(by: { $0.verifiedAt < $1.verifiedAt })?.context
         } catch {
-            accessState = .checking
-            entitlementContext = nil
             Self.logger.warning(
-                "Verified entitlement startup cache could not be discovered; live StoreKit verification remains authoritative."
+                "Last verified StoreKit account identity could not be read; live StoreKit verification remains authoritative."
             )
+            return nil
         }
     }
 
