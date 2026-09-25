@@ -166,7 +166,7 @@ public struct ProGateButton<Label: View>: View {
 
     public var body: some View {
         Button {
-            guard purchaseManager.accessState.isResolved else {
+            guard !isAwaitingProResolution else {
                 return
             }
 
@@ -183,14 +183,14 @@ public struct ProGateButton<Label: View>: View {
         } label: {
             HStack(spacing: 6) {
                 label
-                if purchaseManager.accessState.isResolved,
+                if !isAwaitingProResolution,
                    case .requiresPro = decision,
                    let badgeStyle {
                     ProBadge(style: badgeStyle)
                 }
             }
         }
-        .disabled(!purchaseManager.accessState.isResolved)
+        .disabled(isAwaitingProResolution)
         .popover(isPresented: $showsLockPopover) {
             if let lockInfo {
                 ProLockPopover(info: lockInfo) {
@@ -199,6 +199,10 @@ public struct ProGateButton<Label: View>: View {
                 }
             }
         }
+    }
+
+    private var isAwaitingProResolution: Bool {
+        requirement == .pro && !purchaseManager.accessState.isResolved
     }
 
     private var decision: PremiumAccessDecision {
