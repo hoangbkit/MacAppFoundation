@@ -9,7 +9,7 @@ public extension PurchaseManager {
     /// The loaded product currently best representing the active entitlement.
     /// Permanent lifetime access wins over recurring products when both remain active.
     var activeProduct: StoreProduct? {
-        guard case .active(let snapshot) = entitlementState else {
+        guard case .active(_, let snapshot) = accessState else {
             return nil
         }
 
@@ -34,7 +34,7 @@ public extension PurchaseManager {
     /// This is intentionally separate from `activeProduct`: lifetime access wins for plan
     /// display, but an existing subscription may still need to be managed or cancelled.
     var activeSubscriptionProduct: StoreProduct? {
-        guard case .active(let snapshot) = entitlementState else {
+        guard case .active(_, let snapshot) = accessState else {
             return nil
         }
 
