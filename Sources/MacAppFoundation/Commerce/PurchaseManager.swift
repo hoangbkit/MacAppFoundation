@@ -14,6 +14,11 @@ private struct EntitlementAccessResolution {
     let cacheMutation: EntitlementCacheMutation
 }
 
+private struct ReconciledCacheResult {
+    let cache: VerifiedEntitlementCache?
+    let hadUnavailableLookup: Bool
+}
+
 @MainActor
 @Observable
 public final class PurchaseManager {
@@ -436,11 +441,8 @@ public final class PurchaseManager {
                 )
             }
 
-            let existingCache = loadVerifiedCache(
-                context: context,
-                policy: policy
-            )
-            let reconciled = await reconciledCache(
+            let existingCache = loadVerifiedCache(context: context)
+            let reconciliation = await reconciledCache(
                 liveRecords: records,
                 existingCache: existingCache,
                 context: context,
@@ -451,7 +453,7 @@ public final class PurchaseManager {
 
             return EntitlementAccessResolution(
                 state: .active(source: .storeKit, snapshot: snapshot),
-                cacheMutation: reconciled.map(EntitlementCacheMutation.write) ?? .none
+                cacheMutation: reconciliation.cache.map(EntitlementCacheMutation.write) ?? .none
             )
         }
 
@@ -462,31 +464,26 @@ public final class PurchaseManager {
             )
         }
 
-        guard let existingCache = loadVerifiedCache(
-            context: context,
-            policy: policy
-        ) else {
+        guard let existingCache = loadVerifiedCache(context: context) else {
             return EntitlementAccessResolution(
                 state: .inactive,
                 cacheMutation: .none
             )
         }
 
-        var hadUnavailableLookup = false
-        let reconciled = await reconciledCache(
+        let reconciliation = await reconciledCache(
             liveRecords: [],
             existingCache: existingCache,
             context: context,
             policy: policy,
             service: service,
-            entitledProductIDs: configuration.entitledProductIDs,
-            hadUnavailableLookup: &hadUnavailableLookup
+            entitledProductIDs: configuration.entitledProductIDs
         )
 
-        guard let reconciled else {
+        guard let reconciled = reconciliation.cache else {
             return EntitlementAccessResolution(
-                state: hadUnavailableLookup ? .unresolved : .inactive,
-                cacheMutation: hadUnavailableLookup ? .none : .remove
+                state: reconciliation.hadUnavailableLookup ? .unresolved : .inactive,
+                cacheMutation: reconciliation.hadUnavailableLookup ? .none : .remove
             )
         }
 
@@ -516,9 +513,8 @@ public final class PurchaseManager {
         context: PurchaseEntitlementContext,
         policy: VerifiedEntitlementCachePolicy,
         service: any PurchaseServing,
-        entitledProductIDs: Set<String>,
-        hadUnavailableLookup: inout Bool
-    ) async -> VerifiedEntitlementCache? {
+        entitledProductIDs: Set<String>
+    ) async -> ReconciledCacheResult {
         let date = now()
         let eligibleLiveRecords = liveRecords.filter {
             entitledProductIDs.contains($0.productID)
@@ -532,6 +528,7 @@ public final class PurchaseManager {
             PersistedEntitlementRecord($0, verifiedAt: date)
         }
         let liveProductIDs = Set(eligibleLiveRecords.map(\.productID))
+        var hadUnavailableLookup = false
 
         if let existingCache, existingCache.matches(context) {
             for cachedRecord in existingCache.entitlements
@@ -566,7 +563,10 @@ public final class PurchaseManager {
         }
 
         guard !persisted.isEmpty else {
-            return nil
+            return ReconciledCacheResult(
+                cache: nil,
+                hadUnavailableLookup: hadUnavailableLookup
+            )
         }
 
         let uniquePersisted = Dictionary(
@@ -575,10 +575,13 @@ public final class PurchaseManager {
         ).values.sorted { $0.productID < $1.productID }
 
         if let existingCache, existingCache.matches(context) {
-            return existingCache.replacingEntitlements(
-                uniquePersisted,
-                verifiedAt: date,
-                observedAt: date
+            return ReconciledCacheResult(
+                cache: existingCache.replacingEntitlements(
+                    uniquePersisted,
+                    verifiedAt: date,
+                    observedAt: date
+                ),
+                hadUnavailableLookup: hadUnavailableLookup
             )
         }
 
@@ -586,33 +589,21 @@ public final class PurchaseManager {
             uniqueKeysWithValues: eligibleLiveRecords.map { ($0.productID, $0) }
         )
         let cacheRecords = uniquePersisted.compactMap { liveRecordByID[$0.productID] }
-        guard !cacheRecords.isEmpty else { return nil }
+        guard !cacheRecords.isEmpty else {
+            return ReconciledCacheResult(
+                cache: nil,
+                hadUnavailableLookup: hadUnavailableLookup
+            )
+        }
 
-        return VerifiedEntitlementCache(
-            context: context,
-            verifiedAt: date,
-            records: cacheRecords,
-            entitledProductIDs: entitledProductIDs
-        )
-    }
-
-    private func reconciledCache(
-        liveRecords: [EntitlementRecord],
-        existingCache: VerifiedEntitlementCache?,
-        context: PurchaseEntitlementContext,
-        policy: VerifiedEntitlementCachePolicy,
-        service: any PurchaseServing,
-        entitledProductIDs: Set<String>
-    ) async -> VerifiedEntitlementCache? {
-        var ignoredUnavailableLookup = false
-        return await reconciledCache(
-            liveRecords: liveRecords,
-            existingCache: existingCache,
-            context: context,
-            policy: policy,
-            service: service,
-            entitledProductIDs: entitledProductIDs,
-            hadUnavailableLookup: &ignoredUnavailableLookup
+        return ReconciledCacheResult(
+            cache: VerifiedEntitlementCache(
+                context: context,
+                verifiedAt: date,
+                records: cacheRecords,
+                entitledProductIDs: entitledProductIDs
+            ),
+            hadUnavailableLookup: hadUnavailableLookup
         )
     }
 
@@ -689,10 +680,7 @@ public final class PurchaseManager {
             return
         }
 
-        guard let cache = loadVerifiedCache(
-            context: context,
-            policy: policy
-        ) else {
+        guard let cache = loadVerifiedCache(context: context) else {
             accessState = .checking
             verifiedEntitlementCache = nil
             return
@@ -708,8 +696,7 @@ public final class PurchaseManager {
     }
 
     private func loadVerifiedCache(
-        context: PurchaseEntitlementContext,
-        policy: VerifiedEntitlementCachePolicy
+        context: PurchaseEntitlementContext
     ) -> VerifiedEntitlementCache? {
         guard let entitlementStore else { return nil }
 
