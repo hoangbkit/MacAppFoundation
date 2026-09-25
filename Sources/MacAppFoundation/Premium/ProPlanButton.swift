@@ -29,7 +29,7 @@ public struct ProPlanButton: View {
     public var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: purchaseManager.hasPro ? "checkmark.seal.fill" : "crown.fill")
+                Image(systemName: iconName)
                     .font(.system(size: 11, weight: .semibold))
 
                 Text(title)
@@ -43,15 +43,47 @@ public struct ProPlanButton: View {
                 height: height
             )
         )
-        .help(purchaseManager.hasPro ? "Manage your plan" : "Unlock Pro")
+        .disabled(!purchaseManager.accessState.isResolved)
+        .help(helpText)
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(Self.accessibilityIdentifier)
-        .accessibilityLabel(purchaseManager.hasPro ? "Manage plan" : "Unlock Pro")
-        .accessibilityValue(purchaseManager.hasPro ? planLabel : "Free plan")
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
     }
 
     private var title: String {
-        purchaseManager.hasPro ? planLabel : "Unlock Pro"
+        guard purchaseManager.accessState.isResolved else {
+            return "Checking…"
+        }
+        return purchaseManager.hasPro ? planLabel : "Unlock Pro"
+    }
+
+    private var iconName: String {
+        guard purchaseManager.accessState.isResolved else {
+            return "hourglass"
+        }
+        return purchaseManager.hasPro ? "checkmark.seal.fill" : "crown.fill"
+    }
+
+    private var helpText: String {
+        guard purchaseManager.accessState.isResolved else {
+            return "Checking Pro access"
+        }
+        return purchaseManager.hasPro ? "Manage your plan" : "Unlock Pro"
+    }
+
+    private var accessibilityLabel: String {
+        guard purchaseManager.accessState.isResolved else {
+            return "Checking Pro access"
+        }
+        return purchaseManager.hasPro ? "Manage plan" : "Unlock Pro"
+    }
+
+    private var accessibilityValue: String {
+        guard purchaseManager.accessState.isResolved else {
+            return "Checking"
+        }
+        return purchaseManager.hasPro ? planLabel : "Free plan"
     }
 
     private var planLabel: String {
@@ -74,6 +106,10 @@ public struct ProPlanButton: View {
     }
 
     private func action() {
+        guard purchaseManager.accessState.isResolved else {
+            return
+        }
+
         if purchaseManager.hasPro {
             onManagePlan()
         } else {
