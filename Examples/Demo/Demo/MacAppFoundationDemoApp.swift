@@ -18,6 +18,7 @@ struct MacAppFoundationDemoApp: App {
     @State private var onboarding: OnboardingState
 
     private let purchases: PurchaseManager
+    private let analytics: AppAnalyticsClient
 
     init() {
         _demoState = State(initialValue: DemoState())
@@ -30,17 +31,26 @@ struct MacAppFoundationDemoApp: App {
             )
         )
         purchases = DemoCommerce.manager
+        analytics = AppAnalyticsClient(
+            configuration: AppAnalyticsConfiguration(
+                appID: "maf",
+                appKey: Bundle.main.bundleIdentifier,
+                baseURL: URL(string: "https://analytics.133043.xyz")!
+            )
+        )
     }
 
     var body: some Scene {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
             ContentView(
                 purchaseManager: purchases,
-                settingsRouter: settingsRouter
+                settingsRouter: settingsRouter,
+                analytics: analytics
             )
             .environment(demoState)
             .macAppTheme(themeStore)
             .managesPurchases(purchases)
+            .managesAnalytics(analytics)
         }
         .defaultSize(width: 1080, height: 700)
         .defaultLaunchBehavior(onboarding.mainWindowLaunchBehavior)
@@ -122,6 +132,7 @@ struct MacAppFoundationDemoApp: App {
                 }
             )
             .macAppTheme(themeStore)
+            .managesAnalytics(analytics)
         }
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
@@ -143,6 +154,7 @@ struct MacAppFoundationDemoApp: App {
             )
             .environment(demoState)
             .macAppTheme(themeStore)
+            .managesAnalytics(analytics)
         }
         .defaultSize(
             width: MacAppFoundationDeveloperTools.defaultWidth,
@@ -158,6 +170,7 @@ struct MacAppFoundationDemoApp: App {
             )
             .environment(demoState)
             .macAppTheme(themeStore)
+            .managesAnalytics(analytics)
         }
     }
 
