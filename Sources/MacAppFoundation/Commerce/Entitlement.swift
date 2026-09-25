@@ -4,26 +4,60 @@ public struct EntitlementRecord: Sendable, Equatable {
     public let productID: String
     public let purchaseDate: Date
     public let expirationDate: Date?
+    public let gracePeriodExpirationDate: Date?
     public let revocationDate: Date?
     public let isUpgraded: Bool
+    public let productKind: EntitlementProductKind
+    public let ownership: EntitlementOwnership
+    public let transactionID: String?
+    public let originalTransactionID: String?
+    public let appTransactionID: String?
+    public let environment: PurchaseStoreEnvironment
+    public let subscriptionState: EntitlementSubscriptionState?
 
     public init(
         productID: String,
         purchaseDate: Date = .now,
         expirationDate: Date? = nil,
+        gracePeriodExpirationDate: Date? = nil,
         revocationDate: Date? = nil,
-        isUpgraded: Bool = false
+        isUpgraded: Bool = false,
+        productKind: EntitlementProductKind = .unknown,
+        ownership: EntitlementOwnership = .unknown,
+        transactionID: String? = nil,
+        originalTransactionID: String? = nil,
+        appTransactionID: String? = nil,
+        environment: PurchaseStoreEnvironment = .unknown,
+        subscriptionState: EntitlementSubscriptionState? = nil
     ) {
         self.productID = productID
         self.purchaseDate = purchaseDate
         self.expirationDate = expirationDate
+        self.gracePeriodExpirationDate = gracePeriodExpirationDate
         self.revocationDate = revocationDate
         self.isUpgraded = isUpgraded
+        self.productKind = productKind
+        self.ownership = ownership
+        self.transactionID = transactionID
+        self.originalTransactionID = originalTransactionID
+        self.appTransactionID = appTransactionID
+        self.environment = environment
+        self.subscriptionState = subscriptionState
     }
 
     public func isActive(at date: Date = .now) -> Bool {
         guard revocationDate == nil, !isUpgraded else {
             return false
+        }
+
+        if productKind == .autoRenewable {
+            if subscriptionState?.isExplicitlyInactive == true {
+                return false
+            }
+            guard let effectiveExpiration = gracePeriodExpirationDate ?? expirationDate else {
+                return false
+            }
+            return effectiveExpiration > date
         }
 
         guard let expirationDate else {
@@ -84,8 +118,15 @@ public enum EntitlementEvaluator {
     ) -> EntitlementState {
         let activeRecords = records.filter { record in
             entitledProductIDs.contains(record.productID)
+                && record.revocationDate == nil
+                && !record.isUpgraded
+                && record.subscriptionState?.isExplicitlyInactive != true
         }
         return state(from: activeRecords)
+    }
+
+    static func snapshot(from records: [EntitlementRecord]) -> EntitlementSnapshot? {
+        state(from: records).snapshot
     }
 
     private static func state(from activeRecords: [EntitlementRecord]) -> EntitlementState {
@@ -93,13 +134,26 @@ public enum EntitlementEvaluator {
             return .inactive
         }
 
-        let hasPermanentEntitlement = activeRecords.contains { $0.expirationDate == nil }
+        let hasPermanentEntitlement = activeRecords.contains {
+            $0.productKind == .nonConsumable
+                ? $0.ownership == .purchased
+                : $0.expirationDate == nil && $0.gracePeriodExpirationDate == nil
+        }
         let snapshot = EntitlementSnapshot(
             activeProductIDs: Set(activeRecords.map(\.productID)),
             latestExpirationDate: hasPermanentEntitlement
                 ? nil
-                : activeRecords.compactMap(\.expirationDate).max()
+                : activeRecords.compactMap {
+                    $0.gracePeriodExpirationDate ?? $0.expirationDate
+                }.max()
         )
         return .active(snapshot)
+    }
+}
+
+private extension EntitlementState {
+    var snapshot: EntitlementSnapshot? {
+        guard case .active(let snapshot) = self else { return nil }
+        return snapshot
     }
 }
