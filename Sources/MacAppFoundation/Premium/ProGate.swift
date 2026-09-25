@@ -31,11 +31,18 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
     }
 
     public var body: some View {
-        switch decision {
-        case .allowed:
-            proContent
-        case .requiresPro(let feature):
-            lockedContent(feature)
+        if requirement == .pro, !purchaseManager.accessState.isResolved {
+            ProgressView()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Checking Pro access")
+        } else {
+            switch decision {
+            case .allowed:
+                proContent
+            case .requiresPro(let feature):
+                lockedContent(feature)
+            }
         }
     }
 
