@@ -833,13 +833,15 @@ final class OfflineEntitlementTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertEqual(manager.accessState, .inactive)
+        let unresolvedCallCount = service.currentEntitlementsCallCount
         service.defaultLatestLookup = .notPurchased
 
-        let resolved = await Self.waitUntil {
-            manager.accessState == .inactive
+        let retried = await Self.waitUntil {
+            service.currentEntitlementsCallCount > unresolvedCallCount
         }
 
-        XCTAssertTrue(resolved)
+        XCTAssertTrue(retried)
+        XCTAssertEqual(manager.accessState, .inactive)
         XCTAssertFalse(manager.hasPro)
 
         let resolvedEntitlementCallCount = service.currentEntitlementsCallCount
@@ -919,12 +921,14 @@ final class OfflineEntitlementTests: XCTestCase {
         }
         XCTAssertTrue(retriedRepeatedly)
 
+        let unresolvedCallCount = service.currentEntitlementsCallCount
         service.defaultLatestLookup = .notPurchased
 
         let resolved = await Self.waitUntil {
-            manager.accessState == .inactive
+            service.currentEntitlementsCallCount > unresolvedCallCount
         }
         XCTAssertTrue(resolved)
+        XCTAssertEqual(manager.accessState, .inactive)
 
         let resolvedCallCount = service.currentEntitlementsCallCount
         try? await Task.sleep(for: .milliseconds(40))
