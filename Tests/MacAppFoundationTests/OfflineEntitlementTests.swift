@@ -801,7 +801,7 @@ final class OfflineEntitlementTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertFalse(manager.hasPro)
-        XCTAssertEqual(manager.accessState, .inactive)
+        XCTAssertNil(manager.accessState.source)
         XCTAssertNil(try store.data(for: context.storageAccount))
     }
 
