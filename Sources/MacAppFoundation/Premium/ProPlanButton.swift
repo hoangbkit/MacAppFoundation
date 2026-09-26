@@ -43,8 +43,7 @@ public struct ProPlanButton: View {
                 height: height
             )
         )
-        .disabled(!presentation.isEnabled)
-        .help(presentation.helpText)
+.help(presentation.helpText)
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(Self.accessibilityIdentifier)
         .accessibilityLabel(presentation.accessibilityLabel)
@@ -53,17 +52,12 @@ public struct ProPlanButton: View {
 
     private var presentation: ProPlanButtonPresentation {
         ProPlanButtonPresentation(
-            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
             activeProduct: purchaseManager.activeProduct
         )
     }
 
     private func action() {
-        guard presentation.isEnabled else {
-            return
-        }
-
         if presentation.isPro {
             onManagePlan()
         } else {
@@ -78,26 +72,12 @@ struct ProPlanButtonPresentation: Equatable {
     let helpText: String
     let accessibilityLabel: String
     let accessibilityValue: String
-    let isEnabled: Bool
     let isPro: Bool
 
     init(
-        isResolved: Bool,
         hasPro: Bool,
         activeProduct: StoreProduct?
     ) {
-        guard isResolved else {
-            title = "Checking…"
-            iconName = "hourglass"
-            helpText = "Checking Pro access"
-            accessibilityLabel = "Checking Pro access"
-            accessibilityValue = "Checking"
-            isEnabled = false
-            isPro = false
-            return
-        }
-
-        isEnabled = true
         isPro = hasPro
 
         if hasPro {
