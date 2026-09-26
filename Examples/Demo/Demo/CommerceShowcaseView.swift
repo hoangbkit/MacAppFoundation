@@ -223,10 +223,6 @@ struct CommerceShowcaseView: View {
 
     private var accessTitle: String {
         switch purchaseManager.accessState {
-        case .checking:
-            return "Checking"
-        case .unresolved:
-            return "Unresolved"
         case .inactive:
             return "Free"
         case .active(let source, let snapshot):
