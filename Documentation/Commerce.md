@@ -15,7 +15,7 @@ MacAppFoundation follows these rules:
 3. Offline persistence is opt-in.
 4. Product catalog availability and entitlement authorization are independent.
 5. Access state and retry policy are independent.
-6. A cacheless user with a known account context and unavailable verification falls back to Free, but MAF may continue retrying verification in the background. If no trustworthy account context can be established at all, access remains unresolved while retrying.
+6. When MAF cannot prove Pro, effective access is Free. Verification may continue or retry in the background without introducing a third user-visible access state.
 7. Previously verified paid access is preserved only when the cached evidence remains safe for the product type and account context.
 8. Explicit verified revocation or refund is authoritative.
 9. The host app owns navigation, window presentation, product copy, legal URLs, and app-specific premium policy.
@@ -142,12 +142,12 @@ It is intentionally not the final offline authorization decision.
 
 `accessState` represents the final authorization result after combining StoreKit with the optional verified cache.
 
-States:
+It is intentionally binary:
 
-- `.checking`
-- `.unresolved`
-- `.inactive`
-- `.active(source:snapshot:)`
+- `.inactive` — Free
+- `.active(source:snapshot:)` — Pro
+
+There is no checking or unresolved effective-access state. Live StoreKit diagnostics may still report `EntitlementState.checking`, but that does not put the app into a third authorization mode.
 
 An active state records whether authorization came from:
 
@@ -257,30 +257,21 @@ A latest lookup can be:
 
 Verified latest transactions can recover paid access even when `currentEntitlements` is empty.
 
-### 4. No paid cache fallback
+### 4. Free is the safe fallback
 
-If account context is known but no trustworthy entitlement cache can be produced:
+If MAF cannot produce trustworthy evidence that Pro should be granted, effective access is `.inactive` and the user is treated as Free.
 
-- effective access is `.inactive`
-- the user is treated as Free
+This includes:
 
-This is the deliberate fail-closed behavior for a cacheless user.
-
-If the missing answer was caused by unavailable verification, retry may still continue independently in the background.
-
-If MAF cannot establish any trustworthy account context at all, it does not make an account-scoped cache decision. Effective access remains `.unresolved` and retry continues.
-
-### 5. Existing but currently unsafe cache
-
-If a matching cache exists but cannot currently grant access safely, effective access is `.unresolved`.
-
-Examples include:
-
-- an expired cached subscription while StoreKit is unavailable
+- no trustworthy account context
+- no paid cache
+- an expired cached subscription
 - bounded shared access after its offline window
 - suspicious clock rollback for time-bounded access
 
-These cases request retry.
+If the missing answer was caused by unavailable or incomplete StoreKit verification, retry may continue independently in the background.
+
+This deliberately prefers a brief false-Free state over a persistent verification-limbo UI. Restore Purchases remains available as an explicit recovery path.
 
 ## Access and retry are separate
 
@@ -300,13 +291,13 @@ They are intentionally independent.
 | --- | --- | --- |
 | StoreKit confirms Pro | Pro | No |
 | StoreKit confirms Free / not purchased | Free | No |
-| Known account context + no cache + verification unavailable | Free | Yes |
-| No trustworthy account context | Unresolved | Yes |
+| No cache + verification unavailable | Free | Yes |
+| No trustworthy account context | Free | Yes |
 | Valid directly purchased Lifetime cache | Pro | No |
 | Valid recurring cache within trusted validity | Pro | No |
-| Expired/unsafe recurring cache + verification unavailable | Unresolved | Yes |
-| Shared entitlement past offline boundary + verification unavailable | Unresolved | Yes |
-| Account context cannot be established safely | Unresolved | Yes |
+| Expired/unsafe recurring cache + verification unavailable | Free | Yes |
+| Shared entitlement past offline boundary + verification unavailable | Free | Yes |
+| Account context cannot be established safely | Free | Yes |
 | Explicit verified revocation/refund | Free | No |
 
 ### Retry schedule
@@ -382,7 +373,7 @@ Billing retry without an active/grace entitlement does not grant Pro merely beca
 
 When the trusted recurring window has ended and StoreKit cannot currently resolve renewal state:
 
-- access becomes unresolved
+- access falls back to Free
 - retry continues
 
 ### Family Sharing
@@ -658,15 +649,14 @@ Analytics is best effort and never controls purchase success, failure, timing, o
 
 `ProPlanPane` is the reusable Settings Plan surface.
 
-It derives presentation from effective access:
+It derives presentation directly from binary effective access:
 
 | Effective state | Presentation |
 | --- | --- |
-| checking/unresolved | Checking |
 | inactive | Free |
 | active | Pro |
 
-While unresolved, Plan actions that assume a resolved Free/Pro result are withheld.
+StoreKit verification can continue in the background without replacing the Plan UI with a checking state.
 
 ### Free
 
@@ -692,9 +682,8 @@ The Plan pane calls `PurchaseManager.restorePurchases()` directly.
 
 Presentation:
 
-- unresolved/checking -> disabled `Checking…`
-- resolved Free -> `Unlock Pro`
-- resolved Pro -> active plan label, such as `Pro Lifetime`, `Pro Monthly`, or `Pro Yearly`
+- Free -> `Unlock Pro`
+- Pro -> active plan label, such as `Pro Lifetime`, `Pro Monthly`, or `Pro Yearly`
 
 The host app owns navigation:
 
@@ -705,7 +694,7 @@ The host app owns navigation:
 
 For simple checks, `hasPro` is enough.
 
-Reusable gating APIs use the effective resolved access state so a Pro-only surface is not presented as confirmed Free while authorization is unresolved.
+Reusable gating APIs use the same binary effective access state. If Pro is not currently proven, a Pro-only surface behaves as Free while background verification/retry continues independently.
 
 `PremiumAccessPolicy` defaults to preserving access to existing user-created content after Pro expires:
 
@@ -752,14 +741,14 @@ Simulated purchases are isolated from the production verified entitlement cache.
 | Cacheless launch with known account + latest verified paid purchase | Pro and persist verified evidence |
 | Cacheless launch with known account + not purchased | Free, no retry |
 | Cacheless launch with known account + verification unavailable | Free, retry |
-| Cacheless launch with no trustworthy account context | Unresolved, retry |
+| Cacheless launch with no trustworthy account context | Free, retry |
 | Valid directly purchased Lifetime cache + StoreKit unavailable | Pro from cache |
 | Valid recurring cache + StoreKit unavailable | Pro until verified validity/grace boundary |
-| Recurring cache expired + StoreKit unavailable | Unresolved, retry |
-| Billing retry with no active/grace entitlement | Not Pro |
+| Recurring cache expired + StoreKit unavailable | Free, retry |
+| Billing retry with no active/grace entitlement | Free |
 | Family-shared Lifetime within bounded offline window | Pro from cache |
-| Family-shared Lifetime outside bounded window + unavailable verification | Unresolved, retry |
-| Clock rollback beyond tolerance for time-bounded cache | Unresolved, retry |
+| Family-shared Lifetime outside bounded window + unavailable verification | Free, retry |
+| Clock rollback beyond tolerance for time-bounded cache | Free, retry |
 | Explicit verified revocation/refund | Revoked entitlement is invalidated; Free if no other entitlement remains |
 | Paid Account A cache, current verified Free Account B | Free for B; A cache is not reused |
 | Offline relaunch after verified Account B context | Uses B context only |
