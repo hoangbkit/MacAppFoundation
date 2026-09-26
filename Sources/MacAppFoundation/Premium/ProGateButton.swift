@@ -185,7 +185,7 @@ public struct ProGateButton<Label: View>: View {
                 }
             }
         }
-.popover(isPresented: $showsLockPopover) {
+        .popover(isPresented: $showsLockPopover) {
             if let lockInfo {
                 ProLockPopover(info: lockInfo) {
                     showsLockPopover = false
