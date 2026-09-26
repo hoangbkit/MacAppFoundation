@@ -250,9 +250,9 @@ This behavior must be narrowly scoped to previously verified strong entitlement 
 
 A fresh installation has no trustworthy local entitlement cache.
 
-If StoreKit cannot establish entitlement, effective access should remain unresolved rather than fabricating Pro or presenting the user as definitively Free merely because verification did not finish.
+If StoreKit cannot establish entitlement and no verified paid cache exists, effective access falls back to inactive. This is a deliberate fail-closed business policy: absence of local paid evidence does not grant Pro.
 
-The consuming app can decide how to present unresolved access.
+Retry policy is independent from access policy. An unavailable StoreKit verification can still schedule background entitlement retries even while effective access remains inactive, allowing a reinstall or cacheless launch to recover automatically when StoreKit becomes available again.
 
 ## Product catalog independence
 
@@ -388,10 +388,10 @@ Illustrative priority:
 1. explicit live active StoreKit entitlement -> active from StoreKit and refresh cache
 2. explicit verified revocation or sufficiently definitive inactive result -> inactive and update or invalidate cache
 3. live state unresolved or ambiguous + valid account-matching verified cache -> active from verified cache
-4. live unresolved + no trustworthy cache -> unresolved or checking
-5. definitive live inactive + no applicable cache -> inactive
+4. no trustworthy paid cache -> inactive
+5. cached entitlement exists but cannot currently be authorized safely -> unresolved
 
-Implementation must define what constitutes definitive versus ambiguous for destructive cache invalidation.
+Retry is a separate recovery signal. An unavailable verification may request another StoreKit refresh regardless of whether current effective access is inactive or unresolved.
 
 ## Risk assessment
 
@@ -407,7 +407,7 @@ Implementation must define what constitutes definitive versus ambiguous for dest
 | Subscription refund or revocation | High | Cached access outlives refund | Explicit revocation wins |
 | Empty StoreKit entitlement anomaly | High | Delete valid Lifetime cache | Defensive secondary resolution |
 | Apple Account switch | High | Account A unlocks account B | Scope cache by app/account identity |
-| Fresh install offline | Medium | Fabricated Free or Pro | Publish unresolved |
+| Fresh install offline | Medium | Fabricated Pro or permanently stale Free | Fall back to Free, but retry unavailable verification independently |
 | Family Sharing ends | High | Shared Lifetime remains forever | Preserve ownership and use bounded policy |
 | Subscription upgrade | Medium | Old plan remains active in cache | Replace snapshot atomically |
 | Product metadata fails | High | Existing paid user loses Pro | Catalog failure must not affect entitlement |
@@ -526,7 +526,9 @@ This feature is about reliable offline customer access, not perfect anti-piracy.
 
 Trust hierarchy:
 
-verified live StoreKit > account-matching verified local cache > unresolved > no entitlement
+verified live StoreKit > account-matching verified local cache > no paid entitlement
+
+Authorization state and retry state are intentionally separate: a user may currently be inactive while MAF still retries an unavailable StoreKit verification in the background.
 
 Explicit verified revocation outranks prior cached authorization.
 
@@ -568,7 +570,7 @@ The implementation resolves the former ready-to-build questions as follows:
 - directly purchased Lifetime access remains usable offline until authoritative revocation is observed
 - recurring access is bounded by verified expiration/grace data and guarded against wall-clock rollback
 - Family Sharing uses a bounded offline window, configurable by policy
-- empty current entitlement results use latest-transaction reconciliation; unavailable verification remains unresolved rather than fabricating Free
+- empty current entitlement results use latest-transaction reconciliation; no-cache unavailable verification falls back to inactive while independently scheduling entitlement retry
 - `hasPro` reflects effective access while `entitlementState` continues to expose live StoreKit state
 - cache storage uses Keychain
 - historical entitlement IDs may exist outside the current sellable product catalog
