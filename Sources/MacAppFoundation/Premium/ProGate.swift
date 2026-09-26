@@ -31,27 +31,27 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
     }
 
     public var body: some View {
-        if requirement == .pro, !purchaseManager.accessState.isResolved {
+        switch presentationState {
+        case .checking:
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityLabel("Checking Pro access")
-        } else {
-            switch decision {
-            case .allowed:
-                proContent
-            case .requiresPro(let feature):
-                lockedContent(feature)
-            }
+        case .allowed:
+            proContent
+        case .requiresPro(let feature):
+            lockedContent(feature)
         }
     }
 
-    private var decision: PremiumAccessDecision {
-        policy.decision(
-            for: feature,
+    private var presentationState: PremiumGatePresentationState {
+        PremiumGatePresentationState(
+            feature: feature,
             requirement: requirement,
+            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
-            isExistingContent: isExistingContent
+            isExistingContent: isExistingContent,
+            policy: policy
         )
     }
 }
