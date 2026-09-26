@@ -15,7 +15,7 @@ MacAppFoundation follows these rules:
 3. Offline persistence is opt-in.
 4. Product catalog availability and entitlement authorization are independent.
 5. Access state and retry policy are independent.
-6. A cacheless user with unavailable verification falls back to Free, but MAF may continue retrying verification in the background.
+6. A cacheless user with a known account context and unavailable verification falls back to Free, but MAF may continue retrying verification in the background. If no trustworthy account context can be established at all, access remains unresolved while retrying.
 7. Previously verified paid access is preserved only when the cached evidence remains safe for the product type and account context.
 8. Explicit verified revocation or refund is authoritative.
 9. The host app owns navigation, window presentation, product copy, legal URLs, and app-specific premium policy.
@@ -259,7 +259,7 @@ Verified latest transactions can recover paid access even when `currentEntitleme
 
 ### 4. No paid cache fallback
 
-If no trustworthy entitlement cache can be produced:
+If account context is known but no trustworthy entitlement cache can be produced:
 
 - effective access is `.inactive`
 - the user is treated as Free
@@ -267,6 +267,8 @@ If no trustworthy entitlement cache can be produced:
 This is the deliberate fail-closed behavior for a cacheless user.
 
 If the missing answer was caused by unavailable verification, retry may still continue independently in the background.
+
+If MAF cannot establish any trustworthy account context at all, it does not make an account-scoped cache decision. Effective access remains `.unresolved` and retry continues.
 
 ### 5. Existing but currently unsafe cache
 
@@ -298,7 +300,8 @@ They are intentionally independent.
 | --- | --- | --- |
 | StoreKit confirms Pro | Pro | No |
 | StoreKit confirms Free / not purchased | Free | No |
-| No cache + verification unavailable | Free | Yes |
+| Known account context + no cache + verification unavailable | Free | Yes |
+| No trustworthy account context | Unresolved | Yes |
 | Valid directly purchased Lifetime cache | Pro | No |
 | Valid recurring cache within trusted validity | Pro | No |
 | Expired/unsafe recurring cache + verification unavailable | Unresolved | Yes |
@@ -552,6 +555,13 @@ When presented, the paywall:
 3. refreshes entitlements
 4. chooses a default plan when needed
 
+Default plan selection uses this priority:
+
+1. an already valid explicit selection
+2. `highlightedProductID` when available
+3. `preferredEntitlementProduct`
+4. the first paywall product
+
 Automatic default selection does not count as an explicit `paywall_plan_selected` analytics event.
 
 ### Product selection
@@ -739,9 +749,10 @@ Simulated purchases are isolated from the production verified entitlement cache.
 | --- | --- |
 | Current verified paid entitlement | Pro from StoreKit |
 | Current verified Free state | Free |
-| Fresh/cacheless launch + latest verified paid purchase | Pro and persist verified evidence |
-| Fresh/cacheless launch + not purchased | Free, no retry |
-| Fresh/cacheless launch + verification unavailable | Free, retry |
+| Cacheless launch with known account + latest verified paid purchase | Pro and persist verified evidence |
+| Cacheless launch with known account + not purchased | Free, no retry |
+| Cacheless launch with known account + verification unavailable | Free, retry |
+| Cacheless launch with no trustworthy account context | Unresolved, retry |
 | Valid directly purchased Lifetime cache + StoreKit unavailable | Pro from cache |
 | Valid recurring cache + StoreKit unavailable | Pro until verified validity/grace boundary |
 | Recurring cache expired + StoreKit unavailable | Unresolved, retry |
@@ -749,7 +760,7 @@ Simulated purchases are isolated from the production verified entitlement cache.
 | Family-shared Lifetime within bounded offline window | Pro from cache |
 | Family-shared Lifetime outside bounded window + unavailable verification | Unresolved, retry |
 | Clock rollback beyond tolerance for time-bounded cache | Unresolved, retry |
-| Explicit verified revocation/refund | Free; cached authorization invalidated |
+| Explicit verified revocation/refund | Revoked entitlement is invalidated; Free if no other entitlement remains |
 | Paid Account A cache, current verified Free Account B | Free for B; A cache is not reused |
 | Offline relaunch after verified Account B context | Uses B context only |
 | Product catalog fails while paid cache remains valid | Pro remains Pro |
