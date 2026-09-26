@@ -606,6 +606,40 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(manager.accessState, .inactive)
     }
 
+    func testMissingAccountContextStaysFreeWhileRetryCanRecoverPro() async {
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: nil,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            entitlementRetryDelays: [.milliseconds(10)],
+            entitlementRetryInterval: .milliseconds(20)
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(manager.accessState, .inactive)
+        XCTAssertFalse(manager.hasPro)
+        let initialCallCount = service.currentEntitlementsCallCount
+
+        service.context = context
+        service.entitlements = [Self.lifetimeRecord(context: context)]
+
+        let recovered = await Self.waitUntil {
+            manager.accessState.source == .storeKit
+        }
+
+        XCTAssertTrue(recovered)
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertGreaterThan(service.currentEntitlementsCallCount, initialCallCount)
+    }
+
     func testFreshOfflineInstallCanStayFreeWhileRetryingUnavailableVerification() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
