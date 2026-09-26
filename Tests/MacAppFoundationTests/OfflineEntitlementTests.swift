@@ -94,7 +94,7 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(offlineManager.entitlementState, .inactive)
     }
 
-    func testExpiredCachedSubscriptionBecomesUnresolvedOffline() async {
+    func testExpiredCachedSubscriptionFallsBackToFreeOffline() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let store = InMemoryEntitlementStore()
         let context = Self.context(account: "account-a")
@@ -833,11 +833,11 @@ final class OfflineEntitlementTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertEqual(manager.accessState, .inactive)
-        let unresolvedCallCount = service.currentEntitlementsCallCount
+        let preResolutionCallCount = service.currentEntitlementsCallCount
         service.defaultLatestLookup = .notPurchased
 
         let retried = await Self.waitUntil {
-            service.currentEntitlementsCallCount > unresolvedCallCount
+            service.currentEntitlementsCallCount > preResolutionCallCount
         }
 
         XCTAssertTrue(retried)
@@ -891,7 +891,7 @@ final class OfflineEntitlementTests: XCTestCase {
     }
     #endif
 
-    func testEntitlementRetryContinuesAtPeriodicIntervalUntilResolved() async {
+    func testEntitlementRetryContinuesAtPeriodicIntervalUntilStoreKitResolves() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
         let store = await Self.expiredSubscriptionStore(
@@ -921,11 +921,11 @@ final class OfflineEntitlementTests: XCTestCase {
         }
         XCTAssertTrue(retriedRepeatedly)
 
-        let unresolvedCallCount = service.currentEntitlementsCallCount
+        let preResolutionCallCount = service.currentEntitlementsCallCount
         service.defaultLatestLookup = .notPurchased
 
         let resolved = await Self.waitUntil {
-            service.currentEntitlementsCallCount > unresolvedCallCount
+            service.currentEntitlementsCallCount > preResolutionCallCount
         }
         XCTAssertTrue(resolved)
         XCTAssertEqual(manager.accessState, .inactive)
