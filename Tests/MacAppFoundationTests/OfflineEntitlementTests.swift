@@ -712,6 +712,99 @@ final class OfflineEntitlementTests: XCTestCase {
         )
     }
 
+    #if DEBUG
+    func testUnresolvedRetryIsCancelledWhenPurchaseServiceChanges() async {
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            unresolvedRetryDelays: [.milliseconds(100)],
+            unresolvedRetryInterval: .milliseconds(100)
+        )
+
+        await manager.prepare()
+        XCTAssertEqual(manager.accessState, .unresolved)
+
+        let oldServiceCallCount = service.currentEntitlementsCallCount
+
+        await manager.setSimulatedPurchasesEnabled(true)
+        XCTAssertEqual(manager.accessState, .inactive)
+
+        try? await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(
+            service.currentEntitlementsCallCount,
+            oldServiceCallCount
+        )
+    }
+    #endif
+
+    func testUnresolvedRetryContinuesAtPeriodicIntervalUntilResolved() async {
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            unresolvedRetryDelays: [],
+            unresolvedRetryInterval: .milliseconds(10)
+        )
+
+        await manager.prepare()
+        XCTAssertEqual(manager.accessState, .unresolved)
+
+        let retriedRepeatedly = await Self.waitUntil {
+            service.currentEntitlementsCallCount >= 3
+        }
+        XCTAssertTrue(retriedRepeatedly)
+
+        service.defaultLatestLookup = .notPurchased
+
+        let resolved = await Self.waitUntil {
+            manager.accessState == .inactive
+        }
+        XCTAssertTrue(resolved)
+
+        let resolvedCallCount = service.currentEntitlementsCallCount
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(service.currentEntitlementsCallCount, resolvedCallCount)
+    }
+
+    func testCorruptVerifiedCacheNeverGrantsPro() async throws {
+        let context = Self.context(account: "account-a")
+        let store = InMemoryEntitlementStore()
+        try store.set(Data([0xFF, 0x00, 0x01]), for: context.storageAccount)
+
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [],
+                products: [Self.lifetime],
+                defaultLatestLookup: .unavailable
+            ),
+            entitlementStore: store,
+            unresolvedRetryDelays: [.seconds(60)]
+        )
+
+        await manager.prepare()
+
+        XCTAssertFalse(manager.hasPro)
+        XCTAssertEqual(manager.accessState, .inactive)
+        XCTAssertNil(try store.data(for: context.storageAccount))
+    }
+
     func testFreshOfflineInstallCanRecoverVerifiedLifetimeFromLatestTransaction() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
