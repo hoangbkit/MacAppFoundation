@@ -20,6 +20,7 @@ All notable changes to MacAppFoundation will be documented in this file.
 - `hasPro` now follows effective access when offline entitlement persistence is enabled, while `entitlementState` continues to expose the live StoreKit result.
 - Product catalog availability and entitlement authorization are handled independently, so pricing/catalog failures do not revoke previously verified access.
 - Pro gates, the Plan pane, and compact Pro controls now distinguish unresolved entitlement checks from a confirmed Free state.
+- Entitlement retry scheduling is independent from effective access, so unavailable StoreKit verification can retry in the background even when a cacheless user currently falls back to Free.
 
 ### Fixed
 
