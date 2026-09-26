@@ -72,45 +72,26 @@ final class PremiumAccessTests: XCTestCase {
         )
     }
 
-    func testUnresolvedPremiumPresentationNeverLooksFreeOrLocked() {
-        let checkingPlan = ProPlanButtonPresentation(
-            isResolved: false,
+    func testPremiumPresentationUsesFreeAsSafePlaceholder() {
+        let freePlan = ProPlanButtonPresentation(
             hasPro: false,
             activeProduct: nil
         )
-        XCTAssertEqual(checkingPlan.title, "Checking…")
-        XCTAssertEqual(checkingPlan.iconName, "hourglass")
-        XCTAssertEqual(checkingPlan.accessibilityValue, "Checking")
-        XCTAssertFalse(checkingPlan.isEnabled)
-        XCTAssertFalse(checkingPlan.isPro)
+        XCTAssertEqual(freePlan.title, "Unlock Pro")
+        XCTAssertEqual(freePlan.iconName, "crown.fill")
+        XCTAssertEqual(freePlan.accessibilityValue, "Free plan")
+        XCTAssertFalse(freePlan.isPro)
 
-        let staleProWhileUnresolved = ProPlanButtonPresentation(
-            isResolved: false,
+        let proPlan = ProPlanButtonPresentation(
             hasPro: true,
             activeProduct: nil
         )
-        XCTAssertEqual(staleProWhileUnresolved, checkingPlan)
-
-        let checkingGate = PremiumGatePresentationState(
-            feature: feature,
-            requirement: .pro,
-            isResolved: false,
-            hasPro: false
-        )
-        XCTAssertEqual(checkingGate, .checking)
-
-        let staleProGate = PremiumGatePresentationState(
-            feature: feature,
-            requirement: .pro,
-            isResolved: false,
-            hasPro: true
-        )
-        XCTAssertEqual(staleProGate, .checking)
+        XCTAssertEqual(proPlan.title, "Pro")
+        XCTAssertTrue(proPlan.isPro)
 
         let freeGate = PremiumGatePresentationState(
             feature: feature,
             requirement: .pro,
-            isResolved: true,
             hasPro: false
         )
         XCTAssertEqual(freeGate, .requiresPro(feature: feature))
@@ -118,18 +99,16 @@ final class PremiumAccessTests: XCTestCase {
         let proGate = PremiumGatePresentationState(
             feature: feature,
             requirement: .pro,
-            isResolved: true,
             hasPro: true
         )
         XCTAssertEqual(proGate, .allowed)
 
-        let freeRequirementWhileUnresolved = PremiumGatePresentationState(
+        let freeRequirement = PremiumGatePresentationState(
             feature: feature,
             requirement: .free,
-            isResolved: false,
             hasPro: false
         )
-        XCTAssertEqual(freeRequirementWhileUnresolved, .allowed)
+        XCTAssertEqual(freeRequirement, .allowed)
     }
 
     func testLockInfoPreservesAppOwnedCopy() {
