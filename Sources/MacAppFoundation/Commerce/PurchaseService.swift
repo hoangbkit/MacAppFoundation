@@ -9,9 +9,21 @@ protocol PurchaseServing: AnyObject {
     /// Returns only records the backing store currently considers entitled.
     /// Consumers must not independently expire these records after they are returned.
     func currentEntitlements() async -> [EntitlementRecord]
+    func entitlementContext() async -> PurchaseEntitlementContext?
+    func latestEntitlement(for productID: String) async -> LatestEntitlementLookup
     func entitlementUpdates(for productIDs: Set<String>) -> AsyncStream<String>
     func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String>
     func sync() async throws
+}
+
+extension PurchaseServing {
+    func entitlementContext() async -> PurchaseEntitlementContext? {
+        nil
+    }
+
+    func latestEntitlement(for productID: String) async -> LatestEntitlementLookup {
+        .unavailable
+    }
 }
 
 @MainActor
@@ -52,7 +64,7 @@ final class LiveStoreKitService: PurchaseServing {
         switch result {
         case .success(let verification):
             let transaction = try Self.verified(verification)
-            let record = Self.makeEntitlementRecord(transaction)
+            let record = await Self.makeEntitlementRecord(transaction)
             await transaction.finish()
             return .success(record)
         case .pending:
@@ -70,7 +82,7 @@ final class LiveStoreKitService: PurchaseServing {
         for await verification in Transaction.currentEntitlements {
             switch verification {
             case .verified(let transaction):
-                records.append(Self.makeEntitlementRecord(transaction))
+                records.append(await Self.makeEntitlementRecord(transaction))
             case .unverified(_, let error):
                 Self.logger.warning(
                     "Skipping unverified StoreKit entitlement: \(String(describing: error), privacy: .public)"
@@ -79,6 +91,45 @@ final class LiveStoreKitService: PurchaseServing {
         }
 
         return records
+    }
+
+    func entitlementContext() async -> PurchaseEntitlementContext? {
+        do {
+            switch try await AppTransaction.shared {
+            case .verified(let appTransaction):
+                return PurchaseEntitlementContext(
+                    bundleID: appTransaction.bundleID,
+                    environment: Self.makeEnvironment(appTransaction.environment),
+                    appTransactionID: appTransaction.appTransactionID
+                )
+            case .unverified(_, let error):
+                Self.logger.warning(
+                    "Unable to verify AppTransaction for entitlement cache: \(String(describing: error), privacy: .public)"
+                )
+                return nil
+            }
+        } catch {
+            Self.logger.notice(
+                "AppTransaction is unavailable; verified offline entitlement fallback may be used."
+            )
+            return nil
+        }
+    }
+
+    func latestEntitlement(for productID: String) async -> LatestEntitlementLookup {
+        guard let result = await Transaction.latest(for: productID) else {
+            return .notPurchased
+        }
+
+        switch result {
+        case .verified(let transaction):
+            return .verified(await Self.makeEntitlementRecord(transaction))
+        case .unverified(_, let error):
+            Self.logger.warning(
+                "Unable to verify latest StoreKit transaction for cached entitlement: \(String(describing: error), privacy: .public)"
+            )
+            return .unavailable
+        }
     }
 
     /// Observes only transactions owned by this purchase manager.
@@ -111,9 +162,7 @@ final class LiveStoreKitService: PurchaseServing {
     }
 
     /// Observes subscription lifecycle changes without finishing transactions.
-    ///
-    /// Status changes are only a signal to refresh current entitlements. Transaction
-    /// delivery and finishing remain the responsibility of ``entitlementUpdates(for:)``.
+    /// Status changes only signal a current-entitlement refresh.
     func subscriptionStatusUpdates(for productIDs: Set<String>) -> AsyncStream<String> {
         AsyncStream { continuation in
             let task = Task {
@@ -152,13 +201,34 @@ final class LiveStoreKitService: PurchaseServing {
         }
     }
 
-    private static func makeEntitlementRecord(_ transaction: Transaction) -> EntitlementRecord {
-        EntitlementRecord(
+    private static func makeEntitlementRecord(_ transaction: Transaction) async -> EntitlementRecord {
+        let subscriptionStatus = await transaction.subscriptionStatus
+        let subscriptionState = subscriptionStatus.map {
+            makeSubscriptionState($0.state)
+        }
+
+        let gracePeriodExpirationDate: Date?
+        if let subscriptionStatus,
+           case .verified(let renewalInfo) = subscriptionStatus.renewalInfo {
+            gracePeriodExpirationDate = renewalInfo.gracePeriodExpirationDate
+        } else {
+            gracePeriodExpirationDate = nil
+        }
+
+        return EntitlementRecord(
             productID: transaction.productID,
             purchaseDate: transaction.purchaseDate,
             expirationDate: transaction.expirationDate,
+            gracePeriodExpirationDate: gracePeriodExpirationDate,
             revocationDate: transaction.revocationDate,
-            isUpgraded: transaction.isUpgraded
+            isUpgraded: transaction.isUpgraded,
+            productKind: makeEntitlementProductKind(transaction.productType),
+            ownership: makeOwnership(transaction.ownershipType),
+            transactionID: String(transaction.id),
+            originalTransactionID: String(transaction.originalID),
+            appTransactionID: transaction.appTransactionID,
+            environment: makeEnvironment(transaction.environment),
+            subscriptionState: subscriptionState
         )
     }
 
@@ -212,6 +282,43 @@ final class LiveStoreKitService: PurchaseServing {
         if type == .nonConsumable { return .nonConsumable }
         if type == .consumable { return .consumable }
         if type == .nonRenewable { return .nonRenewable }
+        return .unknown
+    }
+
+    private static func makeEntitlementProductKind(
+        _ type: Product.ProductType
+    ) -> EntitlementProductKind {
+        if type == .autoRenewable { return .autoRenewable }
+        if type == .nonConsumable { return .nonConsumable }
+        if type == .consumable || type == .nonRenewable { return .unsupported }
+        return .unknown
+    }
+
+    private static func makeOwnership(
+        _ ownershipType: Transaction.OwnershipType
+    ) -> EntitlementOwnership {
+        if ownershipType == .purchased { return .purchased }
+        if ownershipType == .familyShared { return .familyShared }
+        return .other
+    }
+
+    private static func makeEnvironment(
+        _ environment: AppStore.Environment
+    ) -> PurchaseStoreEnvironment {
+        if environment == .production { return .production }
+        if environment == .sandbox { return .sandbox }
+        if environment == .xcode { return .xcode }
+        return .unknown
+    }
+
+    private static func makeSubscriptionState(
+        _ state: Product.SubscriptionInfo.RenewalState
+    ) -> EntitlementSubscriptionState {
+        if state == .subscribed { return .subscribed }
+        if state == .inGracePeriod { return .inGracePeriod }
+        if state == .inBillingRetryPeriod { return .inBillingRetryPeriod }
+        if state == .expired { return .expired }
+        if state == .revoked { return .revoked }
         return .unknown
     }
 

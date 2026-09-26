@@ -72,6 +72,66 @@ final class PremiumAccessTests: XCTestCase {
         )
     }
 
+    func testUnresolvedPremiumPresentationNeverLooksFreeOrLocked() {
+        let checkingPlan = ProPlanButtonPresentation(
+            isResolved: false,
+            hasPro: false,
+            activeProduct: nil
+        )
+        XCTAssertEqual(checkingPlan.title, "Checking…")
+        XCTAssertEqual(checkingPlan.iconName, "hourglass")
+        XCTAssertEqual(checkingPlan.accessibilityValue, "Checking")
+        XCTAssertFalse(checkingPlan.isEnabled)
+        XCTAssertFalse(checkingPlan.isPro)
+
+        let staleProWhileUnresolved = ProPlanButtonPresentation(
+            isResolved: false,
+            hasPro: true,
+            activeProduct: nil
+        )
+        XCTAssertEqual(staleProWhileUnresolved, checkingPlan)
+
+        let checkingGate = PremiumGatePresentationState(
+            feature: feature,
+            requirement: .pro,
+            isResolved: false,
+            hasPro: false
+        )
+        XCTAssertEqual(checkingGate, .checking)
+
+        let staleProGate = PremiumGatePresentationState(
+            feature: feature,
+            requirement: .pro,
+            isResolved: false,
+            hasPro: true
+        )
+        XCTAssertEqual(staleProGate, .checking)
+
+        let freeGate = PremiumGatePresentationState(
+            feature: feature,
+            requirement: .pro,
+            isResolved: true,
+            hasPro: false
+        )
+        XCTAssertEqual(freeGate, .requiresPro(feature: feature))
+
+        let proGate = PremiumGatePresentationState(
+            feature: feature,
+            requirement: .pro,
+            isResolved: true,
+            hasPro: true
+        )
+        XCTAssertEqual(proGate, .allowed)
+
+        let freeRequirementWhileUnresolved = PremiumGatePresentationState(
+            feature: feature,
+            requirement: .free,
+            isResolved: false,
+            hasPro: false
+        )
+        XCTAssertEqual(freeRequirementWhileUnresolved, .allowed)
+    }
+
     func testLockInfoPreservesAppOwnedCopy() {
         let info = ProLockInfo(
             title: "Pro Feature",

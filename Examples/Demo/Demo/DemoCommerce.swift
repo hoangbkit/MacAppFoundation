@@ -88,7 +88,8 @@ enum DemoCommerce {
         productIDs: [monthlyID, yearlyID, lifetimeID],
         preferredProductID: yearlyID,
         features: features,
-        productLoadAttempts: 2
+        productLoadAttempts: 2,
+        offlineEntitlements: .verifiedCache(.init())
     )
 
     static let manager = PurchaseManager(

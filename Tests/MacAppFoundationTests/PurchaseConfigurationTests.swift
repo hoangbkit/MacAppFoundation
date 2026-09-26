@@ -11,13 +11,20 @@ final class PurchaseConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.entitledProductIDs, ["yearly", "monthly"])
     }
 
-    func testEntitlementIdentifiersAreLimitedToManagedCatalog() {
+    func testHistoricalEntitlementIdentifiersCanRemainOutsideSellableCatalog() {
         let configuration = PurchaseConfiguration(
             productIDs: ["monthly", "lifetime"],
             entitledProductIDs: [" monthly ", "legacy", ""]
         )
 
-        XCTAssertEqual(configuration.entitledProductIDs, ["monthly"])
+        XCTAssertEqual(configuration.entitledProductIDs, ["monthly", "legacy"])
+        XCTAssertEqual(configuration.productIDs, ["monthly", "lifetime"])
+    }
+
+    func testOfflineEntitlementsAreDisabledByDefault() {
+        let configuration = PurchaseConfiguration(productIDs: ["monthly"])
+
+        XCTAssertEqual(configuration.offlineEntitlements, .disabled)
     }
 
     func testDropsPreferredIdentifierThatIsNotInCatalog() {

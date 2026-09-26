@@ -15,7 +15,8 @@ struct CommerceShowcaseView: View {
 
                 GroupBox("Current state") {
                     VStack(spacing: 10) {
-                        LabeledContent("Entitlement", value: entitlementTitle)
+                        LabeledContent("Live entitlement", value: entitlementTitle)
+                        LabeledContent("Effective access", value: accessTitle)
                         LabeledContent("Product loading", value: productLoadingTitle)
                         LabeledContent("Purchase activity", value: activityTitle)
                         LabeledContent("Preferred product", value: purchaseManager.preferredProduct?.displayName ?? "None")
@@ -217,6 +218,21 @@ struct CommerceShowcaseView: View {
         case .checking: "Checking"
         case .inactive: "Free"
         case .active(let snapshot): snapshot.activeProductIDs.sorted().joined(separator: ", ")
+        }
+    }
+
+    private var accessTitle: String {
+        switch purchaseManager.accessState {
+        case .checking:
+            return "Checking"
+        case .unresolved:
+            return "Unresolved"
+        case .inactive:
+            return "Free"
+        case .active(let source, let snapshot):
+            let products = snapshot.activeProductIDs.sorted().joined(separator: ", ")
+            let sourceLabel = source == .storeKit ? "StoreKit" : "Verified cache"
+            return "\(products) · \(sourceLabel)"
         }
     }
 

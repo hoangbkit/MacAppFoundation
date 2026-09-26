@@ -31,7 +31,12 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
     }
 
     public var body: some View {
-        switch decision {
+        switch presentationState {
+        case .checking:
+            ProgressView()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Checking Pro access")
         case .allowed:
             proContent
         case .requiresPro(let feature):
@@ -39,12 +44,14 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
         }
     }
 
-    private var decision: PremiumAccessDecision {
-        policy.decision(
-            for: feature,
+    private var presentationState: PremiumGatePresentationState {
+        PremiumGatePresentationState(
+            feature: feature,
             requirement: requirement,
+            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
-            isExistingContent: isExistingContent
+            isExistingContent: isExistingContent,
+            policy: policy
         )
     }
 }

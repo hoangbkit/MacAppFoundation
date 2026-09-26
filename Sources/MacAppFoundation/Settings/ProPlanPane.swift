@@ -27,27 +27,36 @@ public struct ProPlanPane: View {
         VStack(alignment: .leading, spacing: 16) {
             ZStack(alignment: .topTrailing) {
                 LinearGradient(
-                    colors: purchaseManager.hasPro
-                        ? [theme.accentSoft, theme.surface]
-                        : [theme.surfaceRaised, theme.surface],
+                    colors: headerGradientColors,
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
 
-                Image(systemName: purchaseManager.hasPro ? "checkmark.seal.fill" : "sparkles")
-                    .font(.system(size: 28))
-                    .foregroundStyle(
-                        purchaseManager.hasPro ? theme.accent : theme.textSecondary
-                    )
-                    .padding(18)
+                Group {
+                    switch presentationState {
+                    case .checking:
+                        ProgressView()
+                            .controlSize(.regular)
+                            .accessibilityLabel("Checking Pro access")
+                    case .free:
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 28))
+                            .foregroundStyle(theme.textSecondary)
+                    case .pro:
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(theme.accent)
+                    }
+                }
+                .padding(18)
 
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .center, spacing: 10) {
-                        Text(purchaseManager.hasPro ? configuration.proTitle : configuration.freeTitle)
+                        Text(planTitle)
                             .font(.system(size: 30, weight: .bold, design: .rounded))
                             .foregroundStyle(theme.textPrimary)
 
-                        if purchaseManager.hasPro {
+                        if presentationState == .pro {
                             Text(currentPlanLabel)
                                 .font(.system(size: 11, weight: .bold, design: .rounded))
                                 .padding(.horizontal, 10)
@@ -61,11 +70,7 @@ public struct ProPlanPane: View {
                         }
                     }
 
-                    Text(
-                        purchaseManager.hasPro
-                            ? configuration.proDescription
-                            : configuration.freeDescription
-                    )
+                    Text(planDescription)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textSecondary)
 
@@ -109,6 +114,7 @@ public struct ProPlanPane: View {
                         .buttonStyle(MacAppButtonStyle(.quiet))
                         .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
@@ -122,7 +128,7 @@ public struct ProPlanPane: View {
             if !resolvedFeatures.isEmpty {
                 ProPlanFeatureList(
                     features: resolvedFeatures,
-                    isPro: purchaseManager.hasPro
+                    presentationState: presentationState
                 )
                 .padding(14)
                 .background(theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -137,8 +143,27 @@ public struct ProPlanPane: View {
         }
     }
 
+    private var presentationState: ProPlanPanePresentationState {
+        ProPlanPanePresentationState(
+            isResolved: purchaseManager.accessState.isResolved,
+            hasPro: purchaseManager.hasPro
+        )
+    }
+
+    private var headerGradientColors: [Color] {
+        switch presentationState {
+        case .checking:
+            return [theme.surfaceRaised.opacity(0.45), theme.surface]
+        case .free:
+            return [theme.surfaceRaised, theme.surface]
+        case .pro:
+            return [theme.accentSoft, theme.surface]
+        }
+    }
+
     private var actionState: ProPlanPaneActionState {
         ProPlanPaneActionState(
+            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
             activeProduct: purchaseManager.activeProduct,
             activeSubscriptionProduct: purchaseManager.activeSubscriptionProduct
@@ -147,6 +172,28 @@ public struct ProPlanPane: View {
 
     private var resolvedFeatures: [PurchaseFeature] {
         configuration.features ?? purchaseManager.features
+    }
+
+    private var planTitle: String {
+        switch presentationState {
+        case .checking:
+            return "Checking…"
+        case .free:
+            return configuration.freeTitle
+        case .pro:
+            return configuration.proTitle
+        }
+    }
+
+    private var planDescription: String {
+        switch presentationState {
+        case .checking:
+            return "Verifying your App Store entitlement."
+        case .free:
+            return configuration.freeDescription
+        case .pro:
+            return configuration.proDescription
+        }
     }
 
     private var currentPlanLabel: String {
@@ -159,19 +206,19 @@ private struct ProPlanFeatureList: View {
     @Environment(\.macAppTheme) private var theme
 
     let features: [PurchaseFeature]
-    let isPro: Bool
+    let presentationState: ProPlanPanePresentationState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(features) { feature in
                 HStack(alignment: .top, spacing: 12) {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isPro ? theme.accentSoft : theme.surfaceRaised)
+                        .fill(featureIconBackground)
                         .frame(width: 26, height: 26)
                         .overlay {
                             Image(systemName: feature.systemImage)
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(isPro ? theme.accent : theme.textSecondary)
+                                .foregroundStyle(featureIconForeground)
                         }
                         .overlay {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -195,8 +242,38 @@ private struct ProPlanFeatureList: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private var featureIconBackground: Color {
+        switch presentationState {
+        case .checking:
+            return theme.surface
+        case .free:
+            return theme.surfaceRaised
+        case .pro:
+            return theme.accentSoft
+        }
+    }
+
+    private var featureIconForeground: Color {
+        presentationState == .pro ? theme.accent : theme.textSecondary
+    }
 }
 
+enum ProPlanPanePresentationState: Equatable {
+    case checking
+    case free
+    case pro
+
+    init(isResolved: Bool, hasPro: Bool) {
+        if !isResolved {
+            self = .checking
+        } else if hasPro {
+            self = .pro
+        } else {
+            self = .free
+        }
+    }
+}
 
 struct ProPlanPaneActionState: Equatable {
     let showsUpgrade: Bool
@@ -204,12 +281,13 @@ struct ProPlanPaneActionState: Equatable {
     let showsManageSubscription: Bool
 
     init(
+        isResolved: Bool = true,
         hasPro: Bool,
         activeProduct: StoreProduct?,
         activeSubscriptionProduct: StoreProduct?
     ) {
-        showsUpgrade = !hasPro
-        showsViewPlans = hasPro && activeProduct?.isRecurring == true
-        showsManageSubscription = activeSubscriptionProduct != nil
+        showsUpgrade = isResolved && !hasPro
+        showsViewPlans = isResolved && hasPro && activeProduct?.isRecurring == true
+        showsManageSubscription = isResolved && activeSubscriptionProduct != nil
     }
 }

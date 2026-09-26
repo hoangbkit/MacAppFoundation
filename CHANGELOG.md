@@ -8,6 +8,24 @@ All notable changes to MacAppFoundation will be documented in this file.
 
 - `.managesAnalytics` now shares its optional app-scoped analytics client with MacAppFoundation-owned descendant views.
 - `ProPaywallView` automatically records bounded paywall, purchase, restore, and offer-code funnel events when analytics is available, while remaining fully functional and silent when analytics is not configured.
+- Added opt-in offline-safe entitlement persistence with `PurchaseConfiguration.offlineEntitlements`.
+- Added `PurchaseAccessState` to distinguish live StoreKit entitlement state from effective app authorization.
+- Persist previously verified entitlement records in Keychain with bundle, StoreKit environment, and `appTransactionID` scoping.
+- Persist the last verified StoreKit account identity separately from entitlement state, including Free accounts, so offline relaunches do not reuse another Apple Account's paid cache.
+- Added offline continuity rules for directly purchased Lifetime products, bounded subscriptions, Billing Grace Period, Family Sharing, and wall-clock rollback protection.
+- Added support for historical entitlement product IDs that are no longer part of the current sellable catalog.
+
+### Changed
+
+- `hasPro` now follows effective access when offline entitlement persistence is enabled, while `entitlementState` continues to expose the live StoreKit result.
+- Product catalog availability and entitlement authorization are handled independently, so pricing/catalog failures do not revoke previously verified access.
+- Pro gates, the Plan pane, and compact Pro controls now distinguish unresolved entitlement checks from a confirmed Free state.
+- Entitlement retry scheduling is independent from effective access, so unavailable StoreKit verification can retry in the background even when a cacheless user currently falls back to Free.
+
+### Fixed
+
+- Prevent a verified Free Apple Account from falling back to a previously paid account's cached entitlement during an offline relaunch.
+- Preserve a previously verified directly purchased Lifetime entitlement when `Transaction.latest(for:)` unexpectedly returns no transaction; only explicit verified revocation/refund invalidates the cache.
 
 
 ## 1.2.0 - 2026-09-24

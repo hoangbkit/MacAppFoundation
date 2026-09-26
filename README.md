@@ -30,14 +30,14 @@ The Debug build starts with in-process simulated purchases. The included StoreKi
 
 MacAppFoundation now has six main areas:
 
-1. **Commerce + simulation** — verified StoreKit 2 entitlement state, product loading, purchase/restore, transaction observation, foreground refresh, and a Debug-only in-process simulator.
+1. **Commerce + simulation** — verified StoreKit 2 entitlement state, opt-in offline-safe verified entitlement persistence, product loading, purchase/restore, transaction observation, foreground refresh, and a Debug-only in-process simulator.
 2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
 4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Appearance/Plan panes, and selection routing.
 5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, analytics actions, and app-defined developer actions.
 6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, stable Keychain installation identity, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
 
-Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation does not persist a `hasPro` flag for entitlement decisions.
+Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation never persists a bare `hasPro` flag. Apps may opt into an account-scoped, versioned Keychain cache of previously verified entitlement records for offline continuity.
 
 ## Installation
 
@@ -91,6 +91,23 @@ WindowGroup {
 ```
 
 Normal feature checks use `purchases.hasPro`. Richer commerce surfaces can also read loaded products, loading/activity state, preferred/active product, restore state, and entitlement refresh APIs.
+
+For an offline-first app, enable verified entitlement continuity explicitly:
+
+```swift
+let purchaseConfiguration = PurchaseConfiguration(
+    productIDs: [
+        "com.example.app.pro.monthly",
+        "com.example.app.pro.yearly",
+        "com.example.app.pro.lifetime"
+    ],
+    offlineEntitlements: .verifiedCache(.init())
+)
+```
+
+With caching enabled, `purchases.entitlementState` remains the live StoreKit result while `purchases.accessState` is the effective authorization state. `hasPro` follows effective access, so a previously verified directly purchased Lifetime entitlement can remain usable offline. Recurring products are bounded by their verified expiration or grace-period window rather than becoming indefinite access.
+
+`entitledProductIDs` may include historical SKUs that are no longer present in the current `productIDs` merchandising catalog.
 
 ## 2. Configure app theming
 

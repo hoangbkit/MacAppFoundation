@@ -23,6 +23,38 @@ public enum PremiumAccessDecision: Sendable, Equatable {
     case requiresPro(feature: PremiumFeature)
 }
 
+enum PremiumGatePresentationState: Equatable {
+    case checking
+    case allowed
+    case requiresPro(feature: PremiumFeature)
+
+    init(
+        feature: PremiumFeature,
+        requirement: PremiumAccessRequirement,
+        isResolved: Bool,
+        hasPro: Bool,
+        isExistingContent: Bool = false,
+        policy: PremiumAccessPolicy = .init()
+    ) {
+        if requirement == .pro, !isResolved {
+            self = .checking
+            return
+        }
+
+        switch policy.decision(
+            for: feature,
+            requirement: requirement,
+            hasPro: hasPro,
+            isExistingContent: isExistingContent
+        ) {
+        case .allowed:
+            self = .allowed
+        case .requiresPro(let feature):
+            self = .requiresPro(feature: feature)
+        }
+    }
+}
+
 /// Centralizes expiry behavior used by premium gates.
 ///
 /// Existing user-created content remains accessible by default after Pro expires.

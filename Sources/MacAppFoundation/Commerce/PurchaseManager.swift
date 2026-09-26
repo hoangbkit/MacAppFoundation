@@ -3,12 +3,30 @@ import Observation
 import OSLog
 import StoreKit
 
+private enum EntitlementCacheMutation {
+    case none
+    case write(VerifiedEntitlementCache)
+    case remove
+}
+
+private struct EntitlementAccessResolution {
+    let state: PurchaseAccessState
+    let cacheMutation: EntitlementCacheMutation
+    let shouldRetry: Bool
+}
+
+private struct ReconciledCacheResult {
+    let cache: VerifiedEntitlementCache?
+    let hadUnavailableLookup: Bool
+}
+
 @MainActor
 @Observable
 public final class PurchaseManager {
     public private(set) var products: [StoreProduct] = []
     public private(set) var productLoadingState: ProductLoadingState = .idle
     public private(set) var entitlementState: EntitlementState = .checking
+    public private(set) var accessState: PurchaseAccessState = .checking
     public private(set) var activity: PurchaseActivity = .idle
 
     public let configuration: PurchaseConfiguration
@@ -23,6 +41,8 @@ public final class PurchaseManager {
     @ObservationIgnored private var simulatedOperationDelay: Duration
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     @ObservationIgnored private var subscriptionStatusUpdateTask: Task<Void, Never>?
+    @ObservationIgnored private var unresolvedRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var entitlementRetryNeeded = false
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
     @ObservationIgnored private var entitlementRefreshGeneration = 0
@@ -33,6 +53,11 @@ public final class PurchaseManager {
     ] = [:]
     @ObservationIgnored private var productLoadGeneration = 0
     @ObservationIgnored private var hasPrepared = false
+    @ObservationIgnored private var entitlementStore: (any VerifiedEntitlementStoring)?
+    @ObservationIgnored private var entitlementContext: PurchaseEntitlementContext?
+    @ObservationIgnored private let unresolvedRetryDelays: [Duration]
+    @ObservationIgnored private let unresolvedRetryInterval: Duration
+    @ObservationIgnored private let now: () -> Date
 
     @ObservationIgnored private static let logger = Logger(
         subsystem: "com.macappfoundation.purchases",
@@ -57,18 +82,35 @@ public final class PurchaseManager {
         self.defaultSimulatedProducts = simulatedProducts
         self.simulatedPersistenceKey = simulatedPersistenceKey
         self.simulatedOperationDelay = simulatedOperationDelay
-        self.service = PurchaseServiceFactory.make(
+        self.unresolvedRetryDelays = [.seconds(2), .seconds(5), .seconds(15), .seconds(60)]
+        self.unresolvedRetryInterval = .seconds(300)
+
+        let service = PurchaseServiceFactory.make(
             mode: simulated ? .simulated : .live,
             simulatedProducts: simulatedProducts,
             simulatedPersistenceKey: simulatedPersistenceKey,
             simulatedOperationDelay: simulatedOperationDelay
         )
+        self.service = service
+        self.now = { .now }
+        if let policy = configuration.offlineEntitlements.verifiedCachePolicy {
+            self.entitlementStore = KeychainVerifiedEntitlementStore(
+                service: policy.keychainService
+            )
+        } else {
+            self.entitlementStore = nil
+        }
+        self.entitlementContext = nil
     }
 
     /// Internal service injection used by deterministic package tests.
     init(
         configuration: PurchaseConfiguration,
-        service: any PurchaseServing
+        service: any PurchaseServing,
+        entitlementStore: (any VerifiedEntitlementStoring)? = nil,
+        unresolvedRetryDelays: [Duration] = [.seconds(2), .seconds(5), .seconds(15), .seconds(60)],
+        unresolvedRetryInterval: Duration = .seconds(300),
+        now: @escaping () -> Date = { .now }
     ) {
         self.configuration = configuration
         self.simulatedConfiguration = configuration
@@ -78,17 +120,30 @@ public final class PurchaseManager {
         self.simulatedPersistenceKey = nil
         self.simulatedOperationDelay = .milliseconds(250)
         self.service = service
+        self.unresolvedRetryDelays = unresolvedRetryDelays
+        self.unresolvedRetryInterval = unresolvedRetryInterval
+        self.now = now
+        self.entitlementStore = configuration.offlineEntitlements.verifiedCachePolicy == nil
+            ? nil
+            : entitlementStore
+        self.entitlementContext = nil
     }
 
     deinit {
         updateTask?.cancel()
         subscriptionStatusUpdateTask?.cancel()
+        unresolvedRetryTask?.cancel()
         restoreTask?.cancel()
     }
 
     /// The simple entitlement property apps should use for normal feature gating.
+    ///
+    /// With offline entitlement persistence disabled, this retains the historical
+    /// live-StoreKit behavior. When the app explicitly enables verified caching,
+    /// this reflects effective access and may remain true from a previously
+    /// verified cache while live StoreKit state is unresolved.
     public var hasPro: Bool {
-        entitlementState.isActive
+        accessState.isActive
     }
 
     public var isBusy: Bool {
@@ -328,8 +383,30 @@ public final class PurchaseManager {
         let refreshGeneration = entitlementRefreshGeneration
         let generation = serviceGeneration
         let service = service
-        let entitledProductIDs = activeConfiguration.entitledProductIDs
+        let configuration = activeConfiguration
+        let entitledProductIDs = configuration.entitledProductIDs
+        let usesOfflineCache =
+            configuration.offlineEntitlements.verifiedCachePolicy != nil
+            && shouldUseVerifiedCacheForCurrentService
+
         let records = await service.currentEntitlements()
+        let recordContext = usesOfflineCache
+            ? Self.context(from: records)
+            : nil
+        let verifiedContext: PurchaseEntitlementContext?
+        if usesOfflineCache, recordContext == nil {
+            verifiedContext = await service.entitlementContext()
+        } else {
+            verifiedContext = nil
+        }
+        let newlyVerifiedContext = recordContext ?? verifiedContext
+        let persistedContext = usesOfflineCache && newlyVerifiedContext == nil
+            ? loadLastVerifiedContext()
+            : nil
+
+        let context = newlyVerifiedContext
+            ?? persistedContext
+            ?? entitlementContext
         guard generation == serviceGeneration else { return [] }
 
         guard refreshGeneration == entitlementRefreshGeneration else {
@@ -338,15 +415,588 @@ public final class PurchaseManager {
             )
         }
 
-        entitlementState = EntitlementEvaluator.evaluateCurrentEntitlements(
+        let liveState = EntitlementEvaluator.evaluateCurrentEntitlements(
             records,
             entitledProductIDs: entitledProductIDs
         )
+        let resolution = await resolveAccess(
+            liveState: liveState,
+            records: records,
+            context: context,
+            service: service,
+            configuration: configuration
+        )
+
+        guard generation == serviceGeneration else { return [] }
+        guard refreshGeneration == entitlementRefreshGeneration else {
+            return await waitForEntitlementRefresh(
+                atLeast: entitlementRefreshGeneration
+            )
+        }
+
+        if let newlyVerifiedContext {
+            persistVerifiedContext(newlyVerifiedContext)
+        }
+
+        entitlementState = liveState
+        entitlementContext = context
+        accessState = resolution.state
+        applyCacheMutation(resolution.cacheMutation)
+        updateEntitlementRetry(shouldRetry: resolution.shouldRetry)
+
         completeEntitlementRefresh(
             generation: refreshGeneration,
             records: records
         )
         return records
+    }
+
+    private func resolveAccess(
+        liveState: EntitlementState,
+        records: [EntitlementRecord],
+        context: PurchaseEntitlementContext?,
+        service: any PurchaseServing,
+        configuration: PurchaseConfiguration
+    ) async -> EntitlementAccessResolution {
+        guard let policy = configuration.offlineEntitlements.verifiedCachePolicy,
+              shouldUseVerifiedCacheForCurrentService
+        else {
+            return EntitlementAccessResolution(
+                state: Self.liveAccessState(from: liveState),
+                cacheMutation: .none,
+                shouldRetry: false
+            )
+        }
+
+        if case .active(let snapshot) = liveState {
+            guard let context else {
+                return EntitlementAccessResolution(
+                    state: .active(source: .storeKit, snapshot: snapshot),
+                    cacheMutation: .none,
+                    shouldRetry: false
+                )
+            }
+
+            let existingCache = loadVerifiedCache(context: context)
+            let reconciliation = await reconciledCache(
+                liveRecords: records,
+                existingCache: existingCache,
+                context: context,
+                policy: policy,
+                service: service,
+                entitledProductIDs: configuration.entitledProductIDs
+            )
+
+            return EntitlementAccessResolution(
+                state: .active(source: .storeKit, snapshot: snapshot),
+                cacheMutation: reconciliation.cache.map(EntitlementCacheMutation.write) ?? .none,
+                shouldRetry: false
+            )
+        }
+
+        guard let context else {
+            return EntitlementAccessResolution(
+                state: .unresolved,
+                cacheMutation: .none,
+                shouldRetry: true
+            )
+        }
+
+        let existingCache = loadVerifiedCache(context: context)
+        let reconciliation = await reconciledCache(
+            liveRecords: [],
+            existingCache: existingCache,
+            context: context,
+            policy: policy,
+            service: service,
+            entitledProductIDs: configuration.entitledProductIDs
+        )
+
+        guard let reconciled = reconciliation.cache else {
+            if reconciliation.hadUnavailableLookup, let existingCache {
+                return EntitlementAccessResolution(
+                    state: .unresolved,
+                    cacheMutation: .write(existingCache.touched(at: now())),
+                    shouldRetry: true
+                )
+            }
+
+            return EntitlementAccessResolution(
+                state: .inactive,
+                cacheMutation: .remove,
+                shouldRetry: reconciliation.hadUnavailableLookup
+            )
+        }
+
+        let cachedState = OfflineEntitlementResolver.accessState(
+            cache: reconciled,
+            context: context,
+            policy: policy,
+            now: now()
+        )
+
+        if cachedState.isActive {
+            return EntitlementAccessResolution(
+                state: cachedState,
+                cacheMutation: .write(reconciled),
+                shouldRetry: false
+            )
+        }
+
+        return EntitlementAccessResolution(
+            state: .unresolved,
+            cacheMutation: .write(reconciled),
+            shouldRetry: true
+        )
+    }
+
+    private func reconciledCache(
+        liveRecords: [EntitlementRecord],
+        existingCache: VerifiedEntitlementCache?,
+        context: PurchaseEntitlementContext,
+        policy: VerifiedEntitlementCachePolicy,
+        service: any PurchaseServing,
+        entitledProductIDs: Set<String>
+    ) async -> ReconciledCacheResult {
+        let date = now()
+        let eligibleLiveRecords = liveRecords.filter {
+            entitledProductIDs.contains($0.productID)
+                && recordMatchesContext($0, context: context)
+                && $0.revocationDate == nil
+                && !$0.isUpgraded
+                && ($0.productKind == .autoRenewable || $0.productKind == .nonConsumable)
+        }
+
+        var persisted = eligibleLiveRecords.map {
+            PersistedEntitlementRecord($0, verifiedAt: date)
+        }
+        let liveProductIDs = Set(eligibleLiveRecords.map(\.productID))
+        var hadUnavailableLookup = false
+
+        if let existingCache, existingCache.matches(context) {
+            for cachedRecord in existingCache.entitlements
+            where entitledProductIDs.contains(cachedRecord.productID)
+                && !liveProductIDs.contains(cachedRecord.productID) {
+                switch await service.latestEntitlement(for: cachedRecord.productID) {
+                case .verified(let record):
+                    if let replacement = reconciledRecord(
+                        latestRecord: record,
+                        cachedRecord: cachedRecord,
+                        existingCache: existingCache,
+                        context: context,
+                        policy: policy,
+                        now: date
+                    ) {
+                        persisted.append(replacement)
+                    }
+                case .notPurchased:
+                    if cachedRecord.productKind == .nonConsumable,
+                       cachedRecord.ownership == .purchased {
+                        hadUnavailableLookup = true
+                        persisted.append(cachedRecord)
+                    }
+                case .unavailable:
+                    hadUnavailableLookup = true
+                    if OfflineEntitlementResolver.cachedRecordIsStillUsable(
+                        cachedRecord,
+                        cache: existingCache,
+                        policy: policy,
+                        now: date
+                    ) {
+                        persisted.append(cachedRecord)
+                    }
+                }
+            }
+        } else if liveRecords.isEmpty {
+            for productID in entitledProductIDs.sorted() {
+                switch await service.latestEntitlement(for: productID) {
+                case .verified(let record):
+                    if let persistedRecord = freshReconciledRecord(
+                        latestRecord: record,
+                        context: context,
+                        now: date
+                    ) {
+                        persisted.append(persistedRecord)
+                    }
+                case .notPurchased:
+                    continue
+                case .unavailable:
+                    hadUnavailableLookup = true
+                }
+            }
+        }
+
+        guard !persisted.isEmpty else {
+            return ReconciledCacheResult(
+                cache: nil,
+                hadUnavailableLookup: hadUnavailableLookup
+            )
+        }
+
+        let uniquePersisted = Dictionary(
+            persisted.map { ($0.productID, $0) },
+            uniquingKeysWith: { _, newer in newer }
+        ).values.sorted { $0.productID < $1.productID }
+
+        if let existingCache, existingCache.matches(context) {
+            return ReconciledCacheResult(
+                cache: existingCache.replacingEntitlements(
+                    uniquePersisted,
+                    verifiedAt: date,
+                    observedAt: date
+                ),
+                hadUnavailableLookup: hadUnavailableLookup
+            )
+        }
+
+        return ReconciledCacheResult(
+            cache: VerifiedEntitlementCache(
+                context: context,
+                verifiedAt: date,
+                entitlements: uniquePersisted
+            ),
+            hadUnavailableLookup: hadUnavailableLookup
+        )
+    }
+
+    private func freshReconciledRecord(
+        latestRecord: EntitlementRecord,
+        context: PurchaseEntitlementContext,
+        now: Date
+    ) -> PersistedEntitlementRecord? {
+        guard recordMatchesContext(latestRecord, context: context),
+              latestRecord.revocationDate == nil,
+              !latestRecord.isUpgraded
+        else {
+            return nil
+        }
+
+        switch latestRecord.productKind {
+        case .nonConsumable:
+            guard latestRecord.ownership == .purchased else {
+                return nil
+            }
+            return PersistedEntitlementRecord(
+                latestRecord,
+                verifiedAt: now
+            )
+
+        case .autoRenewable:
+            guard latestRecord.subscriptionState?.isExplicitlyInactive != true,
+                  latestRecord.isActive(at: now)
+            else {
+                return nil
+            }
+            return PersistedEntitlementRecord(
+                latestRecord,
+                verifiedAt: now
+            )
+
+        case .unsupported, .unknown:
+            return nil
+        }
+    }
+
+    private func reconciledRecord(
+        latestRecord: EntitlementRecord,
+        cachedRecord: PersistedEntitlementRecord,
+        existingCache: VerifiedEntitlementCache,
+        context: PurchaseEntitlementContext,
+        policy: VerifiedEntitlementCachePolicy,
+        now: Date
+    ) -> PersistedEntitlementRecord? {
+        guard latestRecord.productID == cachedRecord.productID,
+              recordMatchesContext(latestRecord, context: context),
+              latestRecord.revocationDate == nil,
+              !latestRecord.isUpgraded
+        else {
+            return nil
+        }
+
+        switch latestRecord.productKind {
+        case .nonConsumable:
+            if latestRecord.ownership == .purchased {
+                return PersistedEntitlementRecord(
+                    latestRecord,
+                    verifiedAt: now
+                )
+            }
+            return OfflineEntitlementResolver.cachedRecordIsStillUsable(
+                cachedRecord,
+                cache: existingCache,
+                policy: policy,
+                now: now
+            ) ? cachedRecord : nil
+
+        case .autoRenewable:
+            guard latestRecord.subscriptionState?.isExplicitlyInactive != true,
+                  latestRecord.isActive(at: now)
+            else {
+                return nil
+            }
+            return PersistedEntitlementRecord(
+                latestRecord,
+                verifiedAt: now
+            )
+
+        case .unsupported, .unknown:
+            return nil
+        }
+    }
+
+    private func recordMatchesContext(
+        _ record: EntitlementRecord,
+        context: PurchaseEntitlementContext
+    ) -> Bool {
+        if let appTransactionID = record.appTransactionID,
+           appTransactionID != context.appTransactionID {
+            return false
+        }
+
+        if record.environment != .unknown,
+           record.environment != context.environment {
+            return false
+        }
+
+        return true
+    }
+
+    private func persistVerifiedContext(
+        _ context: PurchaseEntitlementContext
+    ) {
+        guard let entitlementStore else { return }
+
+        do {
+            let identity = PersistedPurchaseIdentity(
+                context: context,
+                verifiedAt: now()
+            )
+            let data = try JSONEncoder().encode(identity)
+            try entitlementStore.set(
+                data,
+                for: context.identityStorageAccount
+            )
+        } catch {
+            Self.logger.warning(
+                "Verified StoreKit account identity could not be persisted; live entitlement state is unchanged."
+            )
+        }
+    }
+
+    private func loadLastVerifiedContext() -> PurchaseEntitlementContext? {
+        guard let entitlementStore,
+              let bundleID = Bundle.main.bundleIdentifier
+        else {
+            return nil
+        }
+
+        #if DEBUG
+        let environments: [PurchaseStoreEnvironment] = [
+            .xcode,
+            .sandbox,
+            .production,
+        ]
+        #else
+        let environments: [PurchaseStoreEnvironment] = [.production]
+        #endif
+
+        do {
+            let identities = try environments.compactMap {
+                environment -> PersistedPurchaseIdentity? in
+                let account = PurchaseEntitlementContext.identityStorageAccount(
+                    bundleID: bundleID,
+                    environment: environment
+                )
+                guard let data = try entitlementStore.data(for: account),
+                      let identity = try? JSONDecoder().decode(
+                          PersistedPurchaseIdentity.self,
+                          from: data
+                      ),
+                      identity.isValid(forBundleID: bundleID),
+                      identity.environment == environment
+                else {
+                    return nil
+                }
+                return identity
+            }
+
+            return identities.max(by: { $0.verifiedAt < $1.verifiedAt })?.context
+        } catch {
+            Self.logger.warning(
+                "Last verified StoreKit account identity could not be read; live StoreKit verification remains authoritative."
+            )
+            return nil
+        }
+    }
+
+    private var shouldUseVerifiedCacheForCurrentService: Bool {
+        #if DEBUG
+        if service is SimulatedPurchaseService {
+            return false
+        }
+        #endif
+        return true
+    }
+
+    private static func context(
+        from records: [EntitlementRecord]
+    ) -> PurchaseEntitlementContext? {
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let identified = records.compactMap { record -> PurchaseEntitlementContext? in
+            guard let appTransactionID = record.appTransactionID,
+                  record.environment != .unknown
+            else {
+                return nil
+            }
+
+            return PurchaseEntitlementContext(
+                bundleID: bundleID,
+                environment: record.environment,
+                appTransactionID: appTransactionID
+            )
+        }
+
+        guard let first = identified.first,
+              identified.allSatisfy({
+                  $0.appTransactionID == first.appTransactionID
+                      && $0.environment == first.environment
+              })
+        else {
+            return nil
+        }
+
+        return first
+    }
+
+    private func loadVerifiedCache(
+        context: PurchaseEntitlementContext
+    ) -> VerifiedEntitlementCache? {
+        guard let entitlementStore else { return nil }
+
+        do {
+            guard let data = try entitlementStore.data(
+                for: context.storageAccount
+            ) else {
+                return nil
+            }
+            let cache = try JSONDecoder().decode(
+                VerifiedEntitlementCache.self,
+                from: data
+            )
+            guard cache.matches(context) else {
+                return nil
+            }
+            return cache
+        } catch {
+            Self.logger.warning(
+                "Verified entitlement cache could not be read; live StoreKit verification remains authoritative."
+            )
+            return nil
+        }
+    }
+
+    private func applyCacheMutation(_ mutation: EntitlementCacheMutation) {
+        guard let context = entitlementContext,
+              let entitlementStore
+        else {
+            return
+        }
+
+        do {
+            switch mutation {
+            case .none:
+                break
+
+            case .write(let cache):
+                let data = try JSONEncoder().encode(cache)
+                try entitlementStore.set(
+                    data,
+                    for: context.storageAccount
+                )
+
+            case .remove:
+                try entitlementStore.removeData(
+                    for: context.storageAccount
+                )
+            }
+        } catch {
+            Self.logger.warning(
+                "Verified entitlement cache could not be updated; live StoreKit state is unchanged."
+            )
+        }
+    }
+
+    private func updateEntitlementRetry(shouldRetry: Bool) {
+        entitlementRetryNeeded = shouldRetry
+
+        guard shouldRetry else {
+            unresolvedRetryTask?.cancel()
+            unresolvedRetryTask = nil
+            return
+        }
+
+        guard unresolvedRetryTask == nil else {
+            return
+        }
+
+        startEntitlementRetry()
+    }
+
+    private func startEntitlementRetry() {
+        let generation = serviceGeneration
+        let delays = unresolvedRetryDelays
+        let interval = unresolvedRetryInterval
+
+        unresolvedRetryTask = Task { [weak self] in
+            for delay in delays {
+                do {
+                    try await Task.sleep(for: delay)
+                } catch {
+                    return
+                }
+
+                guard !Task.isCancelled,
+                      let self,
+                      generation == self.serviceGeneration,
+                      self.entitlementRetryNeeded
+                else {
+                    return
+                }
+
+                await self.refreshEntitlements()
+            }
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    return
+                }
+
+                guard !Task.isCancelled,
+                      let self,
+                      generation == self.serviceGeneration,
+                      self.entitlementRetryNeeded
+                else {
+                    return
+                }
+
+                await self.refreshEntitlements()
+            }
+        }
+    }
+
+    private static func liveAccessState(
+        from entitlementState: EntitlementState
+    ) -> PurchaseAccessState {
+        switch entitlementState {
+        case .checking:
+            return .checking
+        case .inactive:
+            return .inactive
+        case .active(let snapshot):
+            return .active(source: .storeKit, snapshot: snapshot)
+        }
     }
 
     private func waitForEntitlementRefresh(
@@ -748,6 +1398,9 @@ public final class PurchaseManager {
         updateTask = nil
         subscriptionStatusUpdateTask?.cancel()
         subscriptionStatusUpdateTask = nil
+        unresolvedRetryTask?.cancel()
+        unresolvedRetryTask = nil
+        entitlementRetryNeeded = false
         cancelEntitlementRefreshWaiters()
     }
 
@@ -756,7 +1409,9 @@ public final class PurchaseManager {
         products = []
         productLoadingState = .idle
         entitlementState = .checking
+        accessState = .checking
         activity = .idle
+        entitlementContext = nil
     }
 
     private func startObservingTransactions() {
