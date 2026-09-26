@@ -43,7 +43,7 @@ public struct ProPlanButton: View {
                 height: height
             )
         )
-.help(presentation.helpText)
+        .help(presentation.helpText)
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier(Self.accessibilityIdentifier)
         .accessibilityLabel(presentation.accessibilityLabel)
