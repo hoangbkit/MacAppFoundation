@@ -606,20 +606,21 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(manager.accessState, .inactive)
     }
 
-    func testFreshOfflineInstallFallsBackToInactiveWhenLatestVerificationUnavailable() async {
+    func testFreshOfflineInstallCanStayFreeWhileRetryingUnavailableVerification() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
         let manager = PurchaseManager(
-            configuration: Self.configuration(
-                productIDs: [Self.monthly.id, Self.lifetime.id]
-            ),
-            service: OfflineTestPurchaseService(
-                context: context,
-                entitlements: [],
-                products: [Self.monthly, Self.lifetime],
-                defaultLatestLookup: .unavailable
-            ),
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
             entitlementStore: InMemoryEntitlementStore(),
+            unresolvedRetryDelays: [.milliseconds(10)],
+            unresolvedRetryInterval: .milliseconds(20),
             now: { now }
         )
 
@@ -628,6 +629,50 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(manager.entitlementState, .inactive)
         XCTAssertEqual(manager.accessState, .inactive)
         XCTAssertFalse(manager.hasPro)
+
+        let entitlementCallCount = service.currentEntitlementsCallCount
+        service.entitlements = [Self.lifetimeRecord(context: context)]
+
+        let recovered = await Self.waitUntil {
+            manager.accessState.source == .storeKit
+        }
+
+        XCTAssertTrue(recovered)
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertGreaterThan(
+            service.currentEntitlementsCallCount,
+            entitlementCallCount
+        )
+
+        let resolvedCallCount = service.currentEntitlementsCallCount
+        try? await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(service.currentEntitlementsCallCount, resolvedCallCount)
+    }
+
+    func testConfirmedFreeDoesNotStartEntitlementRetry() async {
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .notPurchased
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            unresolvedRetryDelays: [.milliseconds(10)],
+            unresolvedRetryInterval: .milliseconds(20)
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(manager.accessState, .inactive)
+        XCTAssertFalse(manager.hasPro)
+
+        let resolvedCallCount = service.currentEntitlementsCallCount
+        try? await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(service.currentEntitlementsCallCount, resolvedCallCount)
     }
 
     func testUnresolvedAccessRetriesUntilStoreKitResolves() async {
