@@ -12,6 +12,7 @@ private enum EntitlementCacheMutation {
 private struct EntitlementAccessResolution {
     let state: PurchaseAccessState
     let cacheMutation: EntitlementCacheMutation
+    let shouldRetry: Bool
 }
 
 private struct ReconciledCacheResult {
@@ -41,6 +42,7 @@ public final class PurchaseManager {
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     @ObservationIgnored private var subscriptionStatusUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var unresolvedRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var entitlementRetryNeeded = false
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
     @ObservationIgnored private var entitlementRefreshGeneration = 0
@@ -440,7 +442,7 @@ public final class PurchaseManager {
         entitlementContext = context
         accessState = resolution.state
         applyCacheMutation(resolution.cacheMutation)
-        updateUnresolvedRetry()
+        updateEntitlementRetry(shouldRetry: resolution.shouldRetry)
 
         completeEntitlementRefresh(
             generation: refreshGeneration,
@@ -461,7 +463,8 @@ public final class PurchaseManager {
         else {
             return EntitlementAccessResolution(
                 state: Self.liveAccessState(from: liveState),
-                cacheMutation: .none
+                cacheMutation: .none,
+                shouldRetry: false
             )
         }
 
@@ -469,7 +472,8 @@ public final class PurchaseManager {
             guard let context else {
                 return EntitlementAccessResolution(
                     state: .active(source: .storeKit, snapshot: snapshot),
-                    cacheMutation: .none
+                    cacheMutation: .none,
+                    shouldRetry: false
                 )
             }
 
@@ -485,14 +489,16 @@ public final class PurchaseManager {
 
             return EntitlementAccessResolution(
                 state: .active(source: .storeKit, snapshot: snapshot),
-                cacheMutation: reconciliation.cache.map(EntitlementCacheMutation.write) ?? .none
+                cacheMutation: reconciliation.cache.map(EntitlementCacheMutation.write) ?? .none,
+                shouldRetry: false
             )
         }
 
         guard let context else {
             return EntitlementAccessResolution(
                 state: .unresolved,
-                cacheMutation: .none
+                cacheMutation: .none,
+                shouldRetry: true
             )
         }
 
@@ -510,13 +516,15 @@ public final class PurchaseManager {
             if reconciliation.hadUnavailableLookup, let existingCache {
                 return EntitlementAccessResolution(
                     state: .unresolved,
-                    cacheMutation: .write(existingCache.touched(at: now()))
+                    cacheMutation: .write(existingCache.touched(at: now())),
+                    shouldRetry: true
                 )
             }
 
             return EntitlementAccessResolution(
                 state: .inactive,
-                cacheMutation: .remove
+                cacheMutation: .remove,
+                shouldRetry: reconciliation.hadUnavailableLookup
             )
         }
 
@@ -530,13 +538,15 @@ public final class PurchaseManager {
         if cachedState.isActive {
             return EntitlementAccessResolution(
                 state: cachedState,
-                cacheMutation: .write(reconciled)
+                cacheMutation: .write(reconciled),
+                shouldRetry: false
             )
         }
 
         return EntitlementAccessResolution(
             state: .unresolved,
-            cacheMutation: .write(reconciled)
+            cacheMutation: .write(reconciled),
+            shouldRetry: true
         )
     }
 
@@ -916,8 +926,10 @@ public final class PurchaseManager {
         }
     }
 
-    private func updateUnresolvedRetry() {
-        guard case .unresolved = accessState else {
+    private func updateEntitlementRetry(shouldRetry: Bool) {
+        entitlementRetryNeeded = shouldRetry
+
+        guard shouldRetry else {
             unresolvedRetryTask?.cancel()
             unresolvedRetryTask = nil
             return
@@ -927,10 +939,10 @@ public final class PurchaseManager {
             return
         }
 
-        startUnresolvedRetry()
+        startEntitlementRetry()
     }
 
-    private func startUnresolvedRetry() {
+    private func startEntitlementRetry() {
         let generation = serviceGeneration
         let delays = unresolvedRetryDelays
         let interval = unresolvedRetryInterval
@@ -946,7 +958,7 @@ public final class PurchaseManager {
                 guard !Task.isCancelled,
                       let self,
                       generation == self.serviceGeneration,
-                      case .unresolved = self.accessState
+                      self.entitlementRetryNeeded
                 else {
                     return
                 }
@@ -964,7 +976,7 @@ public final class PurchaseManager {
                 guard !Task.isCancelled,
                       let self,
                       generation == self.serviceGeneration,
-                      case .unresolved = self.accessState
+                      self.entitlementRetryNeeded
                 else {
                     return
                 }
@@ -1388,6 +1400,7 @@ public final class PurchaseManager {
         subscriptionStatusUpdateTask = nil
         unresolvedRetryTask?.cancel()
         unresolvedRetryTask = nil
+        entitlementRetryNeeded = false
         cancelEntitlementRefreshWaiters()
     }
 
