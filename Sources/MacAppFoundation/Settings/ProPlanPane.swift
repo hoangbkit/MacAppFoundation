@@ -34,10 +34,6 @@ public struct ProPlanPane: View {
 
                 Group {
                     switch presentationState {
-                    case .checking:
-                        ProgressView()
-                            .controlSize(.regular)
-                            .accessibilityLabel("Checking Pro access")
                     case .free:
                         Image(systemName: "sparkles")
                             .font(.system(size: 28))
@@ -144,16 +140,11 @@ public struct ProPlanPane: View {
     }
 
     private var presentationState: ProPlanPanePresentationState {
-        ProPlanPanePresentationState(
-            isResolved: purchaseManager.accessState.isResolved,
-            hasPro: purchaseManager.hasPro
-        )
+        ProPlanPanePresentationState(hasPro: purchaseManager.hasPro)
     }
 
     private var headerGradientColors: [Color] {
         switch presentationState {
-        case .checking:
-            return [theme.surfaceRaised.opacity(0.45), theme.surface]
         case .free:
             return [theme.surfaceRaised, theme.surface]
         case .pro:
@@ -163,7 +154,6 @@ public struct ProPlanPane: View {
 
     private var actionState: ProPlanPaneActionState {
         ProPlanPaneActionState(
-            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
             activeProduct: purchaseManager.activeProduct,
             activeSubscriptionProduct: purchaseManager.activeSubscriptionProduct
@@ -176,8 +166,6 @@ public struct ProPlanPane: View {
 
     private var planTitle: String {
         switch presentationState {
-        case .checking:
-            return "Checking…"
         case .free:
             return configuration.freeTitle
         case .pro:
@@ -187,8 +175,6 @@ public struct ProPlanPane: View {
 
     private var planDescription: String {
         switch presentationState {
-        case .checking:
-            return "Verifying your App Store entitlement."
         case .free:
             return configuration.freeDescription
         case .pro:
@@ -245,8 +231,6 @@ private struct ProPlanFeatureList: View {
 
     private var featureIconBackground: Color {
         switch presentationState {
-        case .checking:
-            return theme.surface
         case .free:
             return theme.surfaceRaised
         case .pro:
@@ -260,18 +244,11 @@ private struct ProPlanFeatureList: View {
 }
 
 enum ProPlanPanePresentationState: Equatable {
-    case checking
     case free
     case pro
 
-    init(isResolved: Bool, hasPro: Bool) {
-        if !isResolved {
-            self = .checking
-        } else if hasPro {
-            self = .pro
-        } else {
-            self = .free
-        }
+    init(hasPro: Bool) {
+        self = hasPro ? .pro : .free
     }
 }
 
@@ -281,13 +258,12 @@ struct ProPlanPaneActionState: Equatable {
     let showsManageSubscription: Bool
 
     init(
-        isResolved: Bool = true,
         hasPro: Bool,
         activeProduct: StoreProduct?,
         activeSubscriptionProduct: StoreProduct?
     ) {
-        showsUpgrade = isResolved && !hasPro
-        showsViewPlans = isResolved && hasPro && activeProduct?.isRecurring == true
-        showsManageSubscription = isResolved && activeSubscriptionProduct != nil
+        showsUpgrade = !hasPro
+        showsViewPlans = hasPro && activeProduct?.isRecurring == true
+        showsManageSubscription = activeSubscriptionProduct != nil
     }
 }
