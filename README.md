@@ -105,7 +105,7 @@ let purchaseConfiguration = PurchaseConfiguration(
 )
 ```
 
-With caching enabled, `purchases.entitlementState` remains the live StoreKit result while `purchases.accessState` is the effective authorization state. `hasPro` follows effective access, so a previously verified directly purchased Lifetime entitlement can remain usable offline. Recurring products are bounded by their verified expiration or grace-period window rather than becoming indefinite access.
+With caching enabled, `purchases.entitlementState` remains the live StoreKit diagnostic result while `purchases.accessState` is binary effective authorization: Free (`.inactive`) or Pro (`.active`). `hasPro` follows effective access. If Pro cannot currently be proven, the app safely behaves as Free while entitlement verification may retry in the background. A previously verified directly purchased Lifetime entitlement can remain usable offline; recurring products are bounded by their verified expiration or grace-period window rather than becoming indefinite access.
 
 `entitledProductIDs` may include historical SKUs that are no longer present in the current `productIDs` merchandising catalog.
 
