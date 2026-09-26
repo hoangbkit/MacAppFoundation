@@ -606,7 +606,7 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(manager.accessState, .inactive)
     }
 
-    func testFreshOfflineInstallStaysUnresolvedWhenLatestVerificationUnavailable() async {
+    func testFreshOfflineInstallFallsBackToInactiveWhenLatestVerificationUnavailable() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
         let manager = PurchaseManager(
@@ -626,26 +626,31 @@ final class OfflineEntitlementTests: XCTestCase {
         await manager.prepare()
 
         XCTAssertEqual(manager.entitlementState, .inactive)
-        XCTAssertEqual(manager.accessState, .unresolved)
+        XCTAssertEqual(manager.accessState, .inactive)
         XCTAssertFalse(manager.hasPro)
     }
 
     func testUnresolvedAccessRetriesUntilStoreKitResolves() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let retryNow = now.addingTimeInterval(1_200)
         let context = Self.context(account: "account-a")
+        let store = await Self.expiredSubscriptionStore(
+            context: context,
+            now: now
+        )
         let service = OfflineTestPurchaseService(
             context: context,
             entitlements: [],
-            products: [Self.lifetime],
+            products: [Self.monthly],
             defaultLatestLookup: .unavailable
         )
         let manager = PurchaseManager(
-            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            configuration: Self.configuration(productIDs: [Self.monthly.id]),
             service: service,
-            entitlementStore: InMemoryEntitlementStore(),
+            entitlementStore: store,
             unresolvedRetryDelays: [.milliseconds(10)],
             unresolvedRetryInterval: .milliseconds(20),
-            now: { now }
+            now: { retryNow }
         )
 
         await manager.prepare()
@@ -654,7 +659,13 @@ final class OfflineEntitlementTests: XCTestCase {
         let productCallCount = service.productCallCount
         let entitlementCallCount = service.currentEntitlementsCallCount
 
-        service.entitlements = [Self.lifetimeRecord(context: context)]
+        service.entitlements = [
+            Self.subscriptionRecord(
+                context: context,
+                expirationDate: retryNow.addingTimeInterval(3_600),
+                state: .subscribed
+            )
+        ]
 
         let resolved = await Self.waitUntil {
             manager.accessState.source == .storeKit
@@ -677,19 +688,25 @@ final class OfflineEntitlementTests: XCTestCase {
     }
 
     func testUnresolvedRetryCanResolveToFreeAndThenStops() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
+        let store = await Self.expiredSubscriptionStore(
+            context: context,
+            now: now
+        )
         let service = OfflineTestPurchaseService(
             context: context,
             entitlements: [],
-            products: [Self.lifetime],
+            products: [Self.monthly],
             defaultLatestLookup: .unavailable
         )
         let manager = PurchaseManager(
-            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            configuration: Self.configuration(productIDs: [Self.monthly.id]),
             service: service,
-            entitlementStore: InMemoryEntitlementStore(),
+            entitlementStore: store,
             unresolvedRetryDelays: [.milliseconds(10)],
-            unresolvedRetryInterval: .milliseconds(20)
+            unresolvedRetryInterval: .milliseconds(20),
+            now: { now.addingTimeInterval(1_200) }
         )
 
         await manager.prepare()
@@ -714,19 +731,25 @@ final class OfflineEntitlementTests: XCTestCase {
 
     #if DEBUG
     func testUnresolvedRetryIsCancelledWhenPurchaseServiceChanges() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
+        let store = await Self.expiredSubscriptionStore(
+            context: context,
+            now: now
+        )
         let service = OfflineTestPurchaseService(
             context: context,
             entitlements: [],
-            products: [Self.lifetime],
+            products: [Self.monthly],
             defaultLatestLookup: .unavailable
         )
         let manager = PurchaseManager(
-            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            configuration: Self.configuration(productIDs: [Self.monthly.id]),
             service: service,
-            entitlementStore: InMemoryEntitlementStore(),
+            entitlementStore: store,
             unresolvedRetryDelays: [.milliseconds(100)],
-            unresolvedRetryInterval: .milliseconds(100)
+            unresolvedRetryInterval: .milliseconds(100),
+            now: { now.addingTimeInterval(1_200) }
         )
 
         await manager.prepare()
@@ -746,19 +769,25 @@ final class OfflineEntitlementTests: XCTestCase {
     #endif
 
     func testUnresolvedRetryContinuesAtPeriodicIntervalUntilResolved() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
+        let store = await Self.expiredSubscriptionStore(
+            context: context,
+            now: now
+        )
         let service = OfflineTestPurchaseService(
             context: context,
             entitlements: [],
-            products: [Self.lifetime],
+            products: [Self.monthly],
             defaultLatestLookup: .unavailable
         )
         let manager = PurchaseManager(
-            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            configuration: Self.configuration(productIDs: [Self.monthly.id]),
             service: service,
-            entitlementStore: InMemoryEntitlementStore(),
+            entitlementStore: store,
             unresolvedRetryDelays: [],
-            unresolvedRetryInterval: .milliseconds(10)
+            unresolvedRetryInterval: .milliseconds(10),
+            now: { now.addingTimeInterval(1_200) }
         )
 
         await manager.prepare()
@@ -1052,6 +1081,32 @@ final class OfflineEntitlementTests: XCTestCase {
         }
 
         return condition()
+    }
+
+    private static func expiredSubscriptionStore(
+        context: PurchaseEntitlementContext,
+        now: Date
+    ) async -> InMemoryEntitlementStore {
+        let store = InMemoryEntitlementStore()
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.monthly.id]),
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [
+                    Self.subscriptionRecord(
+                        context: context,
+                        expirationDate: now.addingTimeInterval(600),
+                        state: .subscribed
+                    )
+                ],
+                products: [Self.monthly]
+            ),
+            entitlementStore: store,
+            now: { now }
+        )
+
+        await manager.prepare()
+        return store
     }
 
     private static func configuration(
