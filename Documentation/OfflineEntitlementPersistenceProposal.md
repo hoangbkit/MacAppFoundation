@@ -5,12 +5,12 @@
 
 ## Status
 
-Implemented on this branch. This document remains the design rationale and risk checklist for the implementation.
+Implemented. This document remains the historical design rationale and risk checklist; `Commerce.md` defines the current behavior.
 
 Chosen implementation decisions:
 
 - live StoreKit state remains available as `PurchaseManager.entitlementState`
-- effective authorization is exposed as `PurchaseManager.accessState`
+- effective authorization is exposed as binary `PurchaseManager.accessState` (`.inactive` / Free or `.active` / Pro)
 - `hasPro` derives from effective access
 - verified offline persistence is opt-in and disabled by default
 - verified cache data is stored in Keychain
