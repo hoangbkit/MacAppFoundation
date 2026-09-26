@@ -40,6 +40,7 @@ public final class PurchaseManager {
     @ObservationIgnored private var simulatedOperationDelay: Duration
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     @ObservationIgnored private var subscriptionStatusUpdateTask: Task<Void, Never>?
+    @ObservationIgnored private var unresolvedRetryTask: Task<Void, Never>?
     @ObservationIgnored private var restoreTask: Task<RestoreOutcome, Never>?
     @ObservationIgnored private var restoreGeneration = 0
     @ObservationIgnored private var entitlementRefreshGeneration = 0
@@ -52,6 +53,8 @@ public final class PurchaseManager {
     @ObservationIgnored private var hasPrepared = false
     @ObservationIgnored private var entitlementStore: (any VerifiedEntitlementStoring)?
     @ObservationIgnored private var entitlementContext: PurchaseEntitlementContext?
+    @ObservationIgnored private let unresolvedRetryDelays: [Duration]
+    @ObservationIgnored private let unresolvedRetryInterval: Duration
     @ObservationIgnored private let now: () -> Date
 
     @ObservationIgnored private static let logger = Logger(
@@ -77,6 +80,8 @@ public final class PurchaseManager {
         self.defaultSimulatedProducts = simulatedProducts
         self.simulatedPersistenceKey = simulatedPersistenceKey
         self.simulatedOperationDelay = simulatedOperationDelay
+        self.unresolvedRetryDelays = [.seconds(2), .seconds(5), .seconds(15), .seconds(60)]
+        self.unresolvedRetryInterval = .seconds(300)
 
         let service = PurchaseServiceFactory.make(
             mode: simulated ? .simulated : .live,
@@ -101,6 +106,8 @@ public final class PurchaseManager {
         configuration: PurchaseConfiguration,
         service: any PurchaseServing,
         entitlementStore: (any VerifiedEntitlementStoring)? = nil,
+        unresolvedRetryDelays: [Duration] = [.seconds(2), .seconds(5), .seconds(15), .seconds(60)],
+        unresolvedRetryInterval: Duration = .seconds(300),
         now: @escaping () -> Date = { .now }
     ) {
         self.configuration = configuration
@@ -111,6 +118,8 @@ public final class PurchaseManager {
         self.simulatedPersistenceKey = nil
         self.simulatedOperationDelay = .milliseconds(250)
         self.service = service
+        self.unresolvedRetryDelays = unresolvedRetryDelays
+        self.unresolvedRetryInterval = unresolvedRetryInterval
         self.now = now
         self.entitlementStore = configuration.offlineEntitlements.verifiedCachePolicy == nil
             ? nil
@@ -121,6 +130,7 @@ public final class PurchaseManager {
     deinit {
         updateTask?.cancel()
         subscriptionStatusUpdateTask?.cancel()
+        unresolvedRetryTask?.cancel()
         restoreTask?.cancel()
     }
 
@@ -430,6 +440,7 @@ public final class PurchaseManager {
         entitlementContext = context
         accessState = resolution.state
         applyCacheMutation(resolution.cacheMutation)
+        updateUnresolvedRetry()
 
         completeEntitlementRefresh(
             generation: refreshGeneration,
@@ -905,6 +916,64 @@ public final class PurchaseManager {
         }
     }
 
+    private func updateUnresolvedRetry() {
+        guard case .unresolved = accessState else {
+            unresolvedRetryTask?.cancel()
+            unresolvedRetryTask = nil
+            return
+        }
+
+        guard unresolvedRetryTask == nil else {
+            return
+        }
+
+        startUnresolvedRetry()
+    }
+
+    private func startUnresolvedRetry() {
+        let generation = serviceGeneration
+        let delays = unresolvedRetryDelays
+        let interval = unresolvedRetryInterval
+
+        unresolvedRetryTask = Task { [weak self] in
+            for delay in delays {
+                do {
+                    try await Task.sleep(for: delay)
+                } catch {
+                    return
+                }
+
+                guard !Task.isCancelled,
+                      let self,
+                      generation == self.serviceGeneration,
+                      case .unresolved = self.accessState
+                else {
+                    return
+                }
+
+                await self.refreshEntitlements()
+            }
+
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    return
+                }
+
+                guard !Task.isCancelled,
+                      let self,
+                      generation == self.serviceGeneration,
+                      case .unresolved = self.accessState
+                else {
+                    return
+                }
+
+                await self.refreshEntitlements()
+            }
+        }
+    }
+
     private static func liveAccessState(
         from entitlementState: EntitlementState
     ) -> PurchaseAccessState {
@@ -1317,6 +1386,8 @@ public final class PurchaseManager {
         updateTask = nil
         subscriptionStatusUpdateTask?.cancel()
         subscriptionStatusUpdateTask = nil
+        unresolvedRetryTask?.cancel()
+        unresolvedRetryTask = nil
         cancelEntitlementRefreshWaiters()
     }
 
