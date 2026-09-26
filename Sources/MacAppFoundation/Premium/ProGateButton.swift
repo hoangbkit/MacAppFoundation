@@ -167,8 +167,6 @@ public struct ProGateButton<Label: View>: View {
     public var body: some View {
         Button {
             switch presentationState {
-            case .checking:
-                return
             case .allowed:
                 onAction()
             case .requiresPro:
@@ -187,8 +185,7 @@ public struct ProGateButton<Label: View>: View {
                 }
             }
         }
-        .disabled(presentationState == .checking)
-        .popover(isPresented: $showsLockPopover) {
+.popover(isPresented: $showsLockPopover) {
             if let lockInfo {
                 ProLockPopover(info: lockInfo) {
                     showsLockPopover = false
@@ -202,7 +199,6 @@ public struct ProGateButton<Label: View>: View {
         PremiumGatePresentationState(
             feature: feature,
             requirement: requirement,
-            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
             isExistingContent: isExistingContent,
             policy: policy
