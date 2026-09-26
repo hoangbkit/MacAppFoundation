@@ -675,6 +675,48 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertEqual(service.currentEntitlementsCallCount, resolvedCallCount)
     }
 
+    func testValidCachedLifetimeDoesNotStartEntitlementRetry() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = Self.context(account: "account-a")
+        let store = InMemoryEntitlementStore()
+
+        let onlineManager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: OfflineTestPurchaseService(
+                context: context,
+                entitlements: [Self.lifetimeRecord(context: context)],
+                products: [Self.lifetime]
+            ),
+            entitlementStore: store,
+            now: { now }
+        )
+        await onlineManager.prepare()
+
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
+        let offlineManager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: store,
+            unresolvedRetryDelays: [.milliseconds(10)],
+            unresolvedRetryInterval: .milliseconds(20),
+            now: { now.addingTimeInterval(60) }
+        )
+
+        await offlineManager.prepare()
+
+        XCTAssertTrue(offlineManager.hasPro)
+        XCTAssertEqual(offlineManager.accessState.source, .verifiedCache)
+
+        let resolvedCallCount = service.currentEntitlementsCallCount
+        try? await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(service.currentEntitlementsCallCount, resolvedCallCount)
+    }
+
     func testUnresolvedAccessRetriesUntilStoreKitResolves() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let retryNow = now.addingTimeInterval(1_200)
