@@ -1,9 +1,6 @@
 name: Fast CI
 
 on:
-  push:
-    branches:
-      - develop
   workflow_dispatch:
 
 permissions:
