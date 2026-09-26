@@ -45,23 +45,12 @@ public enum PurchaseAccessSource: String, Sendable, Equatable {
 /// Effective authorization state after combining live StoreKit state with an
 /// optional previously verified offline cache.
 public enum PurchaseAccessState: Sendable, Equatable {
-    case checking
-    case unresolved
     case inactive
     case active(source: PurchaseAccessSource, snapshot: EntitlementSnapshot)
 
     public var isActive: Bool {
         if case .active = self { return true }
         return false
-    }
-
-    public var isResolved: Bool {
-        switch self {
-        case .inactive, .active:
-            return true
-        case .checking, .unresolved:
-            return false
-        }
     }
 
     public var snapshot: EntitlementSnapshot? {
@@ -314,7 +303,7 @@ enum OfflineEntitlementResolver {
         now: Date
     ) -> PurchaseAccessState {
         guard cache.matches(context) else {
-            return .unresolved
+            return .inactive
         }
 
         let clockRolledBack =
@@ -331,7 +320,7 @@ enum OfflineEntitlementResolver {
         }
 
         guard !usable.isEmpty else {
-            return .unresolved
+            return .inactive
         }
 
         let hasPermanentEntitlement = usable.contains {

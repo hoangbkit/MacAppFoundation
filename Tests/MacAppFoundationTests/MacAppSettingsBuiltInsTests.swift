@@ -95,20 +95,10 @@ struct MacAppSettingsBuiltInsTests {
     }
 
     @MainActor
-    @Test("Plan pane presentation distinguishes checking, free, and Pro")
+    @Test("Plan pane presentation distinguishes Free and Pro")
     func planPanePresentationState() {
-        #expect(
-            ProPlanPanePresentationState(isResolved: false, hasPro: false) == .checking
-        )
-        #expect(
-            ProPlanPanePresentationState(isResolved: false, hasPro: true) == .checking
-        )
-        #expect(
-            ProPlanPanePresentationState(isResolved: true, hasPro: false) == .free
-        )
-        #expect(
-            ProPlanPanePresentationState(isResolved: true, hasPro: true) == .pro
-        )
+        #expect(ProPlanPanePresentationState(hasPro: false) == .free)
+        #expect(ProPlanPanePresentationState(hasPro: true) == .pro)
     }
 
     @MainActor
@@ -129,16 +119,6 @@ struct MacAppSettingsBuiltInsTests {
             displayPrice: "$79.99",
             price: 79.99
         )
-
-        let unresolved = ProPlanPaneActionState(
-            isResolved: false,
-            hasPro: false,
-            activeProduct: nil,
-            activeSubscriptionProduct: nil
-        )
-        #expect(!unresolved.showsUpgrade)
-        #expect(!unresolved.showsViewPlans)
-        #expect(!unresolved.showsManageSubscription)
 
         let free = ProPlanPaneActionState(
             hasPro: false,

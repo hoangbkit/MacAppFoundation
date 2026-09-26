@@ -32,11 +32,6 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
 
     public var body: some View {
         switch presentationState {
-        case .checking:
-            ProgressView()
-                .controlSize(.small)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityLabel("Checking Pro access")
         case .allowed:
             proContent
         case .requiresPro(let feature):
@@ -48,7 +43,6 @@ public struct ProGate<ProContent: View, LockedContent: View>: View {
         PremiumGatePresentationState(
             feature: feature,
             requirement: requirement,
-            isResolved: purchaseManager.accessState.isResolved,
             hasPro: purchaseManager.hasPro,
             isExistingContent: isExistingContent,
             policy: policy

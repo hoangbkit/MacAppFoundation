@@ -3,6 +3,17 @@ import XCTest
 
 @MainActor
 final class PurchaseManagerTests: XCTestCase {
+    func testEffectiveAccessStartsFreeWhileLiveEntitlementIsChecking() {
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: MockPurchaseService()
+        )
+
+        XCTAssertEqual(manager.entitlementState, .checking)
+        XCTAssertEqual(manager.accessState, .inactive)
+        XCTAssertFalse(manager.hasPro)
+    }
+
     func testPrepareLoadsProductsAndEvaluatesEntitlement() async {
         let service = MockPurchaseService()
         service.productsResult = [Self.monthly]
@@ -356,6 +367,33 @@ final class PurchaseManagerTests: XCTestCase {
         XCTAssertEqual(manager.activity, .idle)
     }
 
+    func testRestoreRecoversFreeUserToPro() async {
+        let service = MockPurchaseService()
+        service.entitlements = []
+
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: service
+        )
+
+        await manager.prepare()
+
+        XCTAssertFalse(manager.hasPro)
+        XCTAssertEqual(manager.accessState, .inactive)
+
+        service.entitlementsAfterSync = [
+            EntitlementRecord(productID: Self.monthly.id)
+        ]
+
+        let outcome = await manager.restorePurchases()
+
+        XCTAssertEqual(outcome, .restored)
+        XCTAssertEqual(service.syncCount, 1)
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertEqual(manager.accessState.source, .storeKit)
+        XCTAssertEqual(manager.activity, .idle)
+    }
+
     func testRestoreReturnsFailureWhenSyncThrows() async {
         let service = MockPurchaseService()
         service.syncFailure = .unknown
@@ -614,6 +652,7 @@ private final class MockPurchaseService: PurchaseServing {
     var purchaseFailure: PurchaseFailure?
     var purchaseDelay: Duration = .milliseconds(0)
     var entitlements: [EntitlementRecord] = []
+    var entitlementsAfterSync: [EntitlementRecord]?
     var blockedFirstEntitlementResponse: [EntitlementRecord]?
     var blockedFirstProductsResponse: [StoreProduct]?
     var productLoadCount = 0
@@ -720,6 +759,9 @@ private final class MockPurchaseService: PurchaseServing {
         syncCount += 1
         if let syncFailure {
             throw syncFailure
+        }
+        if let entitlementsAfterSync {
+            entitlements = entitlementsAfterSync
         }
     }
 }

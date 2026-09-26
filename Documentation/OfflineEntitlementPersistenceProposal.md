@@ -1,13 +1,16 @@
 # Offline-Safe Entitlement Persistence Proposal
 
+> [!NOTE]
+> This file preserves the design exploration and risk analysis that led to the offline entitlement implementation. The current effective-access contract is intentionally simpler than some earlier sections below: `PurchaseAccessState` is binary (`.inactive` / Free or `.active` / Pro), while live `EntitlementState` may still report `.checking` for diagnostics. Incomplete StoreKit verification falls back to Free and may retry independently in the background. See `Commerce.md` for the authoritative current behavior.
+
 ## Status
 
-Implemented on this branch. This document remains the design rationale and risk checklist for the implementation.
+Implemented. This document remains the historical design rationale and risk checklist; `Commerce.md` defines the current behavior.
 
 Chosen implementation decisions:
 
 - live StoreKit state remains available as `PurchaseManager.entitlementState`
-- effective authorization is exposed as `PurchaseManager.accessState`
+- effective authorization is exposed as binary `PurchaseManager.accessState` (`.inactive` / Free or `.active` / Pro)
 - `hasPro` derives from effective access
 - verified offline persistence is opt-in and disabled by default
 - verified cache data is stored in Keychain
@@ -563,14 +566,14 @@ Do not rely solely on this proposal text when coding against a future SDK.
 
 The implementation resolves the former ready-to-build questions as follows:
 
-- effective access uses the additive `PurchaseAccessState` API
+- effective access uses binary `PurchaseAccessState` authorization: `.inactive` (Free) or `.active` (Pro); verification/retry is tracked separately
 - persistence is opt-in through `PurchaseConfiguration.offlineEntitlements`
 - entitlement cache namespace uses bundle ID + StoreKit environment + `appTransactionID`
 - last verified StoreKit identity is persisted independently from entitlement state, so Free account switches survive relaunch
 - directly purchased Lifetime access remains usable offline until authoritative revocation is observed
 - recurring access is bounded by verified expiration/grace data and guarded against wall-clock rollback
 - Family Sharing uses a bounded offline window, configurable by policy
-- empty current entitlement results use latest-transaction reconciliation; no-cache unavailable verification falls back to inactive while independently scheduling entitlement retry
+- empty current entitlement results use latest-transaction reconciliation; unavailable or unsafe verification falls back to inactive while independently scheduling entitlement retry
 - `hasPro` reflects effective access while `entitlementState` continues to expose live StoreKit state
 - cache storage uses Keychain
 - historical entitlement IDs may exist outside the current sellable product catalog
