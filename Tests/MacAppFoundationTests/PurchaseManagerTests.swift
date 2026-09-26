@@ -3,6 +3,17 @@ import XCTest
 
 @MainActor
 final class PurchaseManagerTests: XCTestCase {
+    func testEffectiveAccessStartsFreeWhileLiveEntitlementIsChecking() {
+        let manager = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: [Self.monthly.id]),
+            service: MockPurchaseService()
+        )
+
+        XCTAssertEqual(manager.entitlementState, .checking)
+        XCTAssertEqual(manager.accessState, .inactive)
+        XCTAssertFalse(manager.hasPro)
+    }
+
     func testPrepareLoadsProductsAndEvaluatesEntitlement() async {
         let service = MockPurchaseService()
         service.productsResult = [Self.monthly]
