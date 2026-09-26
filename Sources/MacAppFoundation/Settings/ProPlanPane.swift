@@ -114,6 +114,7 @@ public struct ProPlanPane: View {
                         .buttonStyle(MacAppButtonStyle(.quiet))
                         .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
