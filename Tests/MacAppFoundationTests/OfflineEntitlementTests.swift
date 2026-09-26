@@ -630,6 +630,88 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertFalse(manager.hasPro)
     }
 
+    func testUnresolvedAccessRetriesUntilStoreKitResolves() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            unresolvedRetryDelays: [.milliseconds(10)],
+            unresolvedRetryInterval: .milliseconds(20),
+            now: { now }
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(manager.accessState, .unresolved)
+        let productCallCount = service.productCallCount
+        let entitlementCallCount = service.currentEntitlementsCallCount
+
+        service.entitlements = [Self.lifetimeRecord(context: context)]
+
+        let resolved = await Self.waitUntil {
+            manager.accessState.source == .storeKit
+        }
+
+        XCTAssertTrue(resolved)
+        XCTAssertTrue(manager.hasPro)
+        XCTAssertGreaterThan(
+            service.currentEntitlementsCallCount,
+            entitlementCallCount
+        )
+        XCTAssertEqual(service.productCallCount, productCallCount)
+
+        let resolvedEntitlementCallCount = service.currentEntitlementsCallCount
+        try? await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(
+            service.currentEntitlementsCallCount,
+            resolvedEntitlementCallCount
+        )
+    }
+
+    func testUnresolvedRetryCanResolveToFreeAndThenStops() async {
+        let context = Self.context(account: "account-a")
+        let service = OfflineTestPurchaseService(
+            context: context,
+            entitlements: [],
+            products: [Self.lifetime],
+            defaultLatestLookup: .unavailable
+        )
+        let manager = PurchaseManager(
+            configuration: Self.configuration(productIDs: [Self.lifetime.id]),
+            service: service,
+            entitlementStore: InMemoryEntitlementStore(),
+            unresolvedRetryDelays: [.milliseconds(10)],
+            unresolvedRetryInterval: .milliseconds(20)
+        )
+
+        await manager.prepare()
+
+        XCTAssertEqual(manager.accessState, .unresolved)
+        service.defaultLatestLookup = .notPurchased
+
+        let resolved = await Self.waitUntil {
+            manager.accessState == .inactive
+        }
+
+        XCTAssertTrue(resolved)
+        XCTAssertFalse(manager.hasPro)
+
+        let resolvedEntitlementCallCount = service.currentEntitlementsCallCount
+        try? await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(
+            service.currentEntitlementsCallCount,
+            resolvedEntitlementCallCount
+        )
+    }
+
     func testFreshOfflineInstallCanRecoverVerifiedLifetimeFromLatestTransaction() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let context = Self.context(account: "account-a")
@@ -862,6 +944,23 @@ final class OfflineEntitlementTests: XCTestCase {
         XCTAssertNil(manager.activeProduct)
     }
 
+    private static func waitUntil(
+        timeout: Duration = .seconds(1),
+        condition: @escaping @MainActor () -> Bool
+    ) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while clock.now < deadline {
+            if condition() {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        return condition()
+    }
+
     private static func configuration(
         productIDs: [String]
     ) -> PurchaseConfiguration {
@@ -970,6 +1069,8 @@ private final class OfflineTestPurchaseService: PurchaseServing {
     var defaultLatestLookup: LatestEntitlementLookup
     var productFailure: PurchaseFailure?
     private(set) var entitlementContextCallCount = 0
+    private(set) var currentEntitlementsCallCount = 0
+    private(set) var productCallCount = 0
 
     init(
         context: PurchaseEntitlementContext?,
@@ -988,6 +1089,7 @@ private final class OfflineTestPurchaseService: PurchaseServing {
     }
 
     func products(for identifiers: [String]) async throws -> [StoreProduct] {
+        productCallCount += 1
         if let productFailure {
             throw productFailure
         }
@@ -999,7 +1101,8 @@ private final class OfflineTestPurchaseService: PurchaseServing {
     }
 
     func currentEntitlements() async -> [EntitlementRecord] {
-        entitlements
+        currentEntitlementsCallCount += 1
+        return entitlements
     }
 
     func entitlementContext() async -> PurchaseEntitlementContext? {
