@@ -9,14 +9,14 @@ import SwiftUI
 public struct MacAppAppearanceSettingsPane: View {
     @Bindable private var themeStore: MacAppThemeStore
     private let purchaseManager: PurchaseManager?
-    private let onUpgrade: () -> Void
+    private let onUpgrade: (() -> Void)?
 
     @Environment(\.macAppTheme) private var theme
 
     public init(
         themeStore: MacAppThemeStore,
         purchaseManager: PurchaseManager? = nil,
-        onUpgrade: @escaping () -> Void = {}
+        onUpgrade: (() -> Void)? = nil
     ) {
         self.themeStore = themeStore
         self.purchaseManager = purchaseManager
@@ -49,11 +49,11 @@ public struct MacAppAppearanceSettingsPane: View {
                     onPreviewSelect: { themeID in
                         let result = themeStore.choose(themeID, hasPro: hasPro)
                         if case .requiresPro = result {
-                            onUpgrade()
+                            onUpgrade?()
                         }
                     },
                     onLockedSelect: { _ in
-                        onUpgrade()
+                        onUpgrade?()
                     }
                 )
 
@@ -88,9 +88,11 @@ public struct MacAppAppearanceSettingsPane: View {
 
                 Spacer(minLength: 8)
 
-                Button("Unlock Pro", action: onUpgrade)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                if let onUpgrade {
+                    Button("Unlock Pro", action: onUpgrade)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
 
                 Button("End") {
                     themeStore.endPreview()
