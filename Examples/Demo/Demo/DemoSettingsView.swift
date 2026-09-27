@@ -24,17 +24,18 @@ struct DemoSettingsView: View {
                 }
                 .tag(MacAppSettingsPaneID.demoGeneral)
 
-            MacAppAppearanceSettingsPane(
+            MacAppThemeSettingsPane(
                 themeStore: themeStore,
                 purchaseManager: purchaseManager,
+                variant: .compact,
                 onUpgrade: {
                     openWindow(id: DemoWindowID.paywall)
                 }
             )
                 .tabItem {
-                    Label("Appearance", systemImage: "paintpalette")
+                    Label("Theme", systemImage: "paintpalette")
                 }
-                .tag(MacAppSettingsPaneID.appearance)
+                .tag(MacAppSettingsPaneID.theme)
 
             MacAppPlanSettingsPane(
                 purchaseManager: purchaseManager,
@@ -70,7 +71,7 @@ struct DemoSettingsView: View {
         }
 
         switch requestedPaneID {
-        case .demoGeneral, .appearance, .plan, .demoAbout:
+        case .demoGeneral, .theme, .plan, .demoAbout:
             selection = requestedPaneID
             settingsRouter.clear()
         default:
@@ -156,7 +157,7 @@ private struct DemoAboutSettingsPane: View {
                         architectureRow("One shared PurchaseManager")
                         architectureRow("One shared MacAppThemeStore across scenes")
                         architectureRow("Native Settings scene with a SwiftUI TabView")
-                        architectureRow("MAF-owned Appearance and Plan tabs")
+                        architectureRow("MAF-owned Theme and Plan tabs")
                         architectureRow("App-owned General and About tabs")
                         architectureRow("Separate debug Developer Tools window")
                     }
