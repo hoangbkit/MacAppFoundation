@@ -35,6 +35,14 @@ enum DemoTheme {
         themes: MacAppThemeCatalog.allBuiltIn + [violet],
         defaultThemeID: .system,
         storageKey: "MacAppFoundationDemo.theme",
-        proThemeIDs: [violetID]
+        proThemeIDs: [
+            .githubDarkDimmed,
+            .midnight,
+            .ocean,
+            .aurora,
+            .blossom,
+            .softSage,
+            violetID
+        ]
     )
 }
