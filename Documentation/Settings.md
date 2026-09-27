@@ -21,7 +21,7 @@ For apps with a small number of destinations, pass panes directly:
 MacAppSettingsView(
     panes: [
         generalPane,
-        .appearance(themeStore: themeStore),
+        .theme(themeStore: themeStore),
         .plan(
             purchaseManager: purchases,
             configuration: planConfiguration,
@@ -38,14 +38,14 @@ This produces:
 
 ```text
 General
-Appearance
+Theme
 Plan
 About
 ```
 
 There are no section labels unless the app explicitly uses `sections:`.
 
-## Standard Appearance + Plan settings
+## Standard Theme + Plan settings
 
 The convenience initializer includes the two MAF built-ins as a flat list by default:
 
@@ -80,11 +80,11 @@ var body: some Scene {
 The default sidebar is simply:
 
 ```text
-Appearance
+Theme
 Plan
 ```
 
-`MacAppAppearanceSettingsPane` reads `themeStore.configuration.themes`, so it automatically shows the exact built-in subset and custom themes configured by the host app, in host-app order. Selection is persisted by `MacAppThemeStore`.
+`MacAppThemeSettingsPane` reads `themeStore.configuration.themes`, so it automatically shows the exact built-in subset and custom themes configured by the host app, in host-app order. Selection is persisted by `MacAppThemeStore`.
 
 `MacAppPlanSettingsPane` embeds `ProPlanPane`. MAF owns the pane layout, while the host app owns paywall presentation through `onUpgrade`.
 
@@ -117,7 +117,7 @@ extension MacAppSettingsPaneID {
 
 ## Apps without commerce
 
-Apps that only need Appearance can use the lighter convenience initializer:
+Apps that only need Theme can use the lighter convenience initializer:
 
 ```swift
 Settings {
@@ -139,7 +139,7 @@ MacAppSettingsView(
     themeStore: themeStore,
     purchaseManager: purchases,
     planConfiguration: planConfiguration,
-    builtInPanes: [.appearance],
+    builtInPanes: [.theme],
     onUpgrade: presentPaywall
 )
 ```
@@ -157,7 +157,7 @@ let sections = [
         title: "Application",
         panes: [
             generalPane,
-            .appearance(themeStore: themeStore)
+            .theme(themeStore: themeStore)
         ]
     ),
     MacAppSettingsSection(
@@ -193,11 +193,11 @@ ACCOUNT
   Connections
 ```
 
-`MacAppSettingsBuiltIns.appearanceSection(...)`, `planSection(...)`, and `sections(...)` remain available as grouped helpers.
+`MacAppSettingsBuiltIns.themeSection(...)`, `planSection(...)`, and `sections(...)` remain available as grouped helpers.
 
 ## Theme picker
 
-Appearance uses the reusable `MacAppThemePicker` and `MacAppThemePreviewCard` components. Cards preview each candidate theme using its own canvas, surface, text, selection, separator, and accent roles rather than the currently active theme.
+Theme uses the reusable `MacAppThemePicker` and `MacAppThemePreviewCard` components. Cards preview each candidate theme using its own canvas, surface, text, selection, separator, and accent roles rather than the currently active theme.
 
 The picker displays the theme's preferred appearance as `System`, `Light`, or `Dark`, supports app-defined custom themes, preserves the host app's configured order, and exposes selection through a callback rather than owning persistence.
 
@@ -225,7 +225,7 @@ Button("Manage Plan") {
 }
 ```
 
-The same pattern works for `.appearance` and any app-defined pane ID. If Settings is already open, requesting another pane updates the active selection. If a request is made first, the shell consumes the pending request when it appears. Valid requests are one-shot: after the shell applies the requested pane, it clears that request so a later normal Settings launch does not unexpectedly reopen the old destination. Requests for panes that are not currently present remain pending so they can resolve if the pane list changes.
+The same pattern works for `.theme` and any app-defined pane ID. If Settings is already open, requesting another pane updates the active selection. If a request is made first, the shell consumes the pending request when it appears. Valid requests are one-shot: after the shell applies the requested pane, it clears that request so a later normal Settings launch does not unexpectedly reopen the old destination. Requests for panes that are not currently present remain pending so they can resolve if the pane list changes.
 
 ## Theme environment
 
@@ -240,7 +240,7 @@ Settings {
 }
 ```
 
-Changing the theme in Appearance updates the shared store immediately and therefore updates every scene hierarchy using that store.
+Changing the theme in Theme updates the shared store immediately and therefore updates every scene hierarchy using that store.
 
 ## Group boxes
 
