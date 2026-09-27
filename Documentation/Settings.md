@@ -99,6 +99,8 @@ MacAppThemeSettingsPane(
 
 `.standard` remains the default. Compact changes only the theme-card footprint; selection, Pro locking, and timed preview behavior stay the same.
 
+When the Theme configuration contains Pro themes, use the entitlement-aware initializer/factory. Passing a `PurchaseManager` requires an explicit `onUpgrade` action; MAF does not provide a no-op default. Free-only theme configurations can use `MacAppThemeSettingsPane(themeStore:variant:)` or `.theme(themeStore:variant:)` without commerce parameters.
+
 `MacAppPlanSettingsPane` embeds `ProPlanPane`. MAF owns the pane layout, while the host app owns paywall presentation through `onUpgrade`.
 
 ## Add app-owned panes
