@@ -20,6 +20,57 @@ RootView()
 
 MAF visual components read `@Environment(\.macAppTheme)` and do not require ad-hoc theme parameters. The modifier also applies the active accent tint and preferred light/dark color scheme.
 
+## Free and Pro themes
+
+Themes are Free by default. Apps can mark any non-default configured theme as Pro with `proThemeIDs`:
+
+```swift
+let configuration = MacAppThemeConfiguration(
+    themes: [.system, .midnight, .ocean, .porcelain],
+    defaultThemeID: .system,
+    proThemeIDs: [.midnight, .ocean]
+)
+```
+
+The configured default theme must remain Free so MAF always has a safe fallback. Use the entitlement-aware scene modifier when a configuration contains Pro themes:
+
+```swift
+RootView()
+    .macAppTheme(themeStore, purchaseManager: purchaseManager)
+```
+
+If a persisted selection requires Pro while `purchaseManager.hasPro` is false, MAF applies the Free default without deleting the saved preference. If Pro access returns, the saved theme becomes effective again.
+
+The built-in Theme pane accepts optional `PurchaseManager` and `onUpgrade` dependencies. Free-only apps may omit both. If Pro themes are configured and either dependency is missing, the pane shows a configuration error instead of the theme list. With both dependencies present, Free users can temporarily preview Pro themes for five minutes before upgrading:
+
+```swift
+MacAppThemeSettingsPane(
+    themeStore: themeStore,
+    purchaseManager: purchaseManager,
+    variant: .compact,
+    onUpgrade: showPaywall
+)
+```
+
+A Pro preview changes the effective theme across every scene using the shared store without changing the saved selection. The preview expiry is persisted as an absolute date, so relaunching the app does not restart the timer. Switching between Pro themes preserves the original deadline. When the preview expires or the user ends it, MAF returns to the entitled saved theme or the configured Free default.
+
+If Pro is unlocked while a preview is active, the previewed theme is promoted to the permanent selection. Apps can disable previews or customize their behavior:
+
+```swift
+let configuration = MacAppThemeConfiguration(
+    themes: [.system, .midnight, .ocean],
+    defaultThemeID: .system,
+    proThemeIDs: [.midnight, .ocean],
+    previewBehavior: MacAppThemePreviewBehavior(
+        defaultDuration: 5 * 60,
+        preservesExpiryWhenSwitchingThemes: true,
+        promotesPreviewOnProUnlock: true
+    )
+)
+```
+
+Use `.disabled` when Pro themes should remain hard-locked.
+
 ## Built-in themes
 
 The shared catalog contains 13 presets:
@@ -111,7 +162,7 @@ Window("Pro", id: "pro") {
 }
 ```
 
-Because every root observes the same store, selecting a theme from Appearance updates all open themed scenes immediately.
+Because every root observes the same store, permanent selection and temporary Pro previews update all open themed scenes immediately. For configurations with Pro themes, use the `purchaseManager:` overload at each scene root so entitlement changes and preview promotion stay synchronized.
 
 ## Migrating BYOKchat or Onlink theme code
 
@@ -123,11 +174,11 @@ For BYOKchat-style code:
 2. Replace the app-local theme enum/model with `MacAppThemeConfiguration` + `MacAppThemeStore` where the app does not need extra domain behavior.
 3. Keep the app's chosen subset/order by supplying only those presets to the configuration.
 4. Convert genuinely app-specific palettes into custom `MacAppTheme` values instead of adding cases to a framework enum.
-5. Replace the local Appearance grid with `MacAppThemePicker` or the built-in `.appearance(themeStore:)` settings pane.
+5. Replace the local Theme grid with `MacAppThemePicker` or the built-in `.theme(themeStore:)` settings pane.
 
 For Onlink-style code, map existing semantic palette roles directly to `MacAppThemePalette`; the richer MAF palette was designed to cover the same canvas/surface/border/text/accent/status responsibilities. Onlink's `githubDark`, `mist`, and `sage` naming correspond to MAF's `githubDarkDimmed`, `morningMist`, and `softSage` built-ins.
 
-Apps remain free to keep additional theme metadata or entitlement rules outside MAF. The important boundary is that MAF-owned visual components receive their active theme exclusively through the SwiftUI environment.
+Apps can keep additional theme metadata outside MAF, while the built-in binary Free/Pro rule is configured through `proThemeIDs`. The important boundary is that MAF-owned visual components receive their effective theme exclusively through the SwiftUI environment.
 
 ## Fallback behavior
 

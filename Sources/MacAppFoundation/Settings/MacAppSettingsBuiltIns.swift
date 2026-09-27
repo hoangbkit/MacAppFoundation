@@ -3,30 +3,38 @@ import SwiftUI
 /// Built-in Settings destinations provided by MacAppFoundation.
 ///
 /// This enum describes only framework-owned panes. App-defined destinations keep
-/// using open ``MacAppSettingsPaneID`` values and can be mixed freely with these.
+/// using open MacAppSettingsPaneID values and can be mixed freely with these.
 public enum MacAppSettingsBuiltInPane: Hashable, Sendable {
-    case appearance
+    case theme
     case plan
 
-    public static let defaults: Set<Self> = [.appearance, .plan]
+    public static let defaults: Set<Self> = [.theme, .plan]
 }
 
 public extension MacAppSettingsPane {
-    /// Creates MAF's built-in Appearance pane.
+    /// Creates MAF's built-in Theme pane.
     @MainActor
-    static func appearance(
+    static func theme(
         themeStore: MacAppThemeStore,
-        title: String = "Appearance",
+        purchaseManager: PurchaseManager? = nil,
+        title: String = "Theme",
         subtitle: String = "Choose the color theme used throughout the app.",
-        systemImage: String = "paintpalette"
+        systemImage: String = "paintpalette",
+        variant: MacAppThemeSettingsPane.Variant = .standard,
+        onUpgrade: (() -> Void)? = nil
     ) -> MacAppSettingsPane {
         MacAppSettingsPane(
-            id: .appearance,
+            id: .theme,
             title: title,
             subtitle: subtitle,
             systemImage: systemImage
         ) {
-            MacAppAppearanceSettingsPane(themeStore: themeStore)
+            MacAppThemeSettingsPane(
+                themeStore: themeStore,
+                purchaseManager: purchaseManager,
+                variant: variant,
+                onUpgrade: onUpgrade
+            )
         }
     }
 
@@ -63,13 +71,21 @@ public enum MacAppSettingsBuiltIns {
         themeStore: MacAppThemeStore,
         purchaseManager: PurchaseManager,
         planConfiguration: ProPlanPaneConfiguration,
+        themeVariant: MacAppThemeSettingsPane.Variant = .standard,
         enabledPanes: Set<MacAppSettingsBuiltInPane> = MacAppSettingsBuiltInPane.defaults,
         onUpgrade: @escaping () -> Void
     ) -> [MacAppSettingsPane] {
         var panes: [MacAppSettingsPane] = []
 
-        if enabledPanes.contains(.appearance) {
-            panes.append(.appearance(themeStore: themeStore))
+        if enabledPanes.contains(.theme) {
+            panes.append(
+                .theme(
+                    themeStore: themeStore,
+                    purchaseManager: purchaseManager,
+                    variant: themeVariant,
+                    onUpgrade: onUpgrade
+                )
+            )
         }
 
         if enabledPanes.contains(.plan) {
@@ -85,15 +101,23 @@ public enum MacAppSettingsBuiltIns {
         return panes
     }
 
-    /// Advanced grouped helper for apps that benefit from labeled sections.
-    public static func appearanceSection(
-        themeStore: MacAppThemeStore
+    /// Advanced grouped helper for Theme configurations.
+    public static func themeSection(
+        themeStore: MacAppThemeStore,
+        purchaseManager: PurchaseManager? = nil,
+        variant: MacAppThemeSettingsPane.Variant = .standard,
+        onUpgrade: (() -> Void)? = nil
     ) -> MacAppSettingsSection {
         MacAppSettingsSection(
             id: .application,
             title: "Application",
             panes: [
-                .appearance(themeStore: themeStore)
+                .theme(
+                    themeStore: themeStore,
+                    purchaseManager: purchaseManager,
+                    variant: variant,
+                    onUpgrade: onUpgrade
+                )
             ]
         )
     }
@@ -122,13 +146,21 @@ public enum MacAppSettingsBuiltIns {
         themeStore: MacAppThemeStore,
         purchaseManager: PurchaseManager,
         planConfiguration: ProPlanPaneConfiguration,
+        themeVariant: MacAppThemeSettingsPane.Variant = .standard,
         enabledPanes: Set<MacAppSettingsBuiltInPane> = MacAppSettingsBuiltInPane.defaults,
         onUpgrade: @escaping () -> Void
     ) -> [MacAppSettingsSection] {
         var sections: [MacAppSettingsSection] = []
 
-        if enabledPanes.contains(.appearance) {
-            sections.append(appearanceSection(themeStore: themeStore))
+        if enabledPanes.contains(.theme) {
+            sections.append(
+                themeSection(
+                    themeStore: themeStore,
+                    purchaseManager: purchaseManager,
+                    variant: themeVariant,
+                    onUpgrade: onUpgrade
+                )
+            )
         }
 
         if enabledPanes.contains(.plan) {
@@ -146,12 +178,13 @@ public enum MacAppSettingsBuiltIns {
 }
 
 public extension MacAppSettingsView {
-    /// Convenience initializer for apps that only need MAF's Appearance pane.
+    /// Convenience initializer for apps that only need MAF's Theme pane.
     @MainActor
     init(
         title: String = "Settings",
         systemImage: String = "gearshape.fill",
         themeStore: MacAppThemeStore,
+        themeVariant: MacAppThemeSettingsPane.Variant = .standard,
         additionalPanes: [MacAppSettingsPane] = [],
         initialSelection: MacAppSettingsPaneID? = nil,
         router: MacAppSettingsRouter? = nil
@@ -160,7 +193,7 @@ public extension MacAppSettingsView {
             title: title,
             systemImage: systemImage,
             panes: [
-                .appearance(themeStore: themeStore)
+                .theme(themeStore: themeStore, variant: themeVariant)
             ] + additionalPanes,
             initialSelection: initialSelection,
             router: router
@@ -169,9 +202,9 @@ public extension MacAppSettingsView {
 
     /// Convenience initializer for the standard MAF Settings experience.
     ///
-    /// Appearance and Plan are included as a flat pane list by default. Apps can
-    /// disable either pane with `builtInPanes`, append app-owned panes, or use the
-    /// lower-level `sections:` initializer when labeled grouping is actually useful.
+    /// Theme and Plan are included as a flat pane list by default. Apps can
+    /// disable either pane with builtInPanes, append app-owned panes, or use the
+    /// lower-level sections initializer when labeled grouping is actually useful.
     @MainActor
     init(
         title: String = "Settings",
@@ -179,6 +212,7 @@ public extension MacAppSettingsView {
         themeStore: MacAppThemeStore,
         purchaseManager: PurchaseManager,
         planConfiguration: ProPlanPaneConfiguration,
+        themeVariant: MacAppThemeSettingsPane.Variant = .standard,
         builtInPanes: Set<MacAppSettingsBuiltInPane> = MacAppSettingsBuiltInPane.defaults,
         additionalPanes: [MacAppSettingsPane] = [],
         initialSelection: MacAppSettingsPaneID? = nil,
@@ -189,6 +223,7 @@ public extension MacAppSettingsView {
             themeStore: themeStore,
             purchaseManager: purchaseManager,
             planConfiguration: planConfiguration,
+            themeVariant: themeVariant,
             enabledPanes: builtInPanes,
             onUpgrade: onUpgrade
         ) + additionalPanes

@@ -21,7 +21,7 @@ XcodeGen 2.45.4+ is required.
 - the complete MAF built-in theme catalog: System plus all 12 named BYOKchat themes
 - the app-defined **Demo Violet** theme appended after the built-ins to demonstrate custom-theme extension
 - live theme switching through the reusable `MacAppThemePicker`
-- flat `MacAppSettingsView` with app-defined General/About panes and built-in Appearance/Plan panes
+- flat `MacAppSettingsView` with app-defined General/About panes and built-in Theme/Plan panes
 - optional grouped Settings remains available for larger apps
 - `MacAppSettingsRouter` routing the compact Pro control directly to the Plan pane
 - live StoreKit path using `Configuration.storekit`
@@ -43,7 +43,7 @@ XcodeGen 2.45.4+ is required.
 
 The Demo deliberately applies the same `MacAppThemeStore` and shared analytics client to the main window, onboarding, paywall, upsell, Developer Tools, and Settings roots. This demonstrates the required multi-scene integration pattern: SwiftUI scene environments do not automatically cross scene boundaries, so each scene root receives the same shared dependencies.
 
-The Appearance pane exposes every built-in in catalog order:
+The Theme pane exposes every built-in in catalog order:
 
 ```text
 System
@@ -66,7 +66,7 @@ With only four Settings destinations, the Demo uses the recommended flat layout:
 
 ```text
 General      (Demo)
-Appearance   (MAF)
+Theme        (MAF)
 Plan         (MAF)
 About        (Demo)
 ```
