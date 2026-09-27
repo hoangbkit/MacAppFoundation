@@ -27,7 +27,7 @@ struct DemoSettingsView: View {
             MacAppThemeSettingsPane(
                 themeStore: themeStore,
                 purchaseManager: purchaseManager,
-                variant: .compact,
+                variant: demoState.compactCards ? .compact : .standard,
                 onUpgrade: {
                     openWindow(id: DemoWindowID.paywall)
                 }
@@ -100,7 +100,7 @@ private struct DemoGeneralSettingsPane: View {
                             .fill(theme.separator.opacity(0.72))
                             .frame(height: 1)
 
-                        settingRow("Compact showcase cards") {
+                        settingRow("Compact theme cards") {
                             Toggle("", isOn: $demoState.compactCards)
                                 .labelsHidden()
                                 .toggleStyle(.switch)
