@@ -9,6 +9,7 @@ public struct MacAppThemePicker: View {
     private let themes: [MacAppTheme]
     private let selectedThemeID: MacAppThemeID
     private let previewingThemeID: MacAppThemeID?
+    private let previewProgress: Double
     private let previewableThemeIDs: Set<MacAppThemeID>
     private let lockedThemeIDs: Set<MacAppThemeID>
     private let compact: Bool
@@ -34,6 +35,7 @@ public struct MacAppThemePicker: View {
         themes: [MacAppTheme],
         selectedThemeID: MacAppThemeID,
         previewingThemeID: MacAppThemeID? = nil,
+        previewProgress: Double = 0,
         previewableThemeIDs: Set<MacAppThemeID> = [],
         lockedThemeIDs: Set<MacAppThemeID> = [],
         compact: Bool = false,
@@ -44,6 +46,7 @@ public struct MacAppThemePicker: View {
         self.themes = themes
         self.selectedThemeID = selectedThemeID
         self.previewingThemeID = previewingThemeID
+        self.previewProgress = min(1, max(0, previewProgress))
         self.previewableThemeIDs = previewableThemeIDs
         self.lockedThemeIDs = lockedThemeIDs
         self.compact = compact
@@ -64,6 +67,7 @@ public struct MacAppThemePicker: View {
                     compact: compact,
                     isSelected: selectedThemeID == theme.id,
                     isPreviewing: isPreviewing,
+                    previewProgress: isPreviewing ? previewProgress : 0,
                     isPreviewAvailable: isPreviewAvailable,
                     isLocked: isLocked
                 ) {
@@ -90,6 +94,7 @@ public struct MacAppThemePreviewCard: View {
     public let compact: Bool
     public let isSelected: Bool
     public let isPreviewing: Bool
+    public let previewProgress: Double
     public let isPreviewAvailable: Bool
     public let isLocked: Bool
     private let action: () -> Void
@@ -104,6 +109,7 @@ public struct MacAppThemePreviewCard: View {
         compact: Bool = false,
         isSelected: Bool,
         isPreviewing: Bool = false,
+        previewProgress: Double = 0,
         isPreviewAvailable: Bool = false,
         isLocked: Bool = false,
         action: @escaping () -> Void
@@ -112,6 +118,7 @@ public struct MacAppThemePreviewCard: View {
         self.compact = compact
         self.isSelected = isSelected
         self.isPreviewing = isPreviewing
+        self.previewProgress = min(1, max(0, previewProgress))
         self.isPreviewAvailable = isPreviewAvailable
         self.isLocked = isLocked
         self.action = action
@@ -122,7 +129,7 @@ public struct MacAppThemePreviewCard: View {
             VStack(alignment: .leading, spacing: compact ? 7 : 10) {
                 preview
 
-                HStack(spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(theme.name)
                             .font(.system(size: 12.5, weight: .semibold))
@@ -136,8 +143,9 @@ public struct MacAppThemePreviewCard: View {
 
                     Spacer(minLength: 4)
 
-                    stateBadge
+                    stateMark
                 }
+                .frame(minHeight: 30)
             }
             .padding(compact ? 8 : 10)
             .background(cardBackground, in: cardShape)
@@ -164,37 +172,48 @@ public struct MacAppThemePreviewCard: View {
     }
 
     @ViewBuilder
-    private var stateBadge: some View {
-        if isPreviewing {
-            Label("Preview", systemImage: "clock.fill")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(activeTheme.accent)
-                .padding(.horizontal, 7)
-                .frame(height: 20)
-                .background(activeTheme.accentSoft, in: Capsule())
-                .accessibilityHidden(true)
-        } else if isPreviewAvailable {
-            Label("Preview", systemImage: "timer")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(activeTheme.accent)
-                .padding(.horizontal, 7)
-                .frame(height: 20)
-                .background(activeTheme.accentSoft, in: Capsule())
-                .accessibilityHidden(true)
-        } else if isLocked {
-            Label("Pro", systemImage: "crown.fill")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(activeTheme.accent)
-                .padding(.horizontal, 7)
-                .frame(height: 20)
-                .background(activeTheme.accentSoft, in: Capsule())
-                .accessibilityHidden(true)
+    private var stateMark: some View {
+        if isPreviewing || isPreviewAvailable || isLocked {
+            proStateMark
         } else if isSelected {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(activeTheme.accent)
+                .frame(width: 22, height: 22)
                 .accessibilityHidden(true)
         }
+    }
+
+    private var proStateMark: some View {
+        ZStack {
+            if isPreviewing {
+                Circle()
+                    .stroke(theme.accent.opacity(0.18), lineWidth: 2)
+
+                Circle()
+                    .trim(from: 0, to: CGFloat(previewProgress))
+                    .stroke(
+                        theme.accent,
+                        style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .animation(
+                        reduceMotion ? nil : .linear(duration: 0.9),
+                        value: previewProgress
+                    )
+            }
+
+            Image(systemName: isPreviewing ? "lock.open.fill" : "lock.fill")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(theme.accent)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .frame(width: 22, height: 22)
+        .animation(
+            reduceMotion ? nil : .easeInOut(duration: 0.18),
+            value: isPreviewing
+        )
+        .accessibilityHidden(true)
     }
 
     private var preview: some View {
