@@ -206,7 +206,7 @@ public struct MacAppThemePreviewCard: View {
             Image(systemName: isPreviewing ? "lock.open.fill" : "lock.fill")
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(theme.accent)
-                .contentTransition(.symbolEffect(.replace))
+                .contentTransition(.symbolEffect)
         }
         .frame(width: 22, height: 22)
         .animation(
