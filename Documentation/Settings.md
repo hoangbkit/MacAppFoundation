@@ -86,6 +86,19 @@ Plan
 
 `MacAppThemeSettingsPane` reads `themeStore.configuration.themes`, so it automatically shows the exact built-in subset and custom themes configured by the host app, in host-app order. Selection is persisted by `MacAppThemeStore`.
 
+Use the compact variant when the host app wants smaller theme cards:
+
+```swift
+MacAppThemeSettingsPane(
+    themeStore: themeStore,
+    purchaseManager: purchases,
+    variant: .compact,
+    onUpgrade: presentPaywall
+)
+```
+
+`.standard` remains the default. Compact changes only the theme-card footprint; selection, Pro locking, and timed preview behavior stay the same.
+
 `MacAppPlanSettingsPane` embeds `ProPlanPane`. MAF owns the pane layout, while the host app owns paywall presentation through `onUpgrade`.
 
 ## Add app-owned panes
@@ -186,7 +199,7 @@ This produces the more structured BYOKchat-style layout:
 ```text
 APPLICATION
   General
-  Appearance
+  Theme
 
 ACCOUNT
   Plan
