@@ -3,13 +3,16 @@ import SwiftUI
 /// Reusable theme picker used by MacAppFoundation's Appearance settings pane.
 ///
 /// The picker renders the themes supplied by the host app in their configured
-/// order and does not own persistence. Selection is reported through onSelect.
+/// order and reports permanent selection, temporary preview, and locked actions.
 @MainActor
 public struct MacAppThemePicker: View {
     private let themes: [MacAppTheme]
     private let selectedThemeID: MacAppThemeID
+    private let previewingThemeID: MacAppThemeID?
+    private let previewableThemeIDs: Set<MacAppThemeID>
     private let lockedThemeIDs: Set<MacAppThemeID>
     private let onSelect: (MacAppThemeID) -> Void
+    private let onPreviewSelect: (MacAppThemeID) -> Void
     private let onLockedSelect: (MacAppThemeID) -> Void
 
     @Environment(\.macAppTheme) private var activeTheme
@@ -21,28 +24,40 @@ public struct MacAppThemePicker: View {
     public init(
         themes: [MacAppTheme],
         selectedThemeID: MacAppThemeID,
+        previewingThemeID: MacAppThemeID? = nil,
+        previewableThemeIDs: Set<MacAppThemeID> = [],
         lockedThemeIDs: Set<MacAppThemeID> = [],
         onSelect: @escaping (MacAppThemeID) -> Void,
+        onPreviewSelect: @escaping (MacAppThemeID) -> Void = { _ in },
         onLockedSelect: @escaping (MacAppThemeID) -> Void = { _ in }
     ) {
         self.themes = themes
         self.selectedThemeID = selectedThemeID
+        self.previewingThemeID = previewingThemeID
+        self.previewableThemeIDs = previewableThemeIDs
         self.lockedThemeIDs = lockedThemeIDs
         self.onSelect = onSelect
+        self.onPreviewSelect = onPreviewSelect
         self.onLockedSelect = onLockedSelect
     }
 
     public var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
             ForEach(themes) { theme in
+                let isPreviewing = previewingThemeID == theme.id
+                let isPreviewAvailable = previewableThemeIDs.contains(theme.id)
                 let isLocked = lockedThemeIDs.contains(theme.id)
 
                 MacAppThemePreviewCard(
                     theme: theme,
                     isSelected: selectedThemeID == theme.id,
+                    isPreviewing: isPreviewing,
+                    isPreviewAvailable: isPreviewAvailable,
                     isLocked: isLocked
                 ) {
-                    if isLocked {
+                    if isPreviewAvailable {
+                        onPreviewSelect(theme.id)
+                    } else if isLocked {
                         onLockedSelect(theme.id)
                     } else {
                         onSelect(theme.id)
@@ -61,6 +76,8 @@ public struct MacAppThemePicker: View {
 public struct MacAppThemePreviewCard: View {
     public let theme: MacAppTheme
     public let isSelected: Bool
+    public let isPreviewing: Bool
+    public let isPreviewAvailable: Bool
     public let isLocked: Bool
     private let action: () -> Void
 
@@ -72,11 +89,15 @@ public struct MacAppThemePreviewCard: View {
     public init(
         theme: MacAppTheme,
         isSelected: Bool,
+        isPreviewing: Bool = false,
+        isPreviewAvailable: Bool = false,
         isLocked: Bool = false,
         action: @escaping () -> Void
     ) {
         self.theme = theme
         self.isSelected = isSelected
+        self.isPreviewing = isPreviewing
+        self.isPreviewAvailable = isPreviewAvailable
         self.isLocked = isLocked
         self.action = action
     }
@@ -100,20 +121,7 @@ public struct MacAppThemePreviewCard: View {
 
                     Spacer(minLength: 4)
 
-                    if isLocked {
-                        Label("Pro", systemImage: "crown.fill")
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(activeTheme.accent)
-                            .padding(.horizontal, 7)
-                            .frame(height: 20)
-                            .background(activeTheme.accentSoft, in: Capsule())
-                            .accessibilityHidden(true)
-                    } else if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(activeTheme.accent)
-                            .accessibilityHidden(true)
-                    }
+                    stateBadge
                 }
             }
             .padding(10)
@@ -136,8 +144,42 @@ public struct MacAppThemePreviewCard: View {
             }
         }
         .accessibilityLabel(theme.name)
-        .accessibilityHint(isLocked ? "Requires Pro" : "Selects this app theme")
+        .accessibilityHint(accessibilityHint)
         .accessibilityValue(accessibilityValue)
+    }
+
+    @ViewBuilder
+    private var stateBadge: some View {
+        if isPreviewing {
+            Label("Preview", systemImage: "clock.fill")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(activeTheme.accent)
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(activeTheme.accentSoft, in: Capsule())
+                .accessibilityHidden(true)
+        } else if isPreviewAvailable {
+            Label("Preview", systemImage: "timer")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(activeTheme.accent)
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(activeTheme.accentSoft, in: Capsule())
+                .accessibilityHidden(true)
+        } else if isLocked {
+            Label("Pro", systemImage: "crown.fill")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(activeTheme.accent)
+                .padding(.horizontal, 7)
+                .frame(height: 20)
+                .background(activeTheme.accentSoft, in: Capsule())
+                .accessibilityHidden(true)
+        } else if isSelected {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(activeTheme.accent)
+                .accessibilityHidden(true)
+        }
     }
 
     private var preview: some View {
@@ -198,10 +240,22 @@ public struct MacAppThemePreviewCard: View {
         }
     }
 
+    private var accessibilityHint: String {
+        if isPreviewing { return "Continues previewing this Pro theme" }
+        if isPreviewAvailable { return "Temporarily previews this Pro theme" }
+        if isLocked { return "Requires Pro" }
+        return "Selects this app theme"
+    }
+
     private var accessibilityValue: String {
         var values = [appearanceLabel]
-        if isLocked {
+        if isPreviewing {
+            values.insert("Previewing", at: 0)
             values.append("Pro")
+        } else if isPreviewAvailable {
+            values.append("Pro, Preview available")
+        } else if isLocked {
+            values.append("Pro, Locked")
         } else if isSelected {
             values.insert("Selected", at: 0)
         }
@@ -213,14 +267,14 @@ public struct MacAppThemePreviewCard: View {
     }
 
     private var cardBackground: Color {
-        if isSelected && !isLocked { return activeTheme.selection }
+        if isSelected { return activeTheme.selection }
         if isHovering { return activeTheme.surfaceRaised }
         return activeTheme.surface
     }
 
     private var borderColor: Color {
         if isFocused { return activeTheme.accent }
-        if isSelected && !isLocked { return activeTheme.accent.opacity(0.65) }
+        if isSelected { return activeTheme.accent.opacity(0.65) }
         if isHovering { return activeTheme.border }
         return activeTheme.separator.opacity(0.82)
     }
