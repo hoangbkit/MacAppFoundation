@@ -48,23 +48,24 @@ public struct MacAppThemeSettingsPane: View {
     }
 
     private var themeList: some View {
-        let hasPro = purchaseManager?.hasPro ?? false
-        let proThemeIDs = themeStore.configuration.proThemeIDs
-        let previewableThemeIDs = hasPro
-            ? Set<MacAppThemeID>()
-            : Set(proThemeIDs.filter { themeStore.canPreview($0, hasPro: false) })
-        let lockedThemeIDs = hasPro
-            ? Set<MacAppThemeID>()
-            : proThemeIDs.subtracting(previewableThemeIDs)
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let hasPro = purchaseManager?.hasPro ?? false
+            let proThemeIDs = themeStore.configuration.proThemeIDs
+            let previewableThemeIDs = hasPro
+                ? Set<MacAppThemeID>()
+                : Set(proThemeIDs.filter { themeStore.canPreview($0, hasPro: false) })
+            let lockedThemeIDs = hasPro
+                ? Set<MacAppThemeID>()
+                : proThemeIDs.subtracting(previewableThemeIDs)
 
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            ScrollView {
                 MacAppThemePicker(
                     themes: themeStore.configuration.themes,
                     selectedThemeID: themeStore.effectiveThemeID(hasPro: hasPro),
                     previewingThemeID: themeStore.isPreviewActive
                         ? themeStore.previewThemeID
                         : nil,
+                    previewProgress: previewProgress,
                     previewableThemeIDs: previewableThemeIDs,
                     lockedThemeIDs: lockedThemeIDs,
                     compact: variant == .compact,
@@ -81,14 +82,29 @@ public struct MacAppThemeSettingsPane: View {
                         onUpgrade?()
                     }
                 )
-
+                .padding(22)
+                .frame(maxWidth: 780, alignment: .leading)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if themeStore.isPreviewActive {
                     previewStatus(hasPro: hasPro)
+                        .frame(maxWidth: 780)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
                 }
             }
-            .padding(22)
-            .frame(maxWidth: 780, alignment: .leading)
         }
+    }
+
+    var previewProgress: Double {
+        guard themeStore.isPreviewActive else { return 0 }
+        let duration = themeStore.configuration.previewBehavior.defaultDuration
+        guard duration > 0 else { return 0 }
+        return min(
+            1,
+            max(0, Double(themeStore.previewRemainingSeconds) / duration)
+        )
     }
 
     var configurationErrorMessage: String? {
@@ -121,49 +137,51 @@ public struct MacAppThemeSettingsPane: View {
     }
 
     private func previewStatus(hasPro: Bool) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            HStack(spacing: 12) {
-                Image(systemName: "timer")
-                    .font(.headline)
-                    .foregroundStyle(theme.accent)
+        HStack(spacing: 12) {
+            Image(systemName: "timer")
+                .font(.headline)
+                .foregroundStyle(theme.accent)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Previewing \(themeStore.previewTheme?.name ?? "Pro theme")")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(theme.textPrimary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Previewing \(themeStore.previewTheme?.name ?? "Pro theme")")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.textPrimary)
 
-                    Text(
-                        "Returns to \(themeStore.themeAfterPreview(hasPro: hasPro).name) in \(countdown)"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(theme.textSecondary)
-                }
-
-                Spacer(minLength: 8)
-
-                if let onUpgrade {
-                    Button("Unlock Pro", action: onUpgrade)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                }
-
-                Button("End") {
-                    themeStore.endPreview()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Text(
+                    "Returns to \(themeStore.themeAfterPreview(hasPro: hasPro).name) in \(countdown)"
+                )
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
             }
-            .padding(12)
-            .background(theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(theme.border, lineWidth: 1)
+
+            Spacer(minLength: 8)
+
+            if let onUpgrade {
+                Button("Unlock Pro", action: onUpgrade)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                "Previewing \(themeStore.previewTheme?.name ?? "Pro theme"). Returns to \(themeStore.themeAfterPreview(hasPro: hasPro).name) in \(countdown)."
-            )
+
+            Button("End") {
+                themeStore.endPreview()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
+        .padding(12)
+        .background(
+            theme.surfaceRaised,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.border, lineWidth: 1)
+        }
+        .shadow(color: theme.shadow, radius: 8, y: 3)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Previewing \(themeStore.previewTheme?.name ?? "Pro theme"). Returns to \(themeStore.themeAfterPreview(hasPro: hasPro).name) in \(countdown)."
+        )
     }
 
     private var countdown: String {
