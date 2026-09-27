@@ -70,17 +70,15 @@ public struct ProPlanPane: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textSecondary)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: 4) {
                         if actionState.showsUpgrade {
                             Button(configuration.upgradeButtonTitle, action: onUpgrade)
-                                .buttonStyle(MacAppButtonStyle(.primary))
+                                .buttonStyle(ProPlanActionButtonStyle(.primary))
                         }
 
                         if actionState.showsViewPlans {
                             Button(configuration.viewPlansButtonTitle, action: onUpgrade)
-                                .buttonStyle(.plain)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(theme.accent)
+                                .buttonStyle(ProPlanActionButtonStyle(.primary))
                         }
 
                         if actionState.showsManageSubscription {
@@ -88,8 +86,11 @@ public struct ProPlanPane: View {
                                 configuration.manageSubscriptionTitle,
                                 destination: configuration.manageSubscriptionURL
                             )
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(theme.accent)
+                            .buttonStyle(
+                                ProPlanActionButtonStyle(
+                                    hasVisibleActionBeforeManageSubscription ? .quiet : .primary
+                                )
+                            )
                         }
 
                         Button {
@@ -107,7 +108,11 @@ public struct ProPlanPane: View {
                                 Text(configuration.restorePurchasesTitle)
                             }
                         }
-                        .buttonStyle(MacAppButtonStyle(.quiet))
+                        .buttonStyle(
+                            ProPlanActionButtonStyle(
+                                hasVisibleActionBeforeRestore ? .quiet : .primary
+                            )
+                        )
                         .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,6 +165,16 @@ public struct ProPlanPane: View {
         )
     }
 
+    private var hasVisibleActionBeforeManageSubscription: Bool {
+        actionState.showsUpgrade || actionState.showsViewPlans
+    }
+
+    private var hasVisibleActionBeforeRestore: Bool {
+        actionState.showsUpgrade
+            || actionState.showsViewPlans
+            || actionState.showsManageSubscription
+    }
+
     private var resolvedFeatures: [PurchaseFeature] {
         configuration.features ?? purchaseManager.features
     }
@@ -184,6 +199,63 @@ public struct ProPlanPane: View {
 
     private var currentPlanLabel: String {
         purchaseManager.activeProduct?.planLabel.uppercased() ?? "PRO"
+    }
+}
+
+@MainActor
+private struct ProPlanActionButtonStyle: ButtonStyle {
+    enum Kind {
+        case primary
+        case quiet
+    }
+
+    @Environment(\.macAppTheme) private var theme
+
+    let kind: Kind
+
+    init(_ kind: Kind) {
+        self.kind = kind
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        ProPlanActionButtonBody(
+            configuration: configuration,
+            kind: kind,
+            theme: theme
+        )
+    }
+}
+
+@MainActor
+private struct ProPlanActionButtonBody: View {
+    let configuration: ButtonStyle.Configuration
+    let kind: ProPlanActionButtonStyle.Kind
+    let theme: MacAppTheme
+
+    @State private var isHovering = false
+
+    var body: some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(kind == .primary ? theme.accent : theme.textSecondary)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 32)
+            .background(
+                backgroundColor,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onHover { isHovering = $0 }
+    }
+
+    private var backgroundColor: Color {
+        if configuration.isPressed {
+            return theme.selection
+        }
+        if isHovering {
+            return theme.selection.opacity(0.55)
+        }
+        return .clear
     }
 }
 

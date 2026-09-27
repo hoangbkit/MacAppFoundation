@@ -134,7 +134,7 @@ Only active application time contributes to `sessionSeconds`. Time while another
 
 The client stores cumulative UTC-day snapshots locally and uploads opportunistically. Defaults are aligned with the server contract:
 
-- 6-hour upload interval
+- 5-minute upload interval
 - 7 UTC days per batch
 - 6-day offline age plus the current day
 - 50 event/dimension counters per day

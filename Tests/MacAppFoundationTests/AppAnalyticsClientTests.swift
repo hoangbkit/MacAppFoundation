@@ -77,6 +77,15 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     return object
 }
 
+@Test func analyticsConfigurationDefaultsToFiveMinuteUploadInterval() {
+    let configuration = AppAnalyticsConfiguration(
+        appID: "analytics-test",
+        baseURL: URL(string: "https://example.com")!
+    )
+
+    #expect(configuration.uploadInterval == 5 * 60)
+}
+
 @Test func analyticsFlushMatchesNativeServerContract() async throws {
     let transport = MockAnalyticsTransport()
     let store = MemoryAnalyticsStateStore()
