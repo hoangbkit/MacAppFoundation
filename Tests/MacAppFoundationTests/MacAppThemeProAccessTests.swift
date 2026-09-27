@@ -147,6 +147,35 @@ struct MacAppThemeProAccessTests {
         #expect(defaults.object(forKey: "theme.previewExpiresAt") == nil)
     }
 
+    @Test("Pro unlock clears stale expired preview metadata")
+    func proUnlockClearsExpiredPreviewState() {
+        let (defaults, suiteName) = makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var now = Date(timeIntervalSince1970: 4_500)
+        let previewConfiguration = MacAppThemeConfiguration(
+            themes: [.system, .midnight],
+            defaultThemeID: .system,
+            storageKey: "theme",
+            proThemeIDs: [.midnight],
+            previewBehavior: .init(schedulesAutomaticExpiration: false)
+        )
+        let store = MacAppThemeStore(
+            configuration: previewConfiguration,
+            defaults: defaults,
+            now: { now }
+        )
+        _ = store.choose(.midnight, hasPro: false)
+
+        now = now.addingTimeInterval(301)
+        store.synchronizeProAccess(true)
+
+        #expect(store.previewThemeID == nil)
+        #expect(store.previewExpiresAt == nil)
+        #expect(store.selectedThemeID == .system)
+        #expect(store.effectiveThemeID(hasPro: true) == .system)
+    }
+
     @Test("Ending preview immediately restores the entitled theme")
     func endPreviewRestoresTheme() {
         let (defaults, suiteName) = makeDefaults()
