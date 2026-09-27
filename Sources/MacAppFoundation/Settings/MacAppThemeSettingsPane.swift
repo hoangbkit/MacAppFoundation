@@ -19,30 +19,16 @@ public struct MacAppThemeSettingsPane: View {
 
     @Environment(\.macAppTheme) private var theme
 
-    /// Creates a Theme pane for configurations that contain only Free themes.
-    public init(
-        themeStore: MacAppThemeStore,
-        variant: Variant = .standard
-    ) {
-        precondition(
-            themeStore.configuration.proThemeIDs.isEmpty,
-            "Theme configurations with Pro themes require PurchaseManager and onUpgrade."
-        )
-        self.themeStore = themeStore
-        self.purchaseManager = nil
-        self.variant = variant
-        self.onUpgrade = nil
-    }
-
-    /// Creates an entitlement-aware Theme pane.
+    /// Creates MAF's Theme pane.
     ///
-    /// When a PurchaseManager is supplied, the app must also provide the action
-    /// used to present its upgrade/paywall flow.
+    /// Free-only configurations need no commerce dependencies. When Pro themes are
+    /// configured, both PurchaseManager and onUpgrade must be supplied; otherwise
+    /// the pane renders a configuration error instead of the theme list.
     public init(
         themeStore: MacAppThemeStore,
-        purchaseManager: PurchaseManager,
+        purchaseManager: PurchaseManager? = nil,
         variant: Variant = .standard,
-        onUpgrade: @escaping () -> Void
+        onUpgrade: (() -> Void)? = nil
     ) {
         self.themeStore = themeStore
         self.purchaseManager = purchaseManager
@@ -51,6 +37,17 @@ public struct MacAppThemeSettingsPane: View {
     }
 
     public var body: some View {
+        Group {
+            if let configurationErrorMessage {
+                configurationErrorView(configurationErrorMessage)
+            } else {
+                themeList
+            }
+        }
+        .background(theme.canvas)
+    }
+
+    private var themeList: some View {
         let hasPro = purchaseManager?.hasPro ?? false
         let proThemeIDs = themeStore.configuration.proThemeIDs
         let previewableThemeIDs = hasPro
@@ -60,7 +57,7 @@ public struct MacAppThemeSettingsPane: View {
             ? Set<MacAppThemeID>()
             : proThemeIDs.subtracting(previewableThemeIDs)
 
-        ScrollView {
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 MacAppThemePicker(
                     themes: themeStore.configuration.themes,
@@ -92,7 +89,35 @@ public struct MacAppThemeSettingsPane: View {
             .padding(22)
             .frame(maxWidth: 780, alignment: .leading)
         }
-        .background(theme.canvas)
+    }
+
+    private var configurationErrorMessage: String? {
+        guard !themeStore.configuration.proThemeIDs.isEmpty else { return nil }
+        guard purchaseManager != nil, onUpgrade != nil else {
+            return "This Theme pane includes Pro themes but is missing PurchaseManager or onUpgrade. Pass both dependencies to enable Pro theme access and upgrades."
+        }
+        return nil
+    }
+
+    private func configurationErrorView(_ message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(theme.warning)
+
+            Text("Theme configuration error")
+                .font(.headline)
+                .foregroundStyle(theme.textPrimary)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+        .accessibilityElement(children: .combine)
     }
 
     private func previewStatus(hasPro: Bool) -> some View {
