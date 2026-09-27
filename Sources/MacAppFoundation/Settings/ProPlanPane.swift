@@ -78,7 +78,11 @@ public struct ProPlanPane: View {
 
                         if actionState.showsViewPlans {
                             Button(configuration.viewPlansButtonTitle, action: onUpgrade)
-                                .buttonStyle(MacAppButtonStyle(.primary))
+                                .buttonStyle(
+                                    MacAppButtonStyle(
+                                        actionState.showsUpgrade ? .secondary : .primary
+                                    )
+                                )
                         }
 
                         if actionState.showsManageSubscription {
@@ -88,7 +92,9 @@ public struct ProPlanPane: View {
                             )
                             .buttonStyle(
                                 MacAppButtonStyle(
-                                    actionState.showsViewPlans ? .secondary : .primary
+                                    hasVisibleActionBeforeManageSubscription
+                                        ? .secondary
+                                        : .primary
                                 )
                             )
                         }
@@ -163,6 +169,10 @@ public struct ProPlanPane: View {
             activeProduct: purchaseManager.activeProduct,
             activeSubscriptionProduct: purchaseManager.activeSubscriptionProduct
         )
+    }
+
+    private var hasVisibleActionBeforeManageSubscription: Bool {
+        actionState.showsUpgrade || actionState.showsViewPlans
     }
 
     private var hasVisibleActionBeforeRestore: Bool {
