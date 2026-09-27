@@ -41,7 +41,7 @@ RootView()
 
 If a persisted selection requires Pro while `purchaseManager.hasPro` is false, MAF applies the Free default without deleting the saved preference. If Pro access returns, the saved theme becomes effective again.
 
-The built-in Theme pane accepts the same `PurchaseManager`. By default, Free users can temporarily preview Pro themes for five minutes before upgrading:
+The built-in Theme pane accepts the same `PurchaseManager`. When Pro themes are configured, `onUpgrade` is required so every upgrade action has a real destination. By default, Free users can temporarily preview Pro themes for five minutes before upgrading:
 
 ```swift
 MacAppThemeSettingsPane(
