@@ -12,40 +12,16 @@ public enum MacAppSettingsBuiltInPane: Hashable, Sendable {
 }
 
 public extension MacAppSettingsPane {
-    /// Creates MAF's built-in Theme pane for Free-only theme configurations.
+    /// Creates MAF's built-in Theme pane.
     @MainActor
     static func theme(
         themeStore: MacAppThemeStore,
-        title: String = "Theme",
-        subtitle: String = "Choose the color theme used throughout the app.",
-        systemImage: String = "paintpalette",
-        variant: MacAppThemeSettingsPane.Variant = .standard
-    ) -> MacAppSettingsPane {
-        MacAppSettingsPane(
-            id: .theme,
-            title: title,
-            subtitle: subtitle,
-            systemImage: systemImage
-        ) {
-            MacAppThemeSettingsPane(
-                themeStore: themeStore,
-                variant: variant
-            )
-        }
-    }
-
-    /// Creates MAF's entitlement-aware Theme pane.
-    ///
-    /// Supplying PurchaseManager requires an explicit upgrade/paywall action.
-    @MainActor
-    static func theme(
-        themeStore: MacAppThemeStore,
-        purchaseManager: PurchaseManager,
+        purchaseManager: PurchaseManager? = nil,
         title: String = "Theme",
         subtitle: String = "Choose the color theme used throughout the app.",
         systemImage: String = "paintpalette",
         variant: MacAppThemeSettingsPane.Variant = .standard,
-        onUpgrade: @escaping () -> Void
+        onUpgrade: (() -> Void)? = nil
     ) -> MacAppSettingsPane {
         MacAppSettingsPane(
             id: .theme,
@@ -125,29 +101,12 @@ public enum MacAppSettingsBuiltIns {
         return panes
     }
 
-    /// Advanced grouped helper for Free-only Theme configurations.
+    /// Advanced grouped helper for Theme configurations.
     public static func themeSection(
         themeStore: MacAppThemeStore,
-        variant: MacAppThemeSettingsPane.Variant = .standard
-    ) -> MacAppSettingsSection {
-        MacAppSettingsSection(
-            id: .application,
-            title: "Application",
-            panes: [
-                .theme(
-                    themeStore: themeStore,
-                    variant: variant
-                )
-            ]
-        )
-    }
-
-    /// Advanced grouped helper for entitlement-aware Theme configurations.
-    public static func themeSection(
-        themeStore: MacAppThemeStore,
-        purchaseManager: PurchaseManager,
+        purchaseManager: PurchaseManager? = nil,
         variant: MacAppThemeSettingsPane.Variant = .standard,
-        onUpgrade: @escaping () -> Void
+        onUpgrade: (() -> Void)? = nil
     ) -> MacAppSettingsSection {
         MacAppSettingsSection(
             id: .application,
