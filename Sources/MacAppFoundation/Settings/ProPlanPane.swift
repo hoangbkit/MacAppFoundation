@@ -78,9 +78,7 @@ public struct ProPlanPane: View {
 
                         if actionState.showsViewPlans {
                             Button(configuration.viewPlansButtonTitle, action: onUpgrade)
-                                .buttonStyle(.plain)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(theme.accent)
+                                .buttonStyle(MacAppButtonStyle(.primary))
                         }
 
                         if actionState.showsManageSubscription {
@@ -88,8 +86,11 @@ public struct ProPlanPane: View {
                                 configuration.manageSubscriptionTitle,
                                 destination: configuration.manageSubscriptionURL
                             )
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(theme.accent)
+                            .buttonStyle(
+                                MacAppButtonStyle(
+                                    actionState.showsViewPlans ? .secondary : .primary
+                                )
+                            )
                         }
 
                         Button {
@@ -107,7 +108,11 @@ public struct ProPlanPane: View {
                                 Text(configuration.restorePurchasesTitle)
                             }
                         }
-                        .buttonStyle(MacAppButtonStyle(.quiet))
+                        .buttonStyle(
+                            MacAppButtonStyle(
+                                hasVisibleActionBeforeRestore ? .secondary : .primary
+                            )
+                        )
                         .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -158,6 +163,12 @@ public struct ProPlanPane: View {
             activeProduct: purchaseManager.activeProduct,
             activeSubscriptionProduct: purchaseManager.activeSubscriptionProduct
         )
+    }
+
+    private var hasVisibleActionBeforeRestore: Bool {
+        actionState.showsUpgrade
+            || actionState.showsViewPlans
+            || actionState.showsManageSubscription
     }
 
     private var resolvedFeatures: [PurchaseFeature] {
