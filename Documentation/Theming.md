@@ -41,7 +41,7 @@ RootView()
 
 If a persisted selection requires Pro while `purchaseManager.hasPro` is false, MAF applies the Free default without deleting the saved preference. If Pro access returns, the saved theme becomes effective again.
 
-The built-in Appearance pane accepts the same `PurchaseManager`. Locked cards stay visible with a Pro badge; selecting one calls the app-owned upgrade action instead of changing the theme:
+The built-in Appearance pane accepts the same `PurchaseManager`. By default, Free users can temporarily preview Pro themes for five minutes before upgrading:
 
 ```swift
 MacAppAppearanceSettingsPane(
@@ -50,6 +50,25 @@ MacAppAppearanceSettingsPane(
     onUpgrade: showPaywall
 )
 ```
+
+A Pro preview changes the effective theme across every scene using the shared store without changing the saved selection. The preview expiry is persisted as an absolute date, so relaunching the app does not restart the timer. Switching between Pro themes preserves the original deadline. When the preview expires or the user ends it, MAF returns to the entitled saved theme or the configured Free default.
+
+If Pro is unlocked while a preview is active, the previewed theme is promoted to the permanent selection. Apps can disable previews or customize their behavior:
+
+```swift
+let configuration = MacAppThemeConfiguration(
+    themes: [.system, .midnight, .ocean],
+    defaultThemeID: .system,
+    proThemeIDs: [.midnight, .ocean],
+    previewBehavior: MacAppThemePreviewBehavior(
+        defaultDuration: 5 * 60,
+        preservesExpiryWhenSwitchingThemes: true,
+        promotesPreviewOnProUnlock: true
+    )
+)
+```
+
+Use `.disabled` when Pro themes should remain hard-locked.
 
 ## Built-in themes
 
@@ -142,7 +161,7 @@ Window("Pro", id: "pro") {
 }
 ```
 
-Because every root observes the same store, selecting a theme from Appearance updates all open themed scenes immediately.
+Because every root observes the same store, permanent selection and temporary Pro previews update all open themed scenes immediately. For configurations with Pro themes, use the `purchaseManager:` overload at each scene root so entitlement changes and preview promotion stay synchronized.
 
 ## Migrating BYOKchat or Onlink theme code
 
