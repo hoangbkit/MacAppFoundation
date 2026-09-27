@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Reusable theme picker used by MacAppFoundation's Appearance settings pane.
+/// Reusable theme picker used by MacAppFoundation's Theme settings pane.
 ///
 /// The picker renders the themes supplied by the host app in their configured
 /// order and reports permanent selection, temporary preview, and locked actions.
@@ -11,15 +11,24 @@ public struct MacAppThemePicker: View {
     private let previewingThemeID: MacAppThemeID?
     private let previewableThemeIDs: Set<MacAppThemeID>
     private let lockedThemeIDs: Set<MacAppThemeID>
+    private let compact: Bool
     private let onSelect: (MacAppThemeID) -> Void
     private let onPreviewSelect: (MacAppThemeID) -> Void
     private let onLockedSelect: (MacAppThemeID) -> Void
 
     @Environment(\.macAppTheme) private var activeTheme
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 170, maximum: 210), spacing: 12)
-    ]
+    private var columns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(
+                    minimum: compact ? 138 : 170,
+                    maximum: compact ? 168 : 210
+                ),
+                spacing: compact ? 8 : 12
+            )
+        ]
+    }
 
     public init(
         themes: [MacAppTheme],
@@ -27,6 +36,7 @@ public struct MacAppThemePicker: View {
         previewingThemeID: MacAppThemeID? = nil,
         previewableThemeIDs: Set<MacAppThemeID> = [],
         lockedThemeIDs: Set<MacAppThemeID> = [],
+        compact: Bool = false,
         onSelect: @escaping (MacAppThemeID) -> Void,
         onPreviewSelect: @escaping (MacAppThemeID) -> Void = { _ in },
         onLockedSelect: @escaping (MacAppThemeID) -> Void = { _ in }
@@ -36,13 +46,14 @@ public struct MacAppThemePicker: View {
         self.previewingThemeID = previewingThemeID
         self.previewableThemeIDs = previewableThemeIDs
         self.lockedThemeIDs = lockedThemeIDs
+        self.compact = compact
         self.onSelect = onSelect
         self.onPreviewSelect = onPreviewSelect
         self.onLockedSelect = onLockedSelect
     }
 
     public var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: compact ? 8 : 12) {
             ForEach(themes) { theme in
                 let isPreviewing = previewingThemeID == theme.id
                 let isPreviewAvailable = previewableThemeIDs.contains(theme.id)
@@ -50,6 +61,7 @@ public struct MacAppThemePicker: View {
 
                 MacAppThemePreviewCard(
                     theme: theme,
+                    compact: compact,
                     isSelected: selectedThemeID == theme.id,
                     isPreviewing: isPreviewing,
                     isPreviewAvailable: isPreviewAvailable,
@@ -75,6 +87,7 @@ public struct MacAppThemePicker: View {
 @MainActor
 public struct MacAppThemePreviewCard: View {
     public let theme: MacAppTheme
+    public let compact: Bool
     public let isSelected: Bool
     public let isPreviewing: Bool
     public let isPreviewAvailable: Bool
@@ -88,6 +101,7 @@ public struct MacAppThemePreviewCard: View {
 
     public init(
         theme: MacAppTheme,
+        compact: Bool = false,
         isSelected: Bool,
         isPreviewing: Bool = false,
         isPreviewAvailable: Bool = false,
@@ -95,6 +109,7 @@ public struct MacAppThemePreviewCard: View {
         action: @escaping () -> Void
     ) {
         self.theme = theme
+        self.compact = compact
         self.isSelected = isSelected
         self.isPreviewing = isPreviewing
         self.isPreviewAvailable = isPreviewAvailable
@@ -104,7 +119,7 @@ public struct MacAppThemePreviewCard: View {
 
     public var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: compact ? 7 : 10) {
                 preview
 
                 HStack(spacing: 8) {
@@ -124,7 +139,7 @@ public struct MacAppThemePreviewCard: View {
                     stateBadge
                 }
             }
-            .padding(10)
+            .padding(compact ? 8 : 10)
             .background(cardBackground, in: cardShape)
             .overlay {
                 cardShape.stroke(borderColor, lineWidth: isFocused ? 2 : 1)
@@ -195,7 +210,7 @@ public struct MacAppThemePreviewCard: View {
                     .fill(theme.textMuted.opacity(0.26))
                     .frame(width: 34, height: 6)
             }
-            .padding(10)
+            .padding(compact ? 7 : 10)
             .background(theme.canvasTop)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -218,10 +233,10 @@ public struct MacAppThemePreviewCard: View {
                         }
                 }
             }
-            .padding(10)
+            .padding(compact ? 7 : 10)
             .background(theme.surface)
         }
-        .frame(height: 104)
+        .frame(height: compact ? 82 : 104)
         .background(theme.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
