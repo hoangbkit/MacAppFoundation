@@ -129,7 +129,7 @@ public struct MacAppThemePreviewCard: View {
                             .foregroundStyle(activeTheme.textPrimary)
                             .lineLimit(1)
 
-                        Text(appearanceLabel)
+                        Text(schemeLabel)
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(activeTheme.textMuted)
                     }
@@ -246,7 +246,7 @@ public struct MacAppThemePreviewCard: View {
         .allowsHitTesting(false)
     }
 
-    private var appearanceLabel: String {
+    private var schemeLabel: String {
         switch theme.preferredColorScheme {
         case .dark: "Dark"
         case .light: "Light"
@@ -263,7 +263,7 @@ public struct MacAppThemePreviewCard: View {
     }
 
     private var accessibilityValue: String {
-        var values = [appearanceLabel]
+        var values = [schemeLabel]
         if isPreviewing {
             values.insert("Previewing", at: 0)
             values.append("Pro")
