@@ -24,7 +24,13 @@ struct DemoSettingsView: View {
                 }
                 .tag(MacAppSettingsPaneID.demoGeneral)
 
-            MacAppAppearanceSettingsPane(themeStore: themeStore)
+            MacAppAppearanceSettingsPane(
+                themeStore: themeStore,
+                purchaseManager: purchaseManager,
+                onUpgrade: {
+                    openWindow(id: DemoWindowID.paywall)
+                }
+            )
                 .tabItem {
                     Label("Appearance", systemImage: "paintpalette")
                 }
