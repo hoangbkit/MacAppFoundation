@@ -84,7 +84,8 @@ public final class MacAppThemeStore {
     }
 
     public func effectiveThemeID(hasPro: Bool) -> MacAppThemeID {
-        if let previewThemeID = activePreviewThemeID {
+        if let previewThemeID = activePreviewThemeID,
+           !hasPro || configuration.previewBehavior.promotesPreviewOnProUnlock {
             return previewThemeID
         }
         return themeAfterPreviewID(hasPro: hasPro)
@@ -187,7 +188,14 @@ public final class MacAppThemeStore {
     /// By default, unlocking Pro while previewing promotes that theme to the
     /// permanent selection, matching AppFoundation's preview behavior.
     public func synchronizeProAccess(_ hasPro: Bool) {
-        guard hasPro, let previewID = activePreviewThemeID else { return }
+        guard hasPro else { return }
+
+        guard let previewID = activePreviewThemeID else {
+            if previewThemeID != nil || previewExpiresAt != nil {
+                clearPreviewState()
+            }
+            return
+        }
 
         if configuration.previewBehavior.promotesPreviewOnProUnlock {
             selectedThemeID = previewID
