@@ -3,13 +3,15 @@ public extension MacAppThemeConfiguration {
     static func allBuiltIn(
         defaultThemeID: MacAppThemeID = .system,
         storageKey: String = "MacAppFoundation.theme",
-        proThemeIDs: Set<MacAppThemeID> = []
+        proThemeIDs: Set<MacAppThemeID> = [],
+        previewBehavior: MacAppThemePreviewBehavior = .standard
     ) -> MacAppThemeConfiguration {
         MacAppThemeConfiguration(
             themes: MacAppThemeCatalog.allBuiltIn,
             defaultThemeID: defaultThemeID,
             storageKey: storageKey,
-            proThemeIDs: proThemeIDs
+            proThemeIDs: proThemeIDs,
+            previewBehavior: previewBehavior
         )
     }
 
@@ -18,7 +20,8 @@ public extension MacAppThemeConfiguration {
         _ ids: [MacAppThemeID],
         defaultThemeID: MacAppThemeID? = nil,
         storageKey: String = "MacAppFoundation.theme",
-        proThemeIDs: Set<MacAppThemeID> = []
+        proThemeIDs: Set<MacAppThemeID> = [],
+        previewBehavior: MacAppThemePreviewBehavior = .standard
     ) -> MacAppThemeConfiguration {
         let themes = ids.compactMap(MacAppThemeCatalog.theme(for:))
         let availableThemes = themes.isEmpty ? [.system] : themes
@@ -29,7 +32,8 @@ public extension MacAppThemeConfiguration {
             themes: availableThemes,
             defaultThemeID: fallback,
             storageKey: storageKey,
-            proThemeIDs: proThemeIDs.intersection(availableIDs)
+            proThemeIDs: proThemeIDs.intersection(availableIDs),
+            previewBehavior: previewBehavior
         )
     }
 }
