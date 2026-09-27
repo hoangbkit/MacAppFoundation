@@ -50,6 +50,111 @@ struct MacAppSettingsBuiltInsTests {
     }
 
     @MainActor
+    @Test("Free-only Theme pane needs no commerce dependencies")
+    func freeThemeNeedsNoCommerceDependencies() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.freeTheme")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.freeTheme")
+        let store = MacAppThemeStore(
+            configuration: .builtIns([.system, .midnight]),
+            defaults: defaults
+        )
+
+        let pane = MacAppThemeSettingsPane(themeStore: store)
+
+        #expect(pane.configurationErrorMessage == nil)
+    }
+
+    @MainActor
+    @Test("Pro Theme pane accepts both commerce dependencies")
+    func proThemeAcceptsCommerceDependencies() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.validProTheme")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.validProTheme")
+        let store = MacAppThemeStore(
+            configuration: .builtIns(
+                [.system, .midnight],
+                proThemeIDs: [.midnight]
+            ),
+            defaults: defaults
+        )
+        let purchases = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: ["pro"]),
+            simulated: true
+        )
+
+        let pane = MacAppThemeSettingsPane(
+            themeStore: store,
+            purchaseManager: purchases,
+            onUpgrade: {}
+        )
+
+        #expect(pane.configurationErrorMessage == nil)
+    }
+
+    @MainActor
+    @Test("Pro Theme pane reports missing PurchaseManager")
+    func proThemeReportsMissingPurchaseManager() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.missingPurchases")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.missingPurchases")
+        let store = MacAppThemeStore(
+            configuration: .builtIns(
+                [.system, .midnight],
+                proThemeIDs: [.midnight]
+            ),
+            defaults: defaults
+        )
+
+        let pane = MacAppThemeSettingsPane(
+            themeStore: store,
+            onUpgrade: {}
+        )
+
+        #expect(pane.configurationErrorMessage != nil)
+    }
+
+    @MainActor
+    @Test("Pro Theme pane reports missing upgrade action")
+    func proThemeReportsMissingUpgradeAction() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.missingUpgrade")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.missingUpgrade")
+        let store = MacAppThemeStore(
+            configuration: .builtIns(
+                [.system, .midnight],
+                proThemeIDs: [.midnight]
+            ),
+            defaults: defaults
+        )
+        let purchases = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: ["pro"]),
+            simulated: true
+        )
+
+        let pane = MacAppThemeSettingsPane(
+            themeStore: store,
+            purchaseManager: purchases
+        )
+
+        #expect(pane.configurationErrorMessage != nil)
+    }
+
+    @MainActor
+    @Test("Pro Theme pane reports when both commerce dependencies are missing")
+    func proThemeReportsMissingCommerceDependencies() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.missingCommerce")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.missingCommerce")
+        let store = MacAppThemeStore(
+            configuration: .builtIns(
+                [.system, .midnight],
+                proThemeIDs: [.midnight]
+            ),
+            defaults: defaults
+        )
+
+        let pane = MacAppThemeSettingsPane(themeStore: store)
+
+        #expect(pane.configurationErrorMessage != nil)
+    }
+
+    @MainActor
     @Test("Default built-ins are a flat Theme then Plan pane list")
     func defaultPanes() {
         let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.defaults")!
