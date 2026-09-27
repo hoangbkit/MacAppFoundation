@@ -34,6 +34,7 @@ enum DemoTheme {
     static let configuration = MacAppThemeConfiguration(
         themes: MacAppThemeCatalog.allBuiltIn + [violet],
         defaultThemeID: .system,
-        storageKey: "MacAppFoundationDemo.theme"
+        storageKey: "MacAppFoundationDemo.theme",
+        proThemeIDs: [violetID]
     )
 }
