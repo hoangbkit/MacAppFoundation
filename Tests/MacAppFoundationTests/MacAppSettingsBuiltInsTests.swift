@@ -22,8 +22,8 @@ struct MacAppSettingsBuiltInsTests {
     }
 
     @MainActor
-    @Test("Theme pane with purchases uses the entitlement-aware factory")
-    func entitledThemeMetadata() {
+    @Test("Theme pane accepts optional commerce dependencies")
+    func themeCommerceMetadata() {
         let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.entitledTheme")!
         defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.entitledTheme")
         let store = MacAppThemeStore(
