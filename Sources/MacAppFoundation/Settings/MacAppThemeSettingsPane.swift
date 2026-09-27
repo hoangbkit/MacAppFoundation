@@ -83,12 +83,12 @@ public struct MacAppThemeSettingsPane: View {
                     }
                 )
                 .padding(22)
-                .frame(maxWidth: 780, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if themeStore.isPreviewActive {
                     previewStatus(hasPro: hasPro)
-                        .frame(maxWidth: 780)
+                        .frame(maxWidth: .infinity)
                         .padding(.horizontal, 22)
                         .padding(.top, 8)
                         .padding(.bottom, 12)
