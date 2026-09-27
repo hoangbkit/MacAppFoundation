@@ -20,6 +20,37 @@ RootView()
 
 MAF visual components read `@Environment(\.macAppTheme)` and do not require ad-hoc theme parameters. The modifier also applies the active accent tint and preferred light/dark color scheme.
 
+## Free and Pro themes
+
+Themes are Free by default. Apps can mark any non-default configured theme as Pro with `proThemeIDs`:
+
+```swift
+let configuration = MacAppThemeConfiguration(
+    themes: [.system, .midnight, .ocean, .porcelain],
+    defaultThemeID: .system,
+    proThemeIDs: [.midnight, .ocean]
+)
+```
+
+The configured default theme must remain Free so MAF always has a safe fallback. Use the entitlement-aware scene modifier when a configuration contains Pro themes:
+
+```swift
+RootView()
+    .macAppTheme(themeStore, purchaseManager: purchaseManager)
+```
+
+If a persisted selection requires Pro while `purchaseManager.hasPro` is false, MAF applies the Free default without deleting the saved preference. If Pro access returns, the saved theme becomes effective again.
+
+The built-in Appearance pane accepts the same `PurchaseManager`. Locked cards stay visible with a Pro badge; selecting one calls the app-owned upgrade action instead of changing the theme:
+
+```swift
+MacAppAppearanceSettingsPane(
+    themeStore: themeStore,
+    purchaseManager: purchaseManager,
+    onUpgrade: showPaywall
+)
+```
+
 ## Built-in themes
 
 The shared catalog contains 13 presets:
@@ -127,7 +158,7 @@ For BYOKchat-style code:
 
 For Onlink-style code, map existing semantic palette roles directly to `MacAppThemePalette`; the richer MAF palette was designed to cover the same canvas/surface/border/text/accent/status responsibilities. Onlink's `githubDark`, `mist`, and `sage` naming correspond to MAF's `githubDarkDimmed`, `morningMist`, and `softSage` built-ins.
 
-Apps remain free to keep additional theme metadata or entitlement rules outside MAF. The important boundary is that MAF-owned visual components receive their active theme exclusively through the SwiftUI environment.
+Apps can keep additional theme metadata outside MAF, while the built-in binary Free/Pro rule is configured through `proThemeIDs`. The important boundary is that MAF-owned visual components receive their effective theme exclusively through the SwiftUI environment.
 
 ## Fallback behavior
 
