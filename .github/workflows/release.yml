@@ -48,7 +48,7 @@ jobs:
           echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "Build release: $tag"
 
-      - name: Build unsigned Apple silicon macOS Demo (Debug and Release)
+      - name: Build unsigned universal macOS Demo (Debug and Release)
         shell: bash
         working-directory: Examples/Demo
         run: |
@@ -64,11 +64,11 @@ jobs:
               -scheme MacAppFoundationDemo \
               -configuration "$CONFIGURATION" \
               -sdk macosx \
-              -destination "platform=macOS,arch=arm64" \
+              -destination "platform=macOS" \
               -derivedDataPath "$MAC_DERIVED" \
               -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
-              ARCHS=arm64 \
-              ONLY_ACTIVE_ARCH=YES \
+              ARCHS="arm64 x86_64" \
+              ONLY_ACTIVE_ARCH=NO \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGNING_REQUIRED=NO \
               build
@@ -79,12 +79,13 @@ jobs:
             MAC_EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$MAC_APP/Contents/Info.plist")"
             MAC_ARCHS="$(lipo -archs "$MAC_APP/Contents/MacOS/$MAC_EXECUTABLE")"
             echo "$CONFIGURATION macOS architectures: $MAC_ARCHS"
-            [[ "$MAC_ARCHS" == "arm64" ]] || { echo "error: expected arm64-only app, got: $MAC_ARCHS" >&2; exit 1; }
+            [[ " $MAC_ARCHS " == *" arm64 "* ]] || { echo "error: arm64 slice missing" >&2; exit 1; }
+            [[ " $MAC_ARCHS " == *" x86_64 "* ]] || { echo "error: x86_64 slice missing" >&2; exit 1; }
 
             CONFIGURATION_LOWER="$(echo "$CONFIGURATION" | tr '[:upper:]' '[:lower:]')"
             ditto -c -k --sequesterRsrc --keepParent \
               "$MAC_APP" \
-              "$ARTIFACTS/MacAppFoundationDemo-macOS-arm64-$CONFIGURATION_LOWER-unsigned-${{ steps.release.outputs.tag }}.zip"
+              "$ARTIFACTS/MacAppFoundationDemo-macOS-universal-$CONFIGURATION_LOWER-unsigned-${{ steps.release.outputs.tag }}.zip"
 
             rm -rf "$MAC_DERIVED"
           done
@@ -95,7 +96,7 @@ jobs:
           ls -lh artifacts
 
           for configuration in debug release; do
-            archive="artifacts/MacAppFoundationDemo-macOS-arm64-$configuration-unsigned-${{ steps.release.outputs.tag }}.zip"
+            archive="artifacts/MacAppFoundationDemo-macOS-universal-$configuration-unsigned-${{ steps.release.outputs.tag }}.zip"
             test -f "$archive"
 
             bytes="$(stat -f%z "$archive")"
