@@ -70,19 +70,15 @@ public struct ProPlanPane: View {
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(theme.textSecondary)
 
-                    HStack(spacing: 10) {
+                    HStack(spacing: 4) {
                         if actionState.showsUpgrade {
                             Button(configuration.upgradeButtonTitle, action: onUpgrade)
-                                .buttonStyle(MacAppButtonStyle(.primary))
+                                .buttonStyle(ProPlanActionButtonStyle(.primary))
                         }
 
                         if actionState.showsViewPlans {
                             Button(configuration.viewPlansButtonTitle, action: onUpgrade)
-                                .buttonStyle(
-                                    MacAppButtonStyle(
-                                        actionState.showsUpgrade ? .secondary : .primary
-                                    )
-                                )
+                                .buttonStyle(ProPlanActionButtonStyle(.primary))
                         }
 
                         if actionState.showsManageSubscription {
@@ -91,10 +87,8 @@ public struct ProPlanPane: View {
                                 destination: configuration.manageSubscriptionURL
                             )
                             .buttonStyle(
-                                MacAppButtonStyle(
-                                    hasVisibleActionBeforeManageSubscription
-                                        ? .secondary
-                                        : .primary
+                                ProPlanActionButtonStyle(
+                                    hasVisibleActionBeforeManageSubscription ? .quiet : .primary
                                 )
                             )
                         }
@@ -115,8 +109,8 @@ public struct ProPlanPane: View {
                             }
                         }
                         .buttonStyle(
-                            MacAppButtonStyle(
-                                hasVisibleActionBeforeRestore ? .secondary : .primary
+                            ProPlanActionButtonStyle(
+                                hasVisibleActionBeforeRestore ? .quiet : .primary
                             )
                         )
                         .disabled(purchaseManager.isBusy || purchaseManager.isPurchasePending)
@@ -205,6 +199,35 @@ public struct ProPlanPane: View {
 
     private var currentPlanLabel: String {
         purchaseManager.activeProduct?.planLabel.uppercased() ?? "PRO"
+    }
+}
+
+@MainActor
+private struct ProPlanActionButtonStyle: ButtonStyle {
+    enum Kind {
+        case primary
+        case quiet
+    }
+
+    @Environment(\.macAppTheme) private var theme
+
+    let kind: Kind
+
+    init(_ kind: Kind) {
+        self.kind = kind
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(kind == .primary ? theme.accent : theme.textSecondary)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 32)
+            .background(
+                configuration.isPressed ? theme.selection : .clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
