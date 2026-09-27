@@ -22,10 +22,7 @@ public struct MacAppThemePicker: View {
     private var columns: [GridItem] {
         [
             GridItem(
-                .adaptive(
-                    minimum: compact ? 138 : 170,
-                    maximum: compact ? 168 : 210
-                ),
+                .adaptive(minimum: compact ? 138 : 170),
                 spacing: compact ? 8 : 12
             )
         ]
