@@ -3,7 +3,7 @@ import SwiftUI
 /// Built-in Settings destinations provided by MacAppFoundation.
 ///
 /// This enum describes only framework-owned panes. App-defined destinations keep
-/// using open ``MacAppSettingsPaneID`` values and can be mixed freely with these.
+/// using open MacAppSettingsPaneID values and can be mixed freely with these.
 public enum MacAppSettingsBuiltInPane: Hashable, Sendable {
     case appearance
     case plan
@@ -16,9 +16,11 @@ public extension MacAppSettingsPane {
     @MainActor
     static func appearance(
         themeStore: MacAppThemeStore,
+        purchaseManager: PurchaseManager? = nil,
         title: String = "Appearance",
         subtitle: String = "Choose the color theme used throughout the app.",
-        systemImage: String = "paintpalette"
+        systemImage: String = "paintpalette",
+        onUpgrade: @escaping () -> Void = {}
     ) -> MacAppSettingsPane {
         MacAppSettingsPane(
             id: .appearance,
@@ -26,7 +28,11 @@ public extension MacAppSettingsPane {
             subtitle: subtitle,
             systemImage: systemImage
         ) {
-            MacAppAppearanceSettingsPane(themeStore: themeStore)
+            MacAppAppearanceSettingsPane(
+                themeStore: themeStore,
+                purchaseManager: purchaseManager,
+                onUpgrade: onUpgrade
+            )
         }
     }
 
@@ -69,7 +75,13 @@ public enum MacAppSettingsBuiltIns {
         var panes: [MacAppSettingsPane] = []
 
         if enabledPanes.contains(.appearance) {
-            panes.append(.appearance(themeStore: themeStore))
+            panes.append(
+                .appearance(
+                    themeStore: themeStore,
+                    purchaseManager: purchaseManager,
+                    onUpgrade: onUpgrade
+                )
+            )
         }
 
         if enabledPanes.contains(.plan) {
@@ -87,13 +99,19 @@ public enum MacAppSettingsBuiltIns {
 
     /// Advanced grouped helper for apps that benefit from labeled sections.
     public static func appearanceSection(
-        themeStore: MacAppThemeStore
+        themeStore: MacAppThemeStore,
+        purchaseManager: PurchaseManager? = nil,
+        onUpgrade: @escaping () -> Void = {}
     ) -> MacAppSettingsSection {
         MacAppSettingsSection(
             id: .application,
             title: "Application",
             panes: [
-                .appearance(themeStore: themeStore)
+                .appearance(
+                    themeStore: themeStore,
+                    purchaseManager: purchaseManager,
+                    onUpgrade: onUpgrade
+                )
             ]
         )
     }
@@ -128,7 +146,13 @@ public enum MacAppSettingsBuiltIns {
         var sections: [MacAppSettingsSection] = []
 
         if enabledPanes.contains(.appearance) {
-            sections.append(appearanceSection(themeStore: themeStore))
+            sections.append(
+                appearanceSection(
+                    themeStore: themeStore,
+                    purchaseManager: purchaseManager,
+                    onUpgrade: onUpgrade
+                )
+            )
         }
 
         if enabledPanes.contains(.plan) {
@@ -170,8 +194,8 @@ public extension MacAppSettingsView {
     /// Convenience initializer for the standard MAF Settings experience.
     ///
     /// Appearance and Plan are included as a flat pane list by default. Apps can
-    /// disable either pane with `builtInPanes`, append app-owned panes, or use the
-    /// lower-level `sections:` initializer when labeled grouping is actually useful.
+    /// disable either pane with builtInPanes, append app-owned panes, or use the
+    /// lower-level sections initializer when labeled grouping is actually useful.
     @MainActor
     init(
         title: String = "Settings",
