@@ -2,12 +2,14 @@ public extension MacAppThemeConfiguration {
     /// Convenience configuration exposing every built-in theme.
     static func allBuiltIn(
         defaultThemeID: MacAppThemeID = .system,
-        storageKey: String = "MacAppFoundation.theme"
+        storageKey: String = "MacAppFoundation.theme",
+        proThemeIDs: Set<MacAppThemeID> = []
     ) -> MacAppThemeConfiguration {
         MacAppThemeConfiguration(
             themes: MacAppThemeCatalog.allBuiltIn,
             defaultThemeID: defaultThemeID,
-            storageKey: storageKey
+            storageKey: storageKey,
+            proThemeIDs: proThemeIDs
         )
     }
 
@@ -15,14 +17,19 @@ public extension MacAppThemeConfiguration {
     static func builtIns(
         _ ids: [MacAppThemeID],
         defaultThemeID: MacAppThemeID? = nil,
-        storageKey: String = "MacAppFoundation.theme"
+        storageKey: String = "MacAppFoundation.theme",
+        proThemeIDs: Set<MacAppThemeID> = []
     ) -> MacAppThemeConfiguration {
         let themes = ids.compactMap(MacAppThemeCatalog.theme(for:))
-        let fallback = defaultThemeID ?? themes.first?.id ?? .system
+        let availableThemes = themes.isEmpty ? [.system] : themes
+        let availableIDs = Set(availableThemes.map(\.id))
+        let fallback = defaultThemeID ?? availableThemes.first?.id ?? .system
+
         return MacAppThemeConfiguration(
-            themes: themes.isEmpty ? [.system] : themes,
+            themes: availableThemes,
             defaultThemeID: fallback,
-            storageKey: storageKey
+            storageKey: storageKey,
+            proThemeIDs: proThemeIDs.intersection(availableIDs)
         )
     }
 }
