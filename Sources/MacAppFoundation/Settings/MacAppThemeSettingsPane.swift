@@ -91,7 +91,7 @@ public struct MacAppThemeSettingsPane: View {
         }
     }
 
-    private var configurationErrorMessage: String? {
+    var configurationErrorMessage: String? {
         guard !themeStore.configuration.proThemeIDs.isEmpty else { return nil }
         guard purchaseManager != nil, onUpgrade != nil else {
             return "This Theme pane includes Pro themes but is missing PurchaseManager or onUpgrade. Pass both dependencies to enable Pro theme access and upgrades."
