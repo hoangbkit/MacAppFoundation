@@ -218,16 +218,44 @@ private struct ProPlanActionButtonStyle: ButtonStyle {
     }
 
     func makeBody(configuration: Configuration) -> some View {
+        ProPlanActionButtonBody(
+            configuration: configuration,
+            kind: kind,
+            theme: theme
+        )
+    }
+}
+
+@MainActor
+private struct ProPlanActionButtonBody: View {
+    let configuration: ButtonStyle.Configuration
+    let kind: ProPlanActionButtonStyle.Kind
+    let theme: MacAppTheme
+
+    @State private var isHovering = false
+
+    var body: some View {
         configuration.label
             .font(.system(size: 13, weight: .medium, design: .rounded))
             .foregroundStyle(kind == .primary ? theme.accent : theme.textSecondary)
             .padding(.horizontal, 8)
             .frame(minHeight: 32)
             .background(
-                configuration.isPressed ? theme.selection : .clear,
+                backgroundColor,
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onHover { isHovering = $0 }
+    }
+
+    private var backgroundColor: Color {
+        if configuration.isPressed {
+            return theme.selection
+        }
+        if isHovering {
+            return theme.selection.opacity(0.55)
+        }
+        return .clear
     }
 }
 
