@@ -17,7 +17,7 @@ MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host 
 
 ## Demo app
 
-`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Appearance/Plan plus app-injected panes, a runtime-configured analytics tester for events/errors, and the separate Developer Tools window/menu.
+`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Theme/Plan plus app-injected panes, a runtime-configured analytics tester for events/errors, and the separate Developer Tools window/menu.
 
 ```sh
 cd Examples/Demo
@@ -33,7 +33,7 @@ MacAppFoundation now has six main areas:
 1. **Commerce + simulation** — verified StoreKit 2 entitlement state, opt-in offline-safe verified entitlement persistence, product loading, purchase/restore, transaction observation, foreground refresh, and a Debug-only in-process simulator.
 2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
-4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Appearance/Plan panes, and selection routing.
+4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Theme/Plan panes, and selection routing.
 5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, analytics actions, and app-defined developer actions.
 6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, stable Keychain installation identity, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
 
@@ -154,7 +154,7 @@ See `Documentation/Theming.md` for semantic palette roles, custom themes, the re
 
 `MacAppSettingsView` provides the custom macOS shell: themed sidebar, detail header, surfaces, inherited group-box treatment, and optional labeled sections. For the common small-app case, **flat panes are the default**.
 
-A standard Appearance + Plan setup is:
+A standard Theme + Plan setup is:
 
 ```swift
 @State private var settingsRouter = MacAppSettingsRouter()
@@ -177,7 +177,7 @@ Settings {
 That produces a simple sidebar:
 
 ```text
-Appearance
+Theme
 Plan
 ```
 
@@ -193,7 +193,7 @@ let panes = [
     ) {
         GeneralSettingsView()
     },
-    .appearance(themeStore: themeStore),
+    .theme(themeStore: themeStore, variant: .compact),
     .plan(
         purchaseManager: purchases,
         configuration: ProPlanPaneConfiguration(appName: "Example"),
