@@ -155,6 +155,46 @@ struct MacAppSettingsBuiltInsTests {
     }
 
     @MainActor
+    @Test("Theme preview progress follows remaining preview time")
+    func themePreviewProgressTracksRemainingTime() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.previewProgress")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.previewProgress")
+        var now = Date(timeIntervalSince1970: 1_000)
+        let configuration = MacAppThemeConfiguration(
+            themes: [.system, .midnight],
+            defaultThemeID: .system,
+            storageKey: "theme",
+            proThemeIDs: [.midnight],
+            previewBehavior: .init(
+                defaultDuration: 100,
+                schedulesAutomaticExpiration: false
+            )
+        )
+        let store = MacAppThemeStore(
+            configuration: configuration,
+            defaults: defaults,
+            now: { now }
+        )
+        let purchases = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: ["pro"]),
+            simulated: true
+        )
+
+        _ = store.choose(.midnight, hasPro: false)
+        let pane = MacAppThemeSettingsPane(
+            themeStore: store,
+            purchaseManager: purchases,
+            onUpgrade: {}
+        )
+
+        #expect(pane.previewProgress == 1)
+
+        now = now.addingTimeInterval(25)
+
+        #expect(pane.previewProgress == 0.75)
+    }
+
+    @MainActor
     @Test("Default built-ins are a flat Theme then Plan pane list")
     func defaultPanes() {
         let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.defaults")!
