@@ -339,12 +339,15 @@ private struct MacAppThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
 
     func body(content: Content) -> some View {
-        let theme = store.currentTheme
+        let theme = store.currentTheme(hasPro: false)
 
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
             .preferredColorScheme(theme.preferredColorScheme)
+            .task {
+                store.refreshPreviewState()
+            }
     }
 }
 
