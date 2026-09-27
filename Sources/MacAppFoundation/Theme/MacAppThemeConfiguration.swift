@@ -1,17 +1,20 @@
 import Foundation
 
-/// Defines which themes a host app exposes, which require Pro, and how selection is persisted.
+/// Defines which themes a host app exposes, which require Pro, how previews behave,
+/// and how selection is persisted.
 public struct MacAppThemeConfiguration: @unchecked Sendable {
     public let themes: [MacAppTheme]
     public let defaultThemeID: MacAppThemeID
     public let storageKey: String
     public let proThemeIDs: Set<MacAppThemeID>
+    public let previewBehavior: MacAppThemePreviewBehavior
 
     public init(
         themes: [MacAppTheme] = MacAppThemeCatalog.allBuiltIn,
         defaultThemeID: MacAppThemeID = .system,
         storageKey: String = "MacAppFoundation.theme",
-        proThemeIDs: Set<MacAppThemeID> = []
+        proThemeIDs: Set<MacAppThemeID> = [],
+        previewBehavior: MacAppThemePreviewBehavior = .standard
     ) {
         precondition(!themes.isEmpty, "MacAppThemeConfiguration requires at least one theme.")
         precondition(Set(themes.map(\.id)).count == themes.count, "Theme IDs must be unique.")
@@ -34,6 +37,7 @@ public struct MacAppThemeConfiguration: @unchecked Sendable {
         self.defaultThemeID = resolvedDefaultThemeID
         self.storageKey = storageKey
         self.proThemeIDs = proThemeIDs
+        self.previewBehavior = previewBehavior
     }
 
     public func theme(for id: MacAppThemeID) -> MacAppTheme? {
