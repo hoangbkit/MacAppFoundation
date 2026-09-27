@@ -11,7 +11,7 @@ struct MacAppSettingsTests {
 
         #expect(pane.rawValue == "providers")
         #expect(section.rawValue == "integrations")
-        #expect(MacAppSettingsPaneID.appearance.rawValue == "appearance")
+        #expect(MacAppSettingsPaneID.theme.rawValue == "theme")
         #expect(MacAppSettingsPaneID.plan.rawValue == "plan")
     }
 
@@ -26,9 +26,9 @@ struct MacAppSettingsTests {
         ) {
             EmptyView()
         }
-        let appearance = MacAppSettingsPane(
-            id: .appearance,
-            title: "Appearance",
+        let theme = MacAppSettingsPane(
+            id: .theme,
+            title: "Theme",
             subtitle: "Theme preferences",
             systemImage: "paintpalette"
         ) {
@@ -38,14 +38,14 @@ struct MacAppSettingsTests {
         let section = MacAppSettingsSection(
             id: .application,
             title: "Application",
-            panes: [general, appearance]
+            panes: [general, theme]
         )
 
-        let expectedIDs: [MacAppSettingsPaneID] = ["general", .appearance]
+        let expectedIDs: [MacAppSettingsPaneID] = ["general", .theme]
         let actualIDs = section.panes.map { $0.id }
         let actualTitles = section.panes.map { $0.title }
         #expect(actualIDs == expectedIDs)
-        #expect(actualTitles == ["General", "Appearance"])
+        #expect(actualTitles == ["General", "Theme"])
     }
 
     @MainActor
