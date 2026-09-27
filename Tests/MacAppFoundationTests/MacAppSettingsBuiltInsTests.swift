@@ -22,6 +22,34 @@ struct MacAppSettingsBuiltInsTests {
     }
 
     @MainActor
+    @Test("Theme pane with purchases uses the entitlement-aware factory")
+    func entitledThemeMetadata() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.entitledTheme")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.entitledTheme")
+        let store = MacAppThemeStore(
+            configuration: .builtIns(
+                [.system, .midnight],
+                proThemeIDs: [.midnight]
+            ),
+            defaults: defaults
+        )
+        let purchases = PurchaseManager(
+            configuration: PurchaseConfiguration(productIDs: ["pro"]),
+            simulated: true
+        )
+
+        let pane = MacAppSettingsPane.theme(
+            themeStore: store,
+            purchaseManager: purchases,
+            variant: .compact,
+            onUpgrade: {}
+        )
+
+        #expect(pane.id == .theme)
+        #expect(pane.title == "Theme")
+    }
+
+    @MainActor
     @Test("Default built-ins are a flat Theme then Plan pane list")
     func defaultPanes() {
         let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.defaults")!
