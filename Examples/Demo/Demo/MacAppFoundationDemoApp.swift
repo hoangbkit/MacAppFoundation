@@ -49,7 +49,7 @@ struct MacAppFoundationDemoApp: App {
                 analytics: analytics
             )
             .environment(demoState)
-            .macAppTheme(themeStore)
+            .macAppTheme(themeStore, purchaseManager: purchases)
             .managesPurchases(purchases)
             .managesAnalytics(analytics)
         }
@@ -113,7 +113,7 @@ struct MacAppFoundationDemoApp: App {
         ) {
             DemoOnboardingView(onboarding: onboarding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .macAppTheme(themeStore)
+                .macAppTheme(themeStore, purchaseManager: purchases)
                 .managesAnalytics(analytics)
         }
 
@@ -133,14 +133,14 @@ struct MacAppFoundationDemoApp: App {
                     demoState.record("Restored purchases")
                 }
             )
-            .macAppTheme(themeStore)
+            .macAppTheme(themeStore, purchaseManager: purchases)
             .managesAnalytics(analytics)
         }
 
         Window("Pro Upsell", id: DemoWindowID.upsell) {
             DemoUpsellWindow(purchaseManager: purchases)
                 .environment(demoState)
-                .macAppTheme(themeStore)
+                .macAppTheme(themeStore, purchaseManager: purchases)
                 .managesAnalytics(analytics)
         }
         .defaultSize(width: 560, height: 520)
@@ -156,7 +156,7 @@ struct MacAppFoundationDemoApp: App {
                 configuration: developerConfiguration
             )
             .environment(demoState)
-            .macAppTheme(themeStore)
+            .macAppTheme(themeStore, purchaseManager: purchases)
             .managesAnalytics(analytics)
         }
         .defaultSize(
@@ -172,7 +172,7 @@ struct MacAppFoundationDemoApp: App {
                 settingsRouter: settingsRouter
             )
             .environment(demoState)
-            .macAppTheme(themeStore)
+            .macAppTheme(themeStore, purchaseManager: purchases)
             .managesAnalytics(analytics)
         }
     }
