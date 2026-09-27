@@ -41,12 +41,13 @@ RootView()
 
 If a persisted selection requires Pro while `purchaseManager.hasPro` is false, MAF applies the Free default without deleting the saved preference. If Pro access returns, the saved theme becomes effective again.
 
-The built-in Appearance pane accepts the same `PurchaseManager`. By default, Free users can temporarily preview Pro themes for five minutes before upgrading:
+The built-in Theme pane accepts the same `PurchaseManager`. By default, Free users can temporarily preview Pro themes for five minutes before upgrading:
 
 ```swift
-MacAppAppearanceSettingsPane(
+MacAppThemeSettingsPane(
     themeStore: themeStore,
     purchaseManager: purchaseManager,
+    variant: .compact,
     onUpgrade: showPaywall
 )
 ```
@@ -173,7 +174,7 @@ For BYOKchat-style code:
 2. Replace the app-local theme enum/model with `MacAppThemeConfiguration` + `MacAppThemeStore` where the app does not need extra domain behavior.
 3. Keep the app's chosen subset/order by supplying only those presets to the configuration.
 4. Convert genuinely app-specific palettes into custom `MacAppTheme` values instead of adding cases to a framework enum.
-5. Replace the local Appearance grid with `MacAppThemePicker` or the built-in `.appearance(themeStore:)` settings pane.
+5. Replace the local Theme grid with `MacAppThemePicker` or the built-in `.theme(themeStore:)` settings pane.
 
 For Onlink-style code, map existing semantic palette roles directly to `MacAppThemePalette`; the richer MAF palette was designed to cover the same canvas/surface/border/text/accent/status responsibilities. Onlink's `githubDark`, `mist`, and `sage` naming correspond to MAF's `githubDarkDimmed`, `morningMist`, and `softSage` built-ins.
 
