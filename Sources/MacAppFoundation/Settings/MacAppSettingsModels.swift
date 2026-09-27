@@ -21,7 +21,7 @@ public struct MacAppSettingsPaneID: RawRepresentable, Hashable, Codable, Sendabl
 }
 
 public extension MacAppSettingsPaneID {
-    static let appearance: Self = "appearance"
+    static let theme: Self = "theme"
     static let plan: Self = "plan"
 }
 
