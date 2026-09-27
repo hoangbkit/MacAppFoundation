@@ -19,11 +19,30 @@ public struct MacAppThemeSettingsPane: View {
 
     @Environment(\.macAppTheme) private var theme
 
+    /// Creates a Theme pane for configurations that contain only Free themes.
     public init(
         themeStore: MacAppThemeStore,
-        purchaseManager: PurchaseManager? = nil,
+        variant: Variant = .standard
+    ) {
+        precondition(
+            themeStore.configuration.proThemeIDs.isEmpty,
+            "Theme configurations with Pro themes require PurchaseManager and onUpgrade."
+        )
+        self.themeStore = themeStore
+        self.purchaseManager = nil
+        self.variant = variant
+        self.onUpgrade = nil
+    }
+
+    /// Creates an entitlement-aware Theme pane.
+    ///
+    /// When a PurchaseManager is supplied, the app must also provide the action
+    /// used to present its upgrade/paywall flow.
+    public init(
+        themeStore: MacAppThemeStore,
+        purchaseManager: PurchaseManager,
         variant: Variant = .standard,
-        onUpgrade: (() -> Void)? = nil
+        onUpgrade: @escaping () -> Void
     ) {
         self.themeStore = themeStore
         self.purchaseManager = purchaseManager
