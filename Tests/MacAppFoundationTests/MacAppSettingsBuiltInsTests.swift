@@ -5,24 +5,24 @@ import Testing
 @Suite("MacAppSettings built-ins")
 struct MacAppSettingsBuiltInsTests {
     @MainActor
-    @Test("Appearance pane uses stable built-in metadata")
-    func appearanceMetadata() {
-        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.appearance")!
-        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.appearance")
+    @Test("Theme pane uses stable built-in metadata")
+    func themeMetadata() {
+        let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.theme")!
+        defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.theme")
         let store = MacAppThemeStore(
             configuration: .builtIns([.system, .midnight]),
             defaults: defaults
         )
 
-        let pane = MacAppSettingsPane.appearance(themeStore: store)
+        let pane = MacAppSettingsPane.theme(themeStore: store, variant: .compact)
 
-        #expect(pane.id == .appearance)
-        #expect(pane.title == "Appearance")
+        #expect(pane.id == .theme)
+        #expect(pane.title == "Theme")
         #expect(pane.systemImage == "paintpalette")
     }
 
     @MainActor
-    @Test("Default built-ins are a flat Appearance then Plan pane list")
+    @Test("Default built-ins are a flat Theme then Plan pane list")
     func defaultPanes() {
         let defaults = UserDefaults(suiteName: "MacAppSettingsBuiltInsTests.defaults")!
         defaults.removePersistentDomain(forName: "MacAppSettingsBuiltInsTests.defaults")
@@ -39,7 +39,7 @@ struct MacAppSettingsBuiltInsTests {
             onUpgrade: {}
         )
 
-        #expect(panes.map { $0.id } == [.appearance, .plan])
+        #expect(panes.map { $0.id } == [.theme, .plan])
     }
 
     @MainActor
@@ -53,11 +53,11 @@ struct MacAppSettingsBuiltInsTests {
             simulated: true
         )
 
-        let appearanceOnly = MacAppSettingsBuiltIns.panes(
+        let themeOnly = MacAppSettingsBuiltIns.panes(
             themeStore: store,
             purchaseManager: purchases,
             planConfiguration: ProPlanPaneConfiguration(appName: "Demo"),
-            enabledPanes: [.appearance],
+            enabledPanes: [.theme],
             onUpgrade: {}
         )
         let planOnly = MacAppSettingsBuiltIns.panes(
@@ -68,7 +68,7 @@ struct MacAppSettingsBuiltInsTests {
             onUpgrade: {}
         )
 
-        #expect(appearanceOnly.map { $0.id } == [.appearance])
+        #expect(themeOnly.map { $0.id } == [.theme])
         #expect(planOnly.map { $0.id } == [.plan])
     }
 
@@ -91,7 +91,7 @@ struct MacAppSettingsBuiltInsTests {
         )
 
         #expect(sections.map { $0.id } == [.application, .account])
-        #expect(sections.flatMap { $0.panes }.map { $0.id } == [.appearance, .plan])
+        #expect(sections.flatMap { $0.panes }.map { $0.id } == [.theme, .plan])
     }
 
     @MainActor
