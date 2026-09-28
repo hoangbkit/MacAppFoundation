@@ -497,13 +497,14 @@ private struct MacAppThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
 
     @Environment(\.colorScheme) private var observedColorScheme
-    @State private var systemColorScheme: ColorScheme = .light
+    @State private var systemColorScheme: ColorScheme?
 
     func body(content: Content) -> some View {
         let effectiveThemeID = store.effectiveThemeID(hasPro: false)
+        let resolvedSystemColorScheme = systemColorScheme ?? observedColorScheme
         let theme = store.currentTheme(
             hasPro: false,
-            systemColorScheme: systemColorScheme
+            systemColorScheme: resolvedSystemColorScheme
         )
 
         content
@@ -544,7 +545,7 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
     let purchaseManager: PurchaseManager
 
     @Environment(\.colorScheme) private var observedColorScheme
-    @State private var systemColorScheme: ColorScheme = .light
+    @State private var systemColorScheme: ColorScheme?
 
     func body(content: Content) -> some View {
         let hasPro = purchaseManager.hasPro
@@ -552,10 +553,11 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro
         )
+        let resolvedSystemColorScheme = systemColorScheme ?? observedColorScheme
         let theme = store.currentTheme(
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro,
-            systemColorScheme: systemColorScheme
+            systemColorScheme: resolvedSystemColorScheme
         )
 
         content
