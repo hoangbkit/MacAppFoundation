@@ -8,6 +8,7 @@ private actor MemoryAnalyticsStateStore: AppAnalyticsStateStoring {
     func load() async throws -> Data? { data }
     func save(_ data: Data) async throws { self.data = data }
     func remove() async throws { data = nil }
+    func hasData() -> Bool { data != nil }
 }
 
 private actor MockAnalyticsTransport: AppAnalyticsTransport {
@@ -84,6 +85,30 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     )
 
     #expect(configuration.uploadInterval == 5 * 60)
+}
+
+@Test func analyticsDiscardsTrackingAndUploadsOnCI() async throws {
+    let transport = MockAnalyticsTransport()
+    let store = MemoryAnalyticsStateStore()
+    let timestamp = isoDate("2026-09-05T10:00:00Z")
+    let client = AppAnalyticsClient(
+        configuration: analyticsConfiguration(),
+        transport: transport,
+        stateStore: store,
+        now: { timestamp },
+        clientContext: analyticsContext(),
+        discardsAnalytics: true
+    )
+
+    try await client.track("generation_completed", dimension: "nano")
+    try await client.trackError("model_load_failed", component: "generation")
+    try await client.applicationDidBecomeActive(at: timestamp)
+    try await client.applicationWillResignActive(at: timestamp.addingTimeInterval(60))
+    try await client.flush()
+
+    #expect(await store.hasData() == false)
+    #expect(await transport.capturedRequests().isEmpty)
+    #expect(try await client.pendingDayCount() == 0)
 }
 
 @Test func analyticsFlushMatchesNativeServerContract() async throws {
