@@ -496,21 +496,11 @@ public extension EnvironmentValues {
 private struct MacAppThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
 
-    /// Keep a SwiftUI appearance dependency so System re-renders when macOS
-    /// changes appearance externally. Resolution itself stays AppKit-authoritative.
     @Environment(\.colorScheme) private var observedColorScheme
+    @State private var systemColorScheme: ColorScheme = .light
 
     func body(content: Content) -> some View {
-        _ = observedColorScheme
-
         let effectiveThemeID = store.effectiveThemeID(hasPro: false)
-        let effectiveTheme = store.configuration.theme(for: effectiveThemeID)
-            ?? store.configuration.defaultTheme
-        let systemColorScheme = MacAppApplicationAppearance
-            .synchronizeAndResolveSystemColorScheme(
-                effectiveThemeID: effectiveThemeID,
-                theme: effectiveTheme
-            )
         let theme = store.currentTheme(
             hasPro: false,
             systemColorScheme: systemColorScheme
@@ -519,9 +509,33 @@ private struct MacAppThemeModifier: ViewModifier {
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
+            .onChange(of: effectiveThemeID, initial: true) { _, newThemeID in
+                synchronizeAppearance(for: newThemeID)
+            }
+            .onChange(of: observedColorScheme) { _, _ in
+                guard effectiveThemeID == .system else { return }
+                synchronizeAppearance(for: .system)
+            }
             .task {
                 store.refreshPreviewState()
             }
+    }
+
+    private func synchronizeAppearance(for effectiveThemeID: MacAppThemeID) {
+        let effectiveTheme = store.configuration.theme(for: effectiveThemeID)
+            ?? store.configuration.defaultTheme
+        let resolvedColorScheme = MacAppApplicationAppearance
+            .synchronizeAndResolveSystemColorScheme(
+                effectiveThemeID: effectiveThemeID,
+                theme: effectiveTheme
+            )
+
+        guard effectiveThemeID == .system,
+              systemColorScheme != resolvedColorScheme
+        else {
+            return
+        }
+        systemColorScheme = resolvedColorScheme
     }
 }
 
@@ -529,25 +543,15 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
     let purchaseManager: PurchaseManager
 
-    /// Keep a SwiftUI appearance dependency so System re-renders when macOS
-    /// changes appearance externally. Resolution itself stays AppKit-authoritative.
     @Environment(\.colorScheme) private var observedColorScheme
+    @State private var systemColorScheme: ColorScheme = .light
 
     func body(content: Content) -> some View {
-        _ = observedColorScheme
-
         let hasPro = purchaseManager.hasPro
         let effectiveThemeID = store.effectiveThemeID(
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro
         )
-        let effectiveTheme = store.configuration.theme(for: effectiveThemeID)
-            ?? store.configuration.defaultTheme
-        let systemColorScheme = MacAppApplicationAppearance
-            .synchronizeAndResolveSystemColorScheme(
-                effectiveThemeID: effectiveThemeID,
-                theme: effectiveTheme
-            )
         let theme = store.currentTheme(
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro,
@@ -557,6 +561,13 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
+            .onChange(of: effectiveThemeID, initial: true) { _, newThemeID in
+                synchronizeAppearance(for: newThemeID)
+            }
+            .onChange(of: observedColorScheme) { _, _ in
+                guard effectiveThemeID == .system else { return }
+                synchronizeAppearance(for: .system)
+            }
             .task {
                 store.synchronizeProAccess(hasPro)
                 store.refreshPreviewState()
@@ -564,6 +575,23 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
             .onChange(of: purchaseManager.hasPro) { _, newHasPro in
                 store.synchronizeProAccess(newHasPro)
             }
+    }
+
+    private func synchronizeAppearance(for effectiveThemeID: MacAppThemeID) {
+        let effectiveTheme = store.configuration.theme(for: effectiveThemeID)
+            ?? store.configuration.defaultTheme
+        let resolvedColorScheme = MacAppApplicationAppearance
+            .synchronizeAndResolveSystemColorScheme(
+                effectiveThemeID: effectiveThemeID,
+                theme: effectiveTheme
+            )
+
+        guard effectiveThemeID == .system,
+              systemColorScheme != resolvedColorScheme
+        else {
+            return
+        }
+        systemColorScheme = resolvedColorScheme
     }
 }
 
