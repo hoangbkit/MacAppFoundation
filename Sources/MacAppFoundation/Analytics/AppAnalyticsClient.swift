@@ -275,7 +275,7 @@ public actor AppAnalyticsClient {
         stateStore: any AppAnalyticsStateStoring,
         now: @escaping @Sendable () -> Date,
         clientContext: AppAnalyticsClientContext = .current(),
-        discardsAnalytics: Bool? = nil
+        discardsAnalytics: Bool = false
     ) {
         self.configuration = configuration
         self.transport = transport
@@ -285,7 +285,7 @@ public actor AppAnalyticsClient {
         self.decoder = Self.makeDecoder()
         self.now = now
         self.clientContext = clientContext
-        self.discardsAnalytics = discardsAnalytics ?? Self.isCIEnvironment()
+        self.discardsAnalytics = discardsAnalytics
     }
 
     public func track(
