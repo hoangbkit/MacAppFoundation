@@ -32,7 +32,7 @@ let configuration = MacAppThemeConfiguration(
 )
 ```
 
-The configured default theme must remain Free so MAF always has a safe fallback. Use the entitlement-aware scene modifier when a configuration contains Pro themes:
+The configured default theme must remain Free so MAF always has a safe fallback. A ThemePickerView configuration must also expose at least one Free light theme and one Free dark theme. Pro themes never satisfy those two appearance slots. Use the entitlement-aware scene modifier when a configuration contains Pro themes:
 
 ```swift
 RootView()
@@ -89,7 +89,7 @@ The shared catalog contains 13 presets:
 - Sunrise
 - GitHub Light
 
-`System` follows semantic AppKit colors at runtime. The named presets use the shared richer semantic palette used by MAF surfaces.
+`System` is a selection mode rather than a standalone app palette. When selected, MAF follows the current macOS appearance and resolves to a configured Free light or Free dark theme. By default MAF uses the first eligible Free light/dark theme in configuration order; apps can choose explicit backing themes with `systemLightThemeID` and `systemDarkThemeID`. The standalone `.system` palette remains the safe environment fallback when no store is injected or a System backing theme is unavailable.
 
 ## App-selected subsets and custom themes
 
@@ -122,11 +122,26 @@ The palette includes canvas, raised surfaces, borders, separators, selection, co
 
 ## Preferred appearance
 
-Every `MacAppTheme` may declare `preferredColorScheme` as `.dark`, `.light`, or `nil`. A `nil` preference follows the system appearance. The shared `.macAppTheme(themeStore)` modifier applies that preference automatically.
+Every named `MacAppTheme` may declare `preferredColorScheme` as `.dark` or `.light`. `ThemePickerView` requires at least one Free theme for each appearance.
+
+When the user selects `System`, MAF keeps the scene preference unset so macOS remains authoritative, then swaps the active semantic palette between the configured Free light and Free dark backing themes as the system appearance changes. Named themes continue to force their declared light/dark appearance.
+
+Apps with multiple Free light or dark themes may explicitly choose the System pair:
+
+```swift
+let configuration = MacAppThemeConfiguration(
+    themes: [.system, .midnight, .ocean, .porcelain, .sunrise],
+    defaultThemeID: .system,
+    systemLightThemeID: .sunrise,
+    systemDarkThemeID: .ocean
+)
+```
 
 ## Reusable theme picker
 
-`MacAppThemePicker` renders any ordered theme list, including custom themes, and reports selection without owning persistence:
+`ThemePickerView` is the reusable settings-facing control. It owns selection, scrolling, Pro locking, previews, and configuration validation while leaving outer background and padding to the host app. If either a Free light or Free dark theme is missing, it shows a configuration error instead of the theme grid.
+
+`MacAppThemePicker` remains the lower-level grid that renders any ordered theme list, including custom themes, and reports selection without owning persistence:
 
 ```swift
 MacAppThemePicker(
