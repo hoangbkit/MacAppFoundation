@@ -50,6 +50,12 @@ public struct ThemePickerView: View {
     private var picker: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let hasPro = purchaseManager?.hasPro ?? false
+            let selectedThemeID = purchaseManager.map {
+                themeStore.effectiveThemeID(
+                    entitlementState: $0.entitlementState,
+                    hasPro: $0.hasPro
+                )
+            } ?? themeStore.effectiveThemeID(hasPro: false)
             let proThemeIDs = themeStore.configuration.proThemeIDs
             let previewableThemeIDs = hasPro
                 ? Set<MacAppThemeID>()
@@ -61,7 +67,7 @@ public struct ThemePickerView: View {
             ScrollView {
                 MacAppThemePicker(
                     themes: themeStore.configuration.themes,
-                    selectedThemeID: themeStore.effectiveThemeID(hasPro: hasPro),
+                    selectedThemeID: selectedThemeID,
                     previewingThemeID: themeStore.isPreviewActive
                         ? themeStore.previewThemeID
                         : nil,
@@ -105,7 +111,12 @@ public struct ThemePickerView: View {
     }
 
     var configurationErrorMessage: String? {
-        guard !themeStore.configuration.proThemeIDs.isEmpty else { return nil }
+        let configuration = themeStore.configuration
+        guard configuration.hasRequiredFreeAppearanceThemes else {
+            return "Theme configuration requires at least one Free Light theme and one Free Dark theme. System uses those themes to follow macOS appearance."
+        }
+
+        guard !configuration.proThemeIDs.isEmpty else { return nil }
         guard purchaseManager != nil, onUpgrade != nil else {
             return "This theme picker includes Pro themes but is missing PurchaseManager or onUpgrade. Pass both dependencies to enable Pro theme access and upgrades."
         }
