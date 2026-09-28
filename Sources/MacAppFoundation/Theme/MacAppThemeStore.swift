@@ -446,18 +446,38 @@ enum MacAppApplicationAppearance {
         theme: MacAppTheme
     ) -> ColorScheme {
         let application = NSApplication.shared
+        return synchronizeAndResolveSystemColorScheme(
+            effectiveThemeID: effectiveThemeID,
+            theme: theme,
+            currentAppearanceName: application.appearance?.name,
+            applyAppearance: { appearanceName in
+                application.appearance = appearanceName.flatMap {
+                    NSAppearance(named: $0)
+                }
+            },
+            effectiveAppearance: {
+                application.effectiveAppearance
+            }
+        )
+    }
+
+    static func synchronizeAndResolveSystemColorScheme(
+        effectiveThemeID: MacAppThemeID,
+        theme: MacAppTheme,
+        currentAppearanceName: NSAppearance.Name?,
+        applyAppearance: (NSAppearance.Name?) -> Void,
+        effectiveAppearance: () -> NSAppearance
+    ) -> ColorScheme {
         let desiredAppearanceName = appearanceName(
             for: effectiveThemeID,
             theme: theme
         )
 
-        if application.appearance?.name != desiredAppearanceName {
-            application.appearance = desiredAppearanceName.flatMap {
-                NSAppearance(named: $0)
-            }
+        if currentAppearanceName != desiredAppearanceName {
+            applyAppearance(desiredAppearanceName)
         }
 
-        return colorScheme(for: application.effectiveAppearance)
+        return colorScheme(for: effectiveAppearance())
     }
 }
 
