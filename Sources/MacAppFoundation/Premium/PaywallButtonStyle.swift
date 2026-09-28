@@ -12,10 +12,6 @@ public struct PaywallButtonStyle: ButtonStyle {
         case text
     }
 
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.macAppTheme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private let kind: Kind
 
     public init(_ kind: Kind = .secondary) {
@@ -23,9 +19,28 @@ public struct PaywallButtonStyle: ButtonStyle {
     }
 
     public func makeBody(configuration: Configuration) -> some View {
+        PaywallButtonStyleBody(
+            label: configuration.label,
+            kind: kind,
+            isPressed: configuration.isPressed
+        )
+    }
+}
+
+private struct PaywallButtonStyleBody<Label: View>: View {
+    let label: Label
+    let kind: PaywallButtonStyle.Kind
+    let isPressed: Bool
+
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.macAppTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    var body: some View {
         let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
 
-        configuration.label
+        label
             .font(font)
             .lineLimit(1)
             .foregroundStyle(foregroundColor)
@@ -33,17 +48,31 @@ public struct PaywallButtonStyle: ButtonStyle {
             .padding(.horizontal, horizontalPadding)
             .frame(minHeight: minimumHeight)
             .background {
-                shape.fill(backgroundColor(isPressed: configuration.isPressed))
+                shape.fill(backgroundColor)
             }
             .overlay {
                 shape.strokeBorder(borderColor, lineWidth: 1)
             }
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.55)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .scaleEffect(isPressed && !reduceMotion ? 0.98 : 1)
+            .onHover { hovering in
+                guard isEnabled else {
+                    isHovering = false
+                    return
+                }
+
+                if reduceMotion {
+                    isHovering = hovering
+                } else {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        isHovering = hovering
+                    }
+                }
+            }
             .animation(
                 reduceMotion ? nil : .easeOut(duration: 0.08),
-                value: configuration.isPressed
+                value: isPressed
             )
     }
 
@@ -83,18 +112,26 @@ public struct PaywallButtonStyle: ButtonStyle {
         case .secondary:
             theme.textPrimary
         case .text:
-            theme.textSecondary
+            isHovering ? theme.textPrimary : theme.textSecondary
         }
     }
 
-    private func backgroundColor(isPressed: Bool) -> Color {
+    private var backgroundColor: Color {
         switch kind {
         case .primary:
-            theme.accent.opacity(isPressed ? 0.84 : 1)
+            if isPressed { return theme.accent.opacity(0.84) }
+            if isHovering { return theme.accent.opacity(0.9) }
+            return theme.accent
+
         case .secondary:
-            isPressed ? theme.selection : theme.surfaceRaised
+            if isPressed { return theme.selection }
+            if isHovering { return theme.selection.opacity(0.72) }
+            return theme.surfaceRaised
+
         case .text:
-            isPressed ? theme.selection : .clear
+            if isPressed { return theme.selection }
+            if isHovering { return theme.selection.opacity(0.72) }
+            return .clear
         }
     }
 
@@ -103,7 +140,7 @@ public struct PaywallButtonStyle: ButtonStyle {
         case .primary, .text:
             .clear
         case .secondary:
-            theme.border
+            isHovering ? theme.accent.opacity(0.65) : theme.border
         }
     }
 }
