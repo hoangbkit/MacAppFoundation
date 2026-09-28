@@ -84,7 +84,7 @@ public struct ThemePickerView: View {
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .safeAreaInset(edge: .bottom, spacing: 12) {
                 if themeStore.isPreviewActive {
                     previewStatus(hasPro: hasPro)
                         .frame(maxWidth: .infinity)
