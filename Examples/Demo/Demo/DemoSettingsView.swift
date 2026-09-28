@@ -90,26 +90,25 @@ private struct DemoThemeSettingsPane: View {
     @Environment(\.macAppTheme) private var theme
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Appearance")
-                    .font(.headline)
-                    .foregroundStyle(theme.textPrimary)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Appearance")
+                .font(.headline)
+                .foregroundStyle(theme.textPrimary)
 
-                Text("Choose the color theme used throughout the demo.")
-                    .font(.subheadline)
-                    .foregroundStyle(theme.textSecondary)
+            Text("Choose the color theme used throughout the demo.")
+                .font(.subheadline)
+                .foregroundStyle(theme.textSecondary)
 
-                ThemePickerView(
-                    themeStore: themeStore,
-                    purchaseManager: purchaseManager,
-                    variant: compact ? .compact : .standard,
-                    onUpgrade: onUpgrade
-                )
-            }
-            .padding(22)
-            .frame(maxWidth: 760, alignment: .leading)
+            ThemePickerView(
+                themeStore: themeStore,
+                purchaseManager: purchaseManager,
+                variant: compact ? .compact : .standard,
+                onUpgrade: onUpgrade
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .padding(22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.canvas)
     }
 }
