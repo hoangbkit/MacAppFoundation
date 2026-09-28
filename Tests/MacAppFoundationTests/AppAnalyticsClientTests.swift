@@ -87,6 +87,15 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
     #expect(configuration.uploadInterval == 5 * 60)
 }
 
+@Test func analyticsDetectsTruthyCIEnvironmentValues() {
+    #expect(AppAnalyticsClient.isCIEnvironment(["CI": "true"]))
+    #expect(AppAnalyticsClient.isCIEnvironment(["CI": "TRUE"]))
+    #expect(AppAnalyticsClient.isCIEnvironment(["CI": "  true  "]))
+    #expect(AppAnalyticsClient.isCIEnvironment(["CI": "1"]))
+    #expect(!AppAnalyticsClient.isCIEnvironment([:]))
+    #expect(!AppAnalyticsClient.isCIEnvironment(["CI": "false"]))
+}
+
 @Test func analyticsDiscardsTrackingAndUploadsOnCI() async throws {
     let transport = MockAnalyticsTransport()
     let store = MemoryAnalyticsStateStore()
