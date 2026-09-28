@@ -77,6 +77,67 @@ struct MacAppApplicationAppearanceTests {
         #expect(scheme == .light)
     }
 
+    @Test("Ending a dark Pro preview restores System light backing")
+    func endingPreviewRestoresSystemBacking() throws {
+        let suiteName = "MacAppApplicationAppearanceTests.preview.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let configuration = MacAppThemeConfiguration(
+            themes: [
+                .system,
+                MacAppThemeCatalog.githubDarkDimmed,
+                MacAppThemeCatalog.porcelain,
+                MacAppThemeCatalog.midnight,
+            ],
+            defaultThemeID: .system,
+            storageKey: "theme",
+            proThemeIDs: [.midnight],
+            systemLightThemeID: .porcelain,
+            systemDarkThemeID: .githubDarkDimmed
+        )
+        let store = MacAppThemeStore(
+            configuration: configuration,
+            defaults: defaults
+        )
+
+        let result = store.choose(.midnight, hasPro: false)
+        if case .previewStarted(let id, _) = result {
+            #expect(id == .midnight)
+        } else {
+            Issue.record("Expected Midnight preview to start")
+        }
+        #expect(store.effectiveThemeID(hasPro: false) == .midnight)
+
+        store.endPreview()
+        #expect(store.effectiveThemeID(hasPro: false) == .system)
+
+        let light = try #require(NSAppearance(named: .aqua))
+        var events: [String] = []
+        let systemScheme = MacAppApplicationAppearance
+            .synchronizeAndResolveSystemColorScheme(
+                effectiveThemeID: .system,
+                theme: configuration.theme(for: .system)!,
+                currentAppearanceName: .darkAqua,
+                applyAppearance: { appearanceName in
+                    events.append(appearanceName == nil ? "apply:nil" : "apply:override")
+                },
+                effectiveAppearance: {
+                    events.append("read-effective")
+                    return light
+                }
+            )
+
+        #expect(events == ["apply:nil", "read-effective"])
+        #expect(systemScheme == .light)
+        #expect(
+            store.currentTheme(
+                hasPro: false,
+                systemColorScheme: systemScheme
+            ).id == .porcelain
+        )
+    }
+
     @Test("AppKit appearances resolve to the matching SwiftUI color scheme")
     func appKitAppearanceResolvesColorScheme() throws {
         let light = try #require(NSAppearance(named: .aqua))
