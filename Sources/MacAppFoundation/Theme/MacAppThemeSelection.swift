@@ -4,6 +4,8 @@ public extension MacAppThemeConfiguration {
         defaultThemeID: MacAppThemeID = .system,
         storageKey: String = "MacAppFoundation.theme",
         proThemeIDs: Set<MacAppThemeID> = [],
+        systemLightThemeID: MacAppThemeID? = nil,
+        systemDarkThemeID: MacAppThemeID? = nil,
         previewBehavior: MacAppThemePreviewBehavior = .standard
     ) -> MacAppThemeConfiguration {
         MacAppThemeConfiguration(
@@ -11,6 +13,8 @@ public extension MacAppThemeConfiguration {
             defaultThemeID: defaultThemeID,
             storageKey: storageKey,
             proThemeIDs: proThemeIDs,
+            systemLightThemeID: systemLightThemeID,
+            systemDarkThemeID: systemDarkThemeID,
             previewBehavior: previewBehavior
         )
     }
@@ -21,6 +25,8 @@ public extension MacAppThemeConfiguration {
         defaultThemeID: MacAppThemeID? = nil,
         storageKey: String = "MacAppFoundation.theme",
         proThemeIDs: Set<MacAppThemeID> = [],
+        systemLightThemeID: MacAppThemeID? = nil,
+        systemDarkThemeID: MacAppThemeID? = nil,
         previewBehavior: MacAppThemePreviewBehavior = .standard
     ) -> MacAppThemeConfiguration {
         let themes = ids.compactMap(MacAppThemeCatalog.theme(for:))
@@ -33,6 +39,8 @@ public extension MacAppThemeConfiguration {
             defaultThemeID: fallback,
             storageKey: storageKey,
             proThemeIDs: proThemeIDs.intersection(availableIDs),
+            systemLightThemeID: systemLightThemeID,
+            systemDarkThemeID: systemDarkThemeID,
             previewBehavior: previewBehavior
         )
     }
