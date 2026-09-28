@@ -18,7 +18,7 @@ RootView()
     .macAppTheme(themeStore)
 ```
 
-MAF visual components read `@Environment(\.macAppTheme)` and do not require ad-hoc theme parameters. The modifier also applies the active accent tint and preferred light/dark color scheme.
+MAF visual components read `@Environment(\.macAppTheme)` and do not require ad-hoc theme parameters. Store-backed theme modifiers also synchronize the app-wide AppKit appearance so native controls, windows, sheets, popovers, and SwiftUI content agree on Light, Dark, or System.
 
 ## Free and Pro themes
 
@@ -124,7 +124,9 @@ The palette includes canvas, raised surfaces, borders, separators, selection, co
 
 Every `MacAppTheme` may declare `preferredColorScheme` as `.dark`, `.light`, or `nil`. For System backing, `ThemePickerView` specifically requires at least one Free `.light` theme and one Free `.dark` theme; themes with `nil` do not satisfy those two slots.
 
-When the user selects `System`, MAF keeps the scene preference unset so macOS remains authoritative, then swaps the active semantic palette between the configured Free light and Free dark backing themes as the system appearance changes. Named themes continue to force their declared light/dark appearance.
+When the user selects `System`, MAF clears `NSApplication.appearance` so AppKit inherits the current macOS appearance, then resolves the active semantic palette from `NSApplication.effectiveAppearance` using the configured Free light and Free dark backing themes. Named themes set the matching app-wide Aqua or Dark Aqua appearance before their palette is applied. This ordering prevents a previously forced theme or temporary preview from feeding its old appearance back into System resolution.
+
+The fixed-theme overload `.macAppTheme(_ theme: MacAppTheme)` remains presentation-scoped and continues to use SwiftUI's preferred color scheme. Use that overload for isolated previews and embedded surfaces; shared store-backed theming is intentionally app-wide.
 
 Apps with multiple Free light or dark themes may explicitly choose the System pair:
 
@@ -177,7 +179,7 @@ Window("Pro", id: "pro") {
 }
 ```
 
-Because every root observes the same store, permanent selection and temporary Pro previews update all open themed scenes immediately. For configurations with Pro themes, use the `purchaseManager:` overload at each scene root so entitlement changes and preview promotion stay synchronized.
+Because every root observes the same store, permanent selection and temporary Pro previews update all open themed scenes immediately. The shared-store APIs intentionally own one application-wide Light/Dark/System appearance through AppKit, so they are not intended for independent per-window appearance choices. For configurations with Pro themes, use the `purchaseManager:` overload at each scene root so entitlement changes and preview promotion stay synchronized.
 
 ## Migrating BYOKchat or Onlink theme code
 

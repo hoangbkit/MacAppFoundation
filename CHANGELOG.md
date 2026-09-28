@@ -24,6 +24,7 @@ All notable changes to MacAppFoundation will be documented in this file.
 
 ### Fixed
 
+- Restore System themes deterministically after Light/Dark theme changes or Pro previews by synchronizing app-wide AppKit appearance before resolving the System backing palette.
 - Prevent a verified Free Apple Account from falling back to a previously paid account's cached entitlement during an offline relaunch.
 - Preserve a previously verified directly purchased Lifetime entitlement when `Transaction.latest(for:)` unexpectedly returns no transaction; only explicit verified revocation/refund invalidates the cache.
 
