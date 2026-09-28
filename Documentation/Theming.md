@@ -122,7 +122,7 @@ The palette includes canvas, raised surfaces, borders, separators, selection, co
 
 ## Preferred appearance
 
-Every named `MacAppTheme` may declare `preferredColorScheme` as `.dark` or `.light`. `ThemePickerView` requires at least one Free theme for each appearance.
+Every `MacAppTheme` may declare `preferredColorScheme` as `.dark`, `.light`, or `nil`. For System backing, `ThemePickerView` specifically requires at least one Free `.light` theme and one Free `.dark` theme; themes with `nil` do not satisfy those two slots.
 
 When the user selects `System`, MAF keeps the scene preference unset so macOS remains authoritative, then swaps the active semantic palette between the configured Free light and Free dark backing themes as the system appearance changes. Named themes continue to force their declared light/dark appearance.
 
