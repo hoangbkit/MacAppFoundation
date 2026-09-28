@@ -1,4 +1,5 @@
 #if os(macOS)
+import Foundation
 import StoreKit
 import SwiftUI
 
