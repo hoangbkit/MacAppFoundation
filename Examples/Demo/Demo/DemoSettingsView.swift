@@ -24,18 +24,18 @@ struct DemoSettingsView: View {
                 }
                 .tag(MacAppSettingsPaneID.demoGeneral)
 
-            MacAppThemeSettingsPane(
-                themeStore: themeStore,
+            DemoThemeSettingsPane(
                 purchaseManager: purchaseManager,
-                variant: demoState.compactCards ? .compact : .standard,
+                themeStore: themeStore,
+                compact: demoState.compactCards,
                 onUpgrade: {
                     openWindow(id: DemoWindowID.paywall)
                 }
             )
-                .tabItem {
-                    Label("Theme", systemImage: "paintpalette")
-                }
-                .tag(MacAppSettingsPaneID.theme)
+            .tabItem {
+                Label("Theme", systemImage: "paintpalette")
+            }
+            .tag(MacAppSettingsPaneID.theme)
 
             MacAppPlanSettingsPane(
                 purchaseManager: purchaseManager,
@@ -81,6 +81,28 @@ struct DemoSettingsView: View {
 }
 
 @MainActor
+private struct DemoThemeSettingsPane: View {
+    let purchaseManager: PurchaseManager
+    let themeStore: MacAppThemeStore
+    let compact: Bool
+    let onUpgrade: () -> Void
+
+    @Environment(\.macAppTheme) private var theme
+
+    var body: some View {
+        ThemePickerView(
+            themeStore: themeStore,
+            purchaseManager: purchaseManager,
+            variant: compact ? .compact : .standard,
+            onUpgrade: onUpgrade
+        )
+        .padding(22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(theme.canvas)
+    }
+}
+
+@MainActor
 private struct DemoGeneralSettingsPane: View {
     @Bindable var demoState: DemoState
     @Environment(\.macAppTheme) private var theme
@@ -111,7 +133,7 @@ private struct DemoGeneralSettingsPane: View {
                 GroupBox("Foundation ownership") {
                     VStack(alignment: .leading, spacing: 10) {
                         LabeledContent("Settings presentation", value: "Native SwiftUI Settings + TabView")
-                        LabeledContent("Pane content", value: "Host app + MAF built-ins")
+                        LabeledContent("Pane content", value: "Host app + reusable MAF views")
                         LabeledContent("Theme selection", value: "Shared MacAppThemeStore")
                         LabeledContent("Window routing", value: "openSettings()")
                     }
@@ -157,7 +179,8 @@ private struct DemoAboutSettingsPane: View {
                         architectureRow("One shared PurchaseManager")
                         architectureRow("One shared MacAppThemeStore across scenes")
                         architectureRow("Native Settings scene with a SwiftUI TabView")
-                        architectureRow("MAF-owned Theme and Plan tabs")
+                        architectureRow("App-owned Theme tab embedding ThemePickerView")
+                        architectureRow("MAF-owned Plan tab")
                         architectureRow("App-owned General and About tabs")
                         architectureRow("Separate debug Developer Tools window")
                     }

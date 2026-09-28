@@ -23,7 +23,7 @@ public struct MacAppThemePicker: View {
         [
             GridItem(
                 .adaptive(minimum: compact ? 138 : 170),
-                spacing: compact ? 8 : 12
+                spacing: compact ? 12 : 16
             )
         ]
     }
@@ -53,7 +53,7 @@ public struct MacAppThemePicker: View {
     }
 
     public var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: compact ? 8 : 12) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: compact ? 12 : 16) {
             ForEach(themes) { theme in
                 let isPreviewing = previewingThemeID == theme.id
                 let isPreviewAvailable = previewableThemeIDs.contains(theme.id)

@@ -43,6 +43,8 @@ enum DemoTheme {
             .blossom,
             .softSage,
             violetID
-        ]
+        ],
+        systemLightThemeID: .githubLight,
+        systemDarkThemeID: .graphite
     )
 }

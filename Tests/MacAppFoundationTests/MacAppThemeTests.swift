@@ -63,6 +63,93 @@ struct MacAppThemeTests {
         #expect(configuration.defaultThemeID == customID)
     }
 
+    @Test("System derives Free light and dark backing themes")
+    func systemDerivesFreeAppearanceThemes() {
+        let configuration = MacAppThemeConfiguration(
+            themes: [
+                .system,
+                MacAppThemeCatalog.midnight,
+                MacAppThemeCatalog.porcelain,
+            ],
+            defaultThemeID: .system,
+            storageKey: "theme-tests.system"
+        )
+
+        #expect(configuration.hasRequiredFreeAppearanceThemes)
+        #expect(configuration.systemLightThemeID == .porcelain)
+        #expect(configuration.systemDarkThemeID == .midnight)
+    }
+
+    @Test("System follows the supplied macOS appearance")
+    func systemFollowsAppearance() {
+        let suiteName = "MacAppThemeTests.systemAppearance.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let configuration = MacAppThemeConfiguration(
+            themes: [
+                .system,
+                MacAppThemeCatalog.midnight,
+                MacAppThemeCatalog.porcelain,
+            ],
+            defaultThemeID: .system,
+            storageKey: "theme"
+        )
+        let store = MacAppThemeStore(configuration: configuration, defaults: defaults)
+
+        #expect(
+            store.currentTheme(
+                hasPro: false,
+                systemColorScheme: .light
+            ).id == .porcelain
+        )
+        #expect(
+            store.currentTheme(
+                hasPro: false,
+                systemColorScheme: .dark
+            ).id == .midnight
+        )
+        #expect(store.selectedThemeID == .system)
+    }
+
+    @Test("Explicit System backing themes override derived order")
+    func explicitSystemBackingThemesOverrideDerivedOrder() {
+        let configuration = MacAppThemeConfiguration(
+            themes: [
+                .system,
+                MacAppThemeCatalog.midnight,
+                MacAppThemeCatalog.ocean,
+                MacAppThemeCatalog.porcelain,
+                MacAppThemeCatalog.sunrise,
+            ],
+            defaultThemeID: .system,
+            storageKey: "theme-tests.system.explicit",
+            systemLightThemeID: .sunrise,
+            systemDarkThemeID: .ocean
+        )
+
+        #expect(configuration.systemLightThemeID == .sunrise)
+        #expect(configuration.systemDarkThemeID == .ocean)
+    }
+
+    @Test("Pro themes do not satisfy System Free appearance requirements")
+    func proThemesDoNotSatisfySystemRequirements() {
+        let configuration = MacAppThemeConfiguration(
+            themes: [
+                .system,
+                MacAppThemeCatalog.midnight,
+                MacAppThemeCatalog.porcelain,
+            ],
+            defaultThemeID: .system,
+            storageKey: "theme-tests.system.pro",
+            proThemeIDs: [.midnight]
+        )
+
+        #expect(!configuration.hasRequiredFreeAppearanceThemes)
+        #expect(configuration.systemLightThemeID == .porcelain)
+        #expect(configuration.systemDarkThemeID == nil)
+    }
+
     @Test("Store restores and persists a valid selection")
     func storeRestoresAndPersistsSelection() {
         let suiteName = "MacAppThemeTests.persistence.\(UUID().uuidString)"

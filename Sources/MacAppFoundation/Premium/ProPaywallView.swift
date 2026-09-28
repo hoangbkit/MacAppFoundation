@@ -1,4 +1,5 @@
 #if os(macOS)
+import Foundation
 import StoreKit
 import SwiftUI
 
@@ -50,17 +51,14 @@ public struct ProPaywallView: View {
             let footerHeight: CGFloat = 58
 
             VStack(spacing: 0) {
-                ScrollView(.vertical, showsIndicators: true) {
-                    HStack(alignment: .top, spacing: columnSpacing) {
-                        leadingPane
-                        trailingPane
-                    }
-                    .padding(.horizontal, outerPadding)
-                    .padding(.top, topPadding)
-                    .padding(.bottom, outerPadding)
-                    .frame(maxWidth: .infinity, alignment: .top)
+                HStack(alignment: .top, spacing: columnSpacing) {
+                    leadingPane
+                    trailingPane
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, outerPadding)
+                .padding(.top, topPadding)
+                .padding(.bottom, outerPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                 bottomBar
                     .padding(.horizontal, max(16, outerPadding - 6))
@@ -136,58 +134,64 @@ public struct ProPaywallView: View {
             }
 
             if !resolvedFeatures.isEmpty {
-                VStack(alignment: .leading, spacing: 18) {
-                    ForEach(resolvedFeatures) { feature in
-                        HStack(alignment: .top, spacing: 14) {
-                            featureIcon(feature.systemImage)
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        ForEach(resolvedFeatures) { feature in
+                            HStack(alignment: .top, spacing: 14) {
+                                featureIcon(feature.systemImage)
 
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(feature.title)
-                                    .font(.headline)
-                                    .foregroundStyle(theme.textPrimary)
-                                Text(feature.message)
-                                    .font(.body)
-                                    .foregroundStyle(theme.textSecondary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(feature.title)
+                                        .font(.headline)
+                                        .foregroundStyle(theme.textPrimary)
+                                    Text(feature.message)
+                                        .font(.body)
+                                        .foregroundStyle(theme.textSecondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
         .frame(
             minWidth: 280,
             idealWidth: 420,
             maxWidth: .infinity,
+            maxHeight: .infinity,
             alignment: .topLeading
         )
     }
 
     private var trailingPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            productContent
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 12) {
+                productContent
 
-            Spacer(minLength: 10)
+                purchaseButton
 
-            purchaseButton
+                if let disclosure = selectedProduct?.introductoryOfferDisclosure {
+                    Text(disclosure)
+                        .font(.caption2)
+                        .foregroundStyle(theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                }
 
-            if let disclosure = selectedProduct?.introductoryOfferDisclosure {
-                Text(disclosure)
-                    .font(.caption2)
-                    .foregroundStyle(theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity)
+                legalFooter
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
-
-            legalFooter
-                .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(
             minWidth: 300,
             idealWidth: 340,
             maxWidth: 390,
+            maxHeight: .infinity,
             alignment: .topLeading
         )
     }
@@ -426,13 +430,17 @@ public struct ProPaywallView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 12) {
-                Link("Terms of Use", destination: configuration.termsURL)
+                PaywallLegalLink(
+                    title: "Terms of Use",
+                    destination: configuration.termsURL
+                )
                 Text("•")
                     .foregroundStyle(theme.textMuted)
-                Link("Privacy Policy", destination: configuration.privacyURL)
+                PaywallLegalLink(
+                    title: "Privacy Policy",
+                    destination: configuration.privacyURL
+                )
             }
-            .font(.caption.weight(.semibold))
-            .tint(theme.accent)
         }
     }
 
@@ -619,6 +627,41 @@ public struct ProPaywallView: View {
             alertMessage = description
         } else {
             alertMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct PaywallLegalLink: View {
+    let title: String
+    let destination: URL
+
+    @Environment(\.macAppTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+
+    var body: some View {
+        Link(destination: destination) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isHovering ? theme.textPrimary : theme.accent)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(
+                    isHovering ? theme.selection.opacity(0.72) : .clear,
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+                .contentShape(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+        }
+        .onHover { hovering in
+            if reduceMotion {
+                isHovering = hovering
+            } else {
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isHovering = hovering
+                }
+            }
         }
     }
 }
