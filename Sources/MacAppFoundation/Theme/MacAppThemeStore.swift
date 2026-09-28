@@ -96,6 +96,21 @@ public final class MacAppThemeStore {
             ?? configuration.defaultTheme
     }
 
+    /// Resolves the visual theme while StoreKit entitlement state is still settling.
+    ///
+    /// During `.checking`, keep the persisted selection (or an active preview) visible
+    /// instead of temporarily treating the user as Free. Once entitlement resolution
+    /// completes, normal Free/Pro gating applies.
+    func currentTheme(
+        entitlementState: EntitlementState,
+        hasPro: Bool
+    ) -> MacAppTheme {
+        if case .checking = entitlementState {
+            return previewTheme ?? currentTheme
+        }
+        return currentTheme(hasPro: hasPro)
+    }
+
     /// Theme that becomes effective when a temporary preview ends.
     public func themeAfterPreview(hasPro: Bool) -> MacAppTheme {
         configuration.theme(for: themeAfterPreviewID(hasPro: hasPro))
@@ -365,7 +380,10 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let hasPro = purchaseManager.hasPro
-        let theme = store.currentTheme(hasPro: hasPro)
+        let theme = store.currentTheme(
+            entitlementState: purchaseManager.entitlementState,
+            hasPro: hasPro
+        )
 
         content
             .environment(\.macAppTheme, theme)
