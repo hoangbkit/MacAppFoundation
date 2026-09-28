@@ -54,6 +54,29 @@ struct MacAppApplicationAppearanceTests {
         )
     }
 
+    @Test("System clears a previous override before resolving effective appearance")
+    func systemClearsOverrideBeforeResolution() throws {
+        let light = try #require(NSAppearance(named: .aqua))
+        var events: [String] = []
+
+        let scheme = MacAppApplicationAppearance
+            .synchronizeAndResolveSystemColorScheme(
+                effectiveThemeID: .system,
+                theme: MacAppThemeCatalog.midnight,
+                currentAppearanceName: .darkAqua,
+                applyAppearance: { appearanceName in
+                    events.append(appearanceName == nil ? "apply:nil" : "apply:override")
+                },
+                effectiveAppearance: {
+                    events.append("read-effective")
+                    return light
+                }
+            )
+
+        #expect(events == ["apply:nil", "read-effective"])
+        #expect(scheme == .light)
+    }
+
     @Test("AppKit appearances resolve to the matching SwiftUI color scheme")
     func appKitAppearanceResolvesColorScheme() throws {
         let light = try #require(NSAppearance(named: .aqua))
