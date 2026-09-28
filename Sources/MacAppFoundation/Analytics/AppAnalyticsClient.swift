@@ -1103,7 +1103,7 @@ public actor AppAnalyticsClient {
         )
     }
 
-    private static func isCIEnvironment(
+    static func isCIEnvironment(
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
         guard let value = environment["CI"]?
