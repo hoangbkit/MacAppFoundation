@@ -96,6 +96,26 @@ public final class MacAppThemeStore {
             ?? configuration.defaultTheme
     }
 
+    func effectiveThemeID(
+        entitlementState: EntitlementState,
+        hasPro: Bool
+    ) -> MacAppThemeID {
+        if case .checking = entitlementState {
+            return activePreviewThemeID ?? selectedThemeID
+        }
+        return effectiveThemeID(hasPro: hasPro)
+    }
+
+    func currentTheme(
+        hasPro: Bool,
+        systemColorScheme: ColorScheme
+    ) -> MacAppTheme {
+        resolvedTheme(
+            for: effectiveThemeID(hasPro: hasPro),
+            systemColorScheme: systemColorScheme
+        )
+    }
+
     /// Resolves the visual theme while StoreKit entitlement state is still settling.
     ///
     /// During `.checking`, keep the persisted selection (or an active preview) visible
@@ -109,6 +129,20 @@ public final class MacAppThemeStore {
             return previewTheme ?? currentTheme
         }
         return currentTheme(hasPro: hasPro)
+    }
+
+    func currentTheme(
+        entitlementState: EntitlementState,
+        hasPro: Bool,
+        systemColorScheme: ColorScheme
+    ) -> MacAppTheme {
+        resolvedTheme(
+            for: effectiveThemeID(
+                entitlementState: entitlementState,
+                hasPro: hasPro
+            ),
+            systemColorScheme: systemColorScheme
+        )
     }
 
     /// Theme that becomes effective when a temporary preview ends.
@@ -233,6 +267,31 @@ public final class MacAppThemeStore {
     public func reset() {
         clearPreviewState()
         selectedThemeID = configuration.defaultThemeID
+    }
+
+    private func resolvedTheme(
+        for id: MacAppThemeID,
+        systemColorScheme: ColorScheme
+    ) -> MacAppTheme {
+        guard id == .system else {
+            return configuration.theme(for: id) ?? configuration.defaultTheme
+        }
+
+        switch systemColorScheme {
+        case .dark:
+            return configuration.systemDarkTheme
+                ?? configuration.theme(for: .system)
+                ?? configuration.defaultTheme
+        case .light:
+            return configuration.systemLightTheme
+                ?? configuration.theme(for: .system)
+                ?? configuration.defaultTheme
+        @unknown default:
+            return configuration.systemLightTheme
+                ?? configuration.systemDarkTheme
+                ?? configuration.theme(for: .system)
+                ?? configuration.defaultTheme
+        }
     }
 
     private var activePreviewThemeID: MacAppThemeID? {
@@ -361,13 +420,22 @@ public extension EnvironmentValues {
 private struct MacAppThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
 
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
-        let theme = store.currentTheme(hasPro: false)
+        let effectiveThemeID = store.effectiveThemeID(hasPro: false)
+        let theme = store.currentTheme(
+            hasPro: false,
+            systemColorScheme: colorScheme
+        )
+        let preferredColorScheme = effectiveThemeID == .system
+            ? nil
+            : theme.preferredColorScheme
 
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
-            .preferredColorScheme(theme.preferredColorScheme)
+            .preferredColorScheme(preferredColorScheme)
             .task {
                 store.refreshPreviewState()
             }
@@ -378,17 +446,27 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
     let purchaseManager: PurchaseManager
 
+    @Environment(\.colorScheme) private var colorScheme
+
     func body(content: Content) -> some View {
         let hasPro = purchaseManager.hasPro
-        let theme = store.currentTheme(
+        let effectiveThemeID = store.effectiveThemeID(
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro
         )
+        let theme = store.currentTheme(
+            entitlementState: purchaseManager.entitlementState,
+            hasPro: hasPro,
+            systemColorScheme: colorScheme
+        )
+        let preferredColorScheme = effectiveThemeID == .system
+            ? nil
+            : theme.preferredColorScheme
 
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
-            .preferredColorScheme(theme.preferredColorScheme)
+            .preferredColorScheme(preferredColorScheme)
             .task {
                 store.synchronizeProAccess(hasPro)
                 store.refreshPreviewState()
