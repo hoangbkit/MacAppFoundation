@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import SwiftUI
@@ -405,6 +406,59 @@ public final class MacAppThemeStore {
     }
 }
 
+@MainActor
+enum MacAppApplicationAppearance {
+    static func appearanceName(
+        for effectiveThemeID: MacAppThemeID,
+        theme: MacAppTheme
+    ) -> NSAppearance.Name? {
+        guard effectiveThemeID != .system else { return nil }
+
+        switch theme.preferredColorScheme {
+        case .dark:
+            return .darkAqua
+        case .light:
+            return .aqua
+        case nil:
+            return nil
+        @unknown default:
+            return nil
+        }
+    }
+
+    static func colorScheme(for appearance: NSAppearance) -> ColorScheme {
+        switch appearance.bestMatch(from: [.darkAqua, .aqua]) {
+        case .darkAqua:
+            return .dark
+        default:
+            return .light
+        }
+    }
+
+    /// Store-backed MAF themes are app-wide. Apply the AppKit appearance first,
+    /// then resolve System from AppKit's resulting effective appearance.
+    ///
+    /// Ordering matters when returning from a forced Light/Dark theme or preview:
+    /// clearing `NSApplication.appearance` before reading `effectiveAppearance`
+    /// prevents the previous override from feeding back into System resolution.
+    static func synchronizeAndResolveSystemColorScheme(
+        effectiveThemeID: MacAppThemeID,
+        theme: MacAppTheme
+    ) -> ColorScheme {
+        let application = NSApplication.shared
+        let desiredAppearanceName = appearanceName(
+            for: effectiveThemeID,
+            theme: theme
+        )
+
+        if application.appearance?.name != desiredAppearanceName {
+            application.appearance = desiredAppearanceName.flatMap(NSAppearance.init(named:))
+        }
+
+        return colorScheme(for: application.effectiveAppearance)
+    }
+}
+
 private struct MacAppThemeEnvironmentKey: EnvironmentKey {
     static let defaultValue: MacAppTheme = .system
 }
@@ -420,22 +474,29 @@ public extension EnvironmentValues {
 private struct MacAppThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
 
-    @Environment(\.colorScheme) private var colorScheme
+    /// Keep a SwiftUI appearance dependency so System re-renders when macOS
+    /// changes appearance externally. Resolution itself stays AppKit-authoritative.
+    @Environment(\.colorScheme) private var observedColorScheme
 
     func body(content: Content) -> some View {
+        _ = observedColorScheme
+
         let effectiveThemeID = store.effectiveThemeID(hasPro: false)
+        let effectiveTheme = store.configuration.theme(for: effectiveThemeID)
+            ?? store.configuration.defaultTheme
+        let systemColorScheme = MacAppApplicationAppearance
+            .synchronizeAndResolveSystemColorScheme(
+                effectiveThemeID: effectiveThemeID,
+                theme: effectiveTheme
+            )
         let theme = store.currentTheme(
             hasPro: false,
-            systemColorScheme: colorScheme
+            systemColorScheme: systemColorScheme
         )
-        let preferredColorScheme = effectiveThemeID == .system
-            ? nil
-            : theme.preferredColorScheme
 
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
-            .preferredColorScheme(preferredColorScheme)
             .task {
                 store.refreshPreviewState()
             }
@@ -446,27 +507,34 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
     @Bindable var store: MacAppThemeStore
     let purchaseManager: PurchaseManager
 
-    @Environment(\.colorScheme) private var colorScheme
+    /// Keep a SwiftUI appearance dependency so System re-renders when macOS
+    /// changes appearance externally. Resolution itself stays AppKit-authoritative.
+    @Environment(\.colorScheme) private var observedColorScheme
 
     func body(content: Content) -> some View {
+        _ = observedColorScheme
+
         let hasPro = purchaseManager.hasPro
         let effectiveThemeID = store.effectiveThemeID(
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro
         )
+        let effectiveTheme = store.configuration.theme(for: effectiveThemeID)
+            ?? store.configuration.defaultTheme
+        let systemColorScheme = MacAppApplicationAppearance
+            .synchronizeAndResolveSystemColorScheme(
+                effectiveThemeID: effectiveThemeID,
+                theme: effectiveTheme
+            )
         let theme = store.currentTheme(
             entitlementState: purchaseManager.entitlementState,
             hasPro: hasPro,
-            systemColorScheme: colorScheme
+            systemColorScheme: systemColorScheme
         )
-        let preferredColorScheme = effectiveThemeID == .system
-            ? nil
-            : theme.preferredColorScheme
 
         content
             .environment(\.macAppTheme, theme)
             .tint(theme.accent)
-            .preferredColorScheme(preferredColorScheme)
             .task {
                 store.synchronizeProAccess(hasPro)
                 store.refreshPreviewState()
@@ -480,8 +548,9 @@ private struct MacAppEntitledThemeModifier: ViewModifier {
 public extension View {
     /// Injects a shared theme store for this view hierarchy.
     ///
-    /// The modifier applies the active accent tint and preferred light/dark color scheme.
-    /// Use the purchase-manager overload when the configuration contains Pro themes.
+    /// The modifier applies the active accent tint and synchronizes the app-wide
+    /// AppKit appearance. Use the purchase-manager overload when the configuration
+    /// contains Pro themes.
     func macAppTheme(_ store: MacAppThemeStore) -> some View {
         modifier(MacAppThemeModifier(store: store))
     }
