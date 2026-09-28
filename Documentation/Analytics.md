@@ -163,14 +163,15 @@ If the server returns HTTP `429 rate_limited`, automatic uploads persist and res
 
 ## CI behavior
 
-When the process environment contains `CI=true` (case-insensitive) or `CI=1`, MAF keeps analytics inert:
+When the process environment contains `CI=true` (case-insensitive) or `CI=1`, MAF disables analytics completely:
 
-- event and error tracking perform validation but do not persist counters
-- application session lifecycle calls do not persist session state
+- event and error tracking immediately return
+- application session lifecycle calls immediately return
+- no local analytics state is read or written
 - `flush()` returns without making a network request
 - no analytics installation ID is read from or written to Keychain
 
-This keeps GitHub Actions, Xcode Cloud, and other CI runs from polluting production analytics while preserving normal API validation behavior.
+This keeps GitHub Actions, Xcode Cloud, and other CI runs completely outside production analytics.
 
 ## Installation identity
 
