@@ -58,8 +58,9 @@ public struct ThemePickerView: View {
                 ? Set<MacAppThemeID>()
                 : proThemeIDs.subtracting(previewableThemeIDs)
 
-            MacAppThemePicker(
-                themes: themeStore.configuration.themes,
+            ScrollView {
+                MacAppThemePicker(
+                    themes: themeStore.configuration.themes,
                 selectedThemeID: themeStore.effectiveThemeID(hasPro: hasPro),
                 previewingThemeID: themeStore.isPreviewActive
                     ? themeStore.previewThemeID
@@ -77,10 +78,12 @@ public struct ThemePickerView: View {
                         onUpgrade?()
                     }
                 },
-                onLockedSelect: { _ in
-                    onUpgrade?()
-                }
-            )
+                    onLockedSelect: { _ in
+                        onUpgrade?()
+                    }
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
