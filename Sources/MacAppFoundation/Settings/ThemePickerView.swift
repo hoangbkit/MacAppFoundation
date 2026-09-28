@@ -1,0 +1,124 @@
+import SwiftUI
+
+/// Reusable theme picker that can be embedded anywhere in an app.
+///
+/// `ThemePickerView` owns theme-selection behavior, Pro locking, and temporary
+/// Pro-theme previews, but deliberately owns no container styling. The host app
+/// decides the surrounding background, padding, section/card treatment, and
+/// whether the picker fills a whole Settings destination or only part of one.
+@MainActor
+public struct ThemePickerView: View {
+    public enum Variant: Sendable, Equatable {
+        case standard
+        case compact
+    }
+
+    @Bindable private var themeStore: MacAppThemeStore
+    private let purchaseManager: PurchaseManager?
+    private let variant: Variant
+    private let onUpgrade: (() -> Void)?
+
+    @Environment(\.macAppTheme) private var theme
+
+    /// Creates a reusable theme picker.
+    ///
+    /// Free-only configurations need no commerce dependencies. When Pro themes
+    /// are configured, both `purchaseManager` and `onUpgrade` must be supplied
+    /// so the picker can distinguish previewable/locked themes and route upgrades.
+    public init(
+        themeStore: MacAppThemeStore,
+        purchaseManager: PurchaseManager? = nil,
+        variant: Variant = .standard,
+        onUpgrade: (() -> Void)? = nil
+    ) {
+        self.themeStore = themeStore
+        self.purchaseManager = purchaseManager
+        self.variant = variant
+        self.onUpgrade = onUpgrade
+    }
+
+    public var body: some View {
+        Group {
+            if let configurationErrorMessage {
+                configurationErrorView(configurationErrorMessage)
+            } else {
+                picker
+            }
+        }
+    }
+
+    private var picker: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let hasPro = purchaseManager?.hasPro ?? false
+            let proThemeIDs = themeStore.configuration.proThemeIDs
+            let previewableThemeIDs = hasPro
+                ? Set<MacAppThemeID>()
+                : Set(proThemeIDs.filter { themeStore.canPreview($0, hasPro: false) })
+            let lockedThemeIDs = hasPro
+                ? Set<MacAppThemeID>()
+                : proThemeIDs.subtracting(previewableThemeIDs)
+
+            MacAppThemePicker(
+                themes: themeStore.configuration.themes,
+                selectedThemeID: themeStore.effectiveThemeID(hasPro: hasPro),
+                previewingThemeID: themeStore.isPreviewActive
+                    ? themeStore.previewThemeID
+                    : nil,
+                previewProgress: previewProgress,
+                previewableThemeIDs: previewableThemeIDs,
+                lockedThemeIDs: lockedThemeIDs,
+                compact: variant == .compact,
+                onSelect: { themeID in
+                    themeStore.select(themeID, hasPro: hasPro)
+                },
+                onPreviewSelect: { themeID in
+                    let result = themeStore.choose(themeID, hasPro: hasPro)
+                    if case .requiresPro = result {
+                        onUpgrade?()
+                    }
+                },
+                onLockedSelect: { _ in
+                    onUpgrade?()
+                }
+            )
+        }
+    }
+
+    var previewProgress: Double {
+        guard themeStore.isPreviewActive else { return 0 }
+        let duration = themeStore.configuration.previewBehavior.defaultDuration
+        guard duration > 0 else { return 0 }
+
+        return min(
+            1,
+            max(0, Double(themeStore.previewRemainingSeconds) / duration)
+        )
+    }
+
+    var configurationErrorMessage: String? {
+        guard !themeStore.configuration.proThemeIDs.isEmpty else { return nil }
+        guard purchaseManager != nil, onUpgrade != nil else {
+            return "This theme picker includes Pro themes but is missing PurchaseManager or onUpgrade. Pass both dependencies to enable Pro theme access and upgrades."
+        }
+        return nil
+    }
+
+    private func configurationErrorView(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(theme.warning)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Theme configuration error")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.textPrimary)
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
