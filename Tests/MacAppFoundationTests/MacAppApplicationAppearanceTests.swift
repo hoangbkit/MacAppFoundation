@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import SwiftUI
 import Testing
 @testable import MacAppFoundation
@@ -117,7 +118,7 @@ struct MacAppApplicationAppearanceTests {
         let systemScheme = MacAppApplicationAppearance
             .synchronizeAndResolveSystemColorScheme(
                 effectiveThemeID: .system,
-                theme: configuration.theme(for: .system)!,
+                theme: try #require(configuration.theme(for: .system)),
                 currentAppearanceName: .darkAqua,
                 applyAppearance: { appearanceName in
                     events.append(appearanceName == nil ? "apply:nil" : "apply:override")
