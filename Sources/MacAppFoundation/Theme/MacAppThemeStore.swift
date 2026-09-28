@@ -452,7 +452,9 @@ enum MacAppApplicationAppearance {
         )
 
         if application.appearance?.name != desiredAppearanceName {
-            application.appearance = desiredAppearanceName.flatMap(NSAppearance.init(named:))
+            application.appearance = desiredAppearanceName.flatMap {
+                NSAppearance(named: $0)
+            }
         }
 
         return colorScheme(for: application.effectiveAppearance)
