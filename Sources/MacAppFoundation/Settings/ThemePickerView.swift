@@ -19,6 +19,7 @@ public struct ThemePickerView: View {
     private let onUpgrade: (() -> Void)?
 
     @Environment(\.macAppTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Creates a reusable theme picker.
     ///
@@ -66,7 +67,7 @@ public struct ThemePickerView: View {
 
             ScrollView {
                 MacAppThemePicker(
-                    themes: themeStore.configuration.themes,
+                    themes: pickerThemes,
                     selectedThemeID: selectedThemeID,
                     previewingThemeID: themeStore.isPreviewActive
                         ? themeStore.previewThemeID
@@ -96,6 +97,34 @@ public struct ThemePickerView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
+        }
+    }
+
+    private var pickerThemes: [MacAppTheme] {
+        let configuration = themeStore.configuration
+
+        return configuration.themes.map { candidate in
+            guard candidate.id == .system else { return candidate }
+
+            let backingTheme: MacAppTheme?
+            switch colorScheme {
+            case .dark:
+                backingTheme = configuration.systemDarkTheme
+            case .light:
+                backingTheme = configuration.systemLightTheme
+            @unknown default:
+                backingTheme = configuration.systemLightTheme
+                    ?? configuration.systemDarkTheme
+            }
+
+            guard let backingTheme else { return candidate }
+            return MacAppTheme(
+                id: .system,
+                name: candidate.name,
+                caption: candidate.caption,
+                preferredColorScheme: nil,
+                palette: backingTheme.palette
+            )
         }
     }
 
