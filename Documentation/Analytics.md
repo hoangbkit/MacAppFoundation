@@ -161,6 +161,17 @@ The server stores cumulative snapshots using retry-safe maximum semantics. The c
 
 If the server returns HTTP `429 rate_limited`, automatic uploads persist and respect the server's `Retry-After` window before trying again. Events continue accumulating locally during that backoff. Explicit `flush()` bypasses the opportunistic schedule and surfaces the server error to the caller.
 
+## CI behavior
+
+When the process environment contains `CI=true` (case-insensitive) or `CI=1`, MAF keeps analytics inert:
+
+- event and error tracking perform validation but do not persist counters
+- application session lifecycle calls do not persist session state
+- `flush()` returns without making a network request
+- no analytics installation ID is read from or written to Keychain
+
+This keeps GitHub Actions, Xcode Cloud, and other CI runs from polluting production analytics while preserving normal API validation behavior.
+
 ## Installation identity
 
 The client creates a random installation UUID and stores it in Keychain under `<appID>.installation`. The opaque identifier is sent to `analytics-server` so cumulative snapshots from the same app installation can be associated. It is an installation identifier, not a human identity.
