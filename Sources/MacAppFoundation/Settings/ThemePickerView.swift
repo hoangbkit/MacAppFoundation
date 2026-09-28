@@ -2,10 +2,10 @@ import SwiftUI
 
 /// Reusable theme picker that can be embedded anywhere in an app.
 ///
-/// `ThemePickerView` owns theme-selection behavior, Pro locking, and temporary
-/// Pro-theme previews, but deliberately owns no container styling. The host app
-/// decides the surrounding background, padding, section/card treatment, and
-/// whether the picker fills a whole Settings destination or only part of one.
+/// `ThemePickerView` owns theme-selection behavior, scrolling, Pro locking, and
+/// temporary Pro-theme previews, but deliberately owns no container styling. The
+/// host app decides the surrounding background, padding, section/card treatment,
+/// and whether the picker fills a whole Settings destination or only part of one.
 @MainActor
 public struct ThemePickerView: View {
     public enum Variant: Sendable, Equatable {
@@ -61,28 +61,34 @@ public struct ThemePickerView: View {
             ScrollView {
                 MacAppThemePicker(
                     themes: themeStore.configuration.themes,
-                selectedThemeID: themeStore.effectiveThemeID(hasPro: hasPro),
-                previewingThemeID: themeStore.isPreviewActive
-                    ? themeStore.previewThemeID
-                    : nil,
-                previewProgress: previewProgress,
-                previewableThemeIDs: previewableThemeIDs,
-                lockedThemeIDs: lockedThemeIDs,
-                compact: variant == .compact,
-                onSelect: { themeID in
-                    themeStore.select(themeID, hasPro: hasPro)
-                },
-                onPreviewSelect: { themeID in
-                    let result = themeStore.choose(themeID, hasPro: hasPro)
-                    if case .requiresPro = result {
-                        onUpgrade?()
-                    }
-                },
+                    selectedThemeID: themeStore.effectiveThemeID(hasPro: hasPro),
+                    previewingThemeID: themeStore.isPreviewActive
+                        ? themeStore.previewThemeID
+                        : nil,
+                    previewProgress: previewProgress,
+                    previewableThemeIDs: previewableThemeIDs,
+                    lockedThemeIDs: lockedThemeIDs,
+                    compact: variant == .compact,
+                    onSelect: { themeID in
+                        themeStore.select(themeID, hasPro: hasPro)
+                    },
+                    onPreviewSelect: { themeID in
+                        let result = themeStore.choose(themeID, hasPro: hasPro)
+                        if case .requiresPro = result {
+                            onUpgrade?()
+                        }
+                    },
                     onLockedSelect: { _ in
                         onUpgrade?()
                     }
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if themeStore.isPreviewActive {
+                    previewStatus(hasPro: hasPro)
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -104,6 +110,59 @@ public struct ThemePickerView: View {
             return "This theme picker includes Pro themes but is missing PurchaseManager or onUpgrade. Pass both dependencies to enable Pro theme access and upgrades."
         }
         return nil
+    }
+
+    private func previewStatus(hasPro: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "timer")
+                .font(.headline)
+                .foregroundStyle(theme.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Previewing \(themeStore.previewTheme?.name ?? "Pro theme")")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.textPrimary)
+
+                Text(
+                    "Returns to \(themeStore.themeAfterPreview(hasPro: hasPro).name) in \(countdown)"
+                )
+                .font(.caption)
+                .foregroundStyle(theme.textSecondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if let onUpgrade {
+                Button("Unlock Pro", action: onUpgrade)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+
+            Button("End") {
+                themeStore.endPreview()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(
+            theme.surfaceRaised,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.border, lineWidth: 1)
+        }
+        .shadow(color: theme.shadow, radius: 8, y: 3)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Previewing \(themeStore.previewTheme?.name ?? "Pro theme"). Returns to \(themeStore.themeAfterPreview(hasPro: hasPro).name) in \(countdown)."
+        )
+    }
+
+    private var countdown: String {
+        let seconds = themeStore.previewRemainingSeconds
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private func configurationErrorView(_ message: String) -> some View {
