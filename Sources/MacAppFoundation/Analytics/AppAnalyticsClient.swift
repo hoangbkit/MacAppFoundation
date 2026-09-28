@@ -229,6 +229,7 @@ public actor AppAnalyticsClient {
     private let decoder: JSONDecoder
     private let now: @Sendable () -> Date
     private let clientContext: AppAnalyticsClientContext
+    private let discardsAnalytics: Bool
     private var automaticUploadTask: Task<Void, Never>?
     private var uploadInFlight = false
     private var uploadWaiters: [CheckedContinuation<Void, Never>] = []
@@ -249,6 +250,7 @@ public actor AppAnalyticsClient {
         self.decoder = Self.makeDecoder()
         self.now = Date.init
         self.clientContext = .current()
+        self.discardsAnalytics = Self.isCIEnvironment()
     }
 
     public init(
@@ -264,6 +266,7 @@ public actor AppAnalyticsClient {
         self.decoder = Self.makeDecoder()
         self.now = Date.init
         self.clientContext = .current()
+        self.discardsAnalytics = Self.isCIEnvironment()
     }
 
     init(
@@ -271,7 +274,8 @@ public actor AppAnalyticsClient {
         transport: any AppAnalyticsTransport,
         stateStore: any AppAnalyticsStateStoring,
         now: @escaping @Sendable () -> Date,
-        clientContext: AppAnalyticsClientContext = .current()
+        clientContext: AppAnalyticsClientContext = .current(),
+        discardsAnalytics: Bool? = nil
     ) {
         self.configuration = configuration
         self.transport = transport
@@ -281,6 +285,7 @@ public actor AppAnalyticsClient {
         self.decoder = Self.makeDecoder()
         self.now = now
         self.clientContext = clientContext
+        self.discardsAnalytics = discardsAnalytics ?? Self.isCIEnvironment()
     }
 
     public func track(
@@ -288,6 +293,7 @@ public actor AppAnalyticsClient {
         dimension: String? = nil,
         count: Int = 1
     ) async throws {
+        guard !discardsAnalytics else { return }
         try Self.validateEvent(name: name, dimension: dimension, count: count)
         let timestamp = now()
         await acquireStateAccess()
@@ -342,6 +348,7 @@ public actor AppAnalyticsClient {
         severity: AppAnalyticsErrorSeverity = .error,
         count: Int = 1
     ) async throws {
+        guard !discardsAnalytics else { return }
         try Self.validateError(
             code: code,
             component: component,
@@ -399,6 +406,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
+        guard !discardsAnalytics else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -444,6 +452,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
+        guard !discardsAnalytics else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -466,6 +475,7 @@ public actor AppAnalyticsClient {
     }
 
     public func flush() async throws {
+        guard !discardsAnalytics else { return }
         if let automaticUploadTask {
             await automaticUploadTask.value
         }
@@ -487,6 +497,7 @@ public actor AppAnalyticsClient {
     }
 
     func pendingDayCount() async throws -> Int {
+        guard !discardsAnalytics else { return 0 }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -1090,6 +1101,18 @@ public actor AppAnalyticsClient {
             message: HTTPURLResponse.localizedString(forStatusCode: response.statusCode),
             retryAfter: response.value(forHTTPHeaderField: "Retry-After")
         )
+    }
+
+    private static func isCIEnvironment(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        guard let value = environment["CI"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        else {
+            return false
+        }
+        return value == "true" || value == "1"
     }
 
     private static func makeEncoder() -> JSONEncoder {
