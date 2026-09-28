@@ -293,8 +293,8 @@ public actor AppAnalyticsClient {
         dimension: String? = nil,
         count: Int = 1
     ) async throws {
-        try Self.validateEvent(name: name, dimension: dimension, count: count)
         guard !discardsAnalytics else { return }
+        try Self.validateEvent(name: name, dimension: dimension, count: count)
         let timestamp = now()
         await acquireStateAccess()
         do {
@@ -348,12 +348,12 @@ public actor AppAnalyticsClient {
         severity: AppAnalyticsErrorSeverity = .error,
         count: Int = 1
     ) async throws {
+        guard !discardsAnalytics else { return }
         try Self.validateError(
             code: code,
             component: component,
             count: count
         )
-        guard !discardsAnalytics else { return }
 
         let timestamp = now()
         await acquireStateAccess()
