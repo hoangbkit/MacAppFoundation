@@ -49,7 +49,17 @@ ContentView()
     .managesAnalytics(analytics)
 ```
 
-`managesAnalytics` also exposes that same client to MacAppFoundation-owned descendant views through an optional SwiftUI environment value. Apps that do not call `managesAnalytics` keep the environment empty; commerce and paywall behavior continue normally with no analytics traffic.
+In Debug, attach the same client to the Developer Tools scene to enable the built-in Analytics inspector:
+
+```swift
+FoundationDeveloperView(
+    purchaseManager: purchases,
+    configuration: developerConfiguration
+)
+.managesAnalytics(analytics)
+```
+
+`managesAnalytics` exposes that same client to MacAppFoundation-owned descendant views through an optional SwiftUI environment value. Apps that do not call `managesAnalytics` keep the environment empty; commerce and paywall behavior continue normally with no analytics traffic.
 
 To keep analytics integrated while disabling collection and uploads, set `enabled: false`:
 
@@ -202,3 +212,12 @@ Corrupt local analytics state is discarded safely rather than crashing the app. 
 The client automatically collects only the bounded native context documented above: OS version, app build, `mac` device family, and CPU architecture. It does not collect screen names, text content, hardware model, serial number, hostname, IP addresses, contacts, files, prompts, exception text, stack traces, or purchase receipts. Apps decide which bounded event names, dimensions, and error codes to record.
 
 Review each shipping app's App Privacy answers and privacy policy based on the events that app actually sends; adding this package does not make every possible analytics field appropriate to collect.
+
+
+## Developer Tools inspection
+
+Debug builds include a first-class **Developer Tools → Analytics** inspector when the Developer Tools scene receives the app-scoped analytics client through `.managesAnalytics(analytics)`.
+
+It exposes the actual configured app key along with app/server/storage configuration, installation identity, runtime/session/upload state, retry/backoff timestamps, client limits, and the persisted cumulative UTC-day snapshots. It also captures a bounded live activity feed from the real analytics client so event/error calls and upload behavior can be observed as they happen.
+
+The inspector never creates an installation identity merely by opening the tab; it reads an existing Keychain identity when present. **Reset Local State** clears cumulative counters/session state but continues to preserve the installation identity.
