@@ -11,60 +11,20 @@ struct CommerceShowcaseView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                header
-
-                GroupBox("Current state") {
-                    VStack(spacing: 10) {
-                        LabeledContent("Live entitlement", value: entitlementTitle)
-                        LabeledContent("Effective access", value: accessTitle)
-                        LabeledContent("Product loading", value: productLoadingTitle)
-                        LabeledContent("Purchase activity", value: activityTitle)
-                        LabeledContent("Preferred product", value: purchaseManager.preferredProduct?.displayName ?? "None")
-                        #if DEBUG
-                        LabeledContent(
-                            "Backend",
-                            value: purchaseManager.isUsingSimulatedPurchases ? "In-process simulator" : "StoreKit Testing"
-                        )
-                        #endif
-                    }
-                    .padding(6)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Commerce")
+                        .font(.system(size: 30, weight: .bold))
+                    Text("Production-facing product presentation, purchase, and restore using the shared PurchaseManager.")
+                        .foregroundStyle(.secondary)
                 }
 
-                GroupBox("Commerce actions") {
-                    HStack(spacing: 10) {
-                        Button("Load Products") {
-                            Task {
-                                await purchaseManager.loadProducts(force: true)
-                                message = "Product catalog reloaded"
-                            }
-                        }
-
-                        Button("Refresh Entitlement") {
-                            Task {
-                                await purchaseManager.refreshEntitlements()
-                                message = "Entitlement refreshed"
-                            }
-                        }
-
-                        Button("Restore Purchases") {
-                            Task {
-                                let outcome = await purchaseManager.restorePurchases(timeout: .seconds(5))
-                                message = restoreMessage(outcome)
-                                demoState.record(message)
-                            }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(6)
-                }
-
-                GroupBox("Loaded products") {
+                GroupBox("Products") {
                     VStack(spacing: 0) {
                         if purchaseManager.products.isEmpty {
                             ContentUnavailableView(
                                 "No Products",
                                 systemImage: "cart",
-                                description: Text("Load the catalog or switch to the simulator.")
+                                description: Text("The product catalog has not loaded yet.")
                             )
                             .frame(minHeight: 160)
                         } else {
@@ -79,76 +39,27 @@ struct CommerceShowcaseView: View {
                     .padding(6)
                 }
 
-                #if DEBUG
-                GroupBox("Debug simulator API") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle(
-                            "Use in-process simulator",
-                            isOn: Binding(
-                                get: { purchaseManager.isUsingSimulatedPurchases },
-                                set: { enabled in
-                                    Task {
-                                        await purchaseManager.setSimulatedPurchasesEnabled(enabled)
-                                        message = enabled ? "Simulator enabled" : "StoreKit Testing enabled"
-                                    }
-                                }
-                            )
-                        )
-
-                        HStack(spacing: 8) {
-                            Button("Free") {
-                                forceEntitlement(nil)
-                            }
-                            ForEach(purchaseManager.products) { product in
-                                Button(product.planLabel) {
-                                    forceEntitlement(product.id)
-                                }
-                            }
+                HStack {
+                    Button("Restore Purchases") {
+                        Task {
+                            let outcome = await purchaseManager.restorePurchases(timeout: .seconds(5))
+                            message = restoreMessage(outcome)
+                            demoState.record(message)
                         }
-                        .disabled(!purchaseManager.isUsingSimulatedPurchases)
-
-                        HStack(spacing: 8) {
-                            Button("Reset Simulator", role: .destructive) {
-                                Task {
-                                    await purchaseManager.resetSimulatedPurchases()
-                                    message = "Simulator reset"
-                                }
-                            }
-
-                            Button("Reset Failures") {
-                                Task {
-                                    await purchaseManager.resetSimulatedFailures()
-                                    message = "Failure simulation reset"
-                                }
-                            }
-                        }
-                        .disabled(!purchaseManager.isUsingSimulatedPurchases)
-
-                        Text("The Developer Tools window exposes the complete catalog editor, introductory offers, latency, purchase outcomes, loading failures, and restore failures.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
-                    .padding(6)
-                }
-                #endif
+                    .buttonStyle(.bordered)
 
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Spacer()
+
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(28)
             .frame(maxWidth: 840, alignment: .leading)
         }
         .navigationTitle("Commerce")
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Commerce + Simulation")
-                .font(.system(size: 30, weight: .bold))
-            Text("The same PurchaseManager drives StoreKit, simulated products, entitlements, purchase, and restore.")
-                .foregroundStyle(.secondary)
-        }
     }
 
     private func productRow(_ product: StoreProduct) -> some View {
@@ -163,9 +74,11 @@ struct CommerceShowcaseView: View {
                             .foregroundStyle(Color.accentColor)
                     }
                 }
+
                 Text(product.id)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
+
                 if let offer = product.introductoryOffer {
                     Text("\(offer.headline) · \(offer.isEligible ? "eligible" : "ineligible")")
                         .font(.caption)
@@ -188,7 +101,7 @@ struct CommerceShowcaseView: View {
                     await purchaseManager.purchase(product)
                     message = purchaseManager.hasPro
                         ? "Entitlement active after \(product.displayName)"
-                        : activityTitle
+                        : purchaseActivityTitle
                     demoState.record(message)
                 }
             }
@@ -198,52 +111,9 @@ struct CommerceShowcaseView: View {
         .padding(.vertical, 10)
     }
 
-    #if DEBUG
-    private func forceEntitlement(_ productID: String?) {
-        Task {
-            if let productID {
-                await purchaseManager.setSimulatedPurchasedProductIDs([productID])
-                message = "Forced entitlement: \(productID)"
-            } else {
-                await purchaseManager.setSimulatedPurchasedProductIDs([])
-                message = "Forced Free entitlement"
-            }
-            demoState.record(message)
-        }
-    }
-    #endif
-
-    private var entitlementTitle: String {
-        switch purchaseManager.entitlementState {
-        case .checking: "Checking"
-        case .inactive: "Free"
-        case .active(let snapshot): snapshot.activeProductIDs.sorted().joined(separator: ", ")
-        }
-    }
-
-    private var accessTitle: String {
-        switch purchaseManager.accessState {
-        case .inactive:
-            return "Free"
-        case .active(let source, let snapshot):
-            let products = snapshot.activeProductIDs.sorted().joined(separator: ", ")
-            let sourceLabel = source == .storeKit ? "StoreKit" : "Verified cache"
-            return "\(products) · \(sourceLabel)"
-        }
-    }
-
-    private var productLoadingTitle: String {
-        switch purchaseManager.productLoadingState {
-        case .idle: "Idle"
-        case .loading: "Loading"
-        case .loaded: "Loaded"
-        case .failed(let failure): "Failed: \(failure.message)"
-        }
-    }
-
-    private var activityTitle: String {
+    private var purchaseActivityTitle: String {
         switch purchaseManager.activity {
-        case .idle: "Idle"
+        case .idle: "Ready"
         case .purchasing(let productID): "Purchasing \(productID)"
         case .restoring: "Restoring"
         case .pending(let productID): "Pending \(productID)"

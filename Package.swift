@@ -13,9 +13,18 @@ let package = Package(
             targets: ["MacAppFoundation"]
         )
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/apple/swift-log.git",
+            from: "1.11.0"
+        )
+    ],
     targets: [
         .target(
-            name: "MacAppFoundation"
+            name: "MacAppFoundation",
+            dependencies: [
+                .product(name: "Logging", package: "swift-log")
+            ]
         ),
         .testTarget(
             name: "MacAppFoundationTests",

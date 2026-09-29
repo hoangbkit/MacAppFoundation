@@ -17,7 +17,7 @@ MacAppFoundation owns reusable macOS infrastructure and visual primitives. Host 
 
 ## Demo app
 
-`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. It demonstrates the complete architecture: StoreKit + simulation, paywall/gating/upsells, one shared theme store across scenes, built-in + custom themes, reusable Settings with Theme/Plan plus app-injected panes, a runtime-configured analytics tester for events/errors, and the separate Developer Tools window/menu.
+`Examples/Demo` is a macOS 15 XcodeGen app wired against the local package checkout. Its main window stays focused on production-facing commerce, paywall/gating/upsells, themes, and Settings; simulation, analytics inspection, logs, diagnostics, and other debug controls live in the separate Developer Tools window/menu.
 
 ```sh
 cd Examples/Demo
@@ -34,7 +34,7 @@ MacAppFoundation now has six main areas:
 2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
 4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Theme/Plan panes, and selection routing.
-5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, analytics actions, and app-defined developer actions.
+5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, live SwiftLog inspection, analytics inspection/override, editable UserDefaults, replays, and app-defined developer actions.
 6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, stable Keychain installation identity, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
 
 Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation never persists a bare `hasPro` flag. Apps may opt into an account-scoped, versioned Keychain cache of previously verified entitlement records for offline continuity.
@@ -49,6 +49,29 @@ Add MacAppFoundation as a Swift Package dependency and link the `MacAppFoundatio
     from: "1.0.0"
 )
 ```
+
+## Optional MAF logging
+
+MacAppFoundation requires no global setup. Existing apps can adopt the package without adding an app lifecycle bootstrap.
+
+Apps that want MAF to own their SwiftLog backend can opt in explicitly before creating any `Logger` instances:
+
+```swift
+@main
+struct MyApp: App {
+    init() {
+        MacAppFoundationLogging.bootstrap()
+    }
+
+    var body: some Scene {
+        // ...
+    }
+}
+```
+
+The logging bootstrap is idempotent for repeated MAF calls. In Debug it multiplexes logs to console output and the bounded in-memory store shown in Developer Tools → Logs; in Release it keeps console logging without the developer log store.
+
+SwiftLog itself permits only one process-wide bootstrap. Apps that already install another SwiftLog backend should keep that backend and must not call `MacAppFoundationLogging.bootstrap()`. Developer Tools remain usable either way; only MAF's built-in log capture depends on this opt-in.
 
 ## 1. Configure commerce
 
@@ -255,11 +278,12 @@ Window(
         configuration: developerConfiguration
     )
     .macAppTheme(themeStore)
+    .managesAnalytics(analytics)
 }
 #endif
 ```
 
-The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, replays, and app-defined developer sections. The Demo uses an app-defined section to exercise analytics track/flush/reset actions without contacting production infrastructure.
+The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, live SwiftLog inspection, a first-class live Analytics inspector, editable UserDefaults inspection, replays, and app-defined developer sections. The Analytics destination shows the real client configuration (including app key), installation/session/upload state, persisted UTC-day counters, retry/backoff state, implementation details, and a bounded live stream of analytics events/errors/uploads.
 
 See `Documentation/DeveloperTools.md` for app-specific actions/toggles/values and replay examples.
 

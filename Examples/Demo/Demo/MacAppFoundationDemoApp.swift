@@ -22,6 +22,8 @@ struct MacAppFoundationDemoApp: App {
     private let analytics: AppAnalyticsClient
 
     init() {
+        MacAppFoundationLogging.bootstrap()
+
         _demoState = State(initialValue: DemoState())
         _themeStore = State(initialValue: MacAppThemeStore(configuration: DemoTheme.configuration))
         _settingsRouter = State(initialValue: MacAppSettingsRouter())
@@ -45,8 +47,7 @@ struct MacAppFoundationDemoApp: App {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
             ContentView(
                 purchaseManager: purchases,
-                settingsRouter: settingsRouter,
-                analytics: analytics
+                settingsRouter: settingsRouter
             )
             .environment(demoState)
             .macAppTheme(themeStore, purchaseManager: purchases)
@@ -74,32 +75,6 @@ struct MacAppFoundationDemoApp: App {
                     openWindow(id: MacAppFoundationDeveloperTools.windowID)
                 }
                 .keyboardShortcut("d", modifiers: [.command, .option])
-
-                Button("Replay Onboarding") {
-                    replayOnboarding()
-                }
-                .keyboardShortcut("o", modifiers: [.command, .option])
-
-                Divider()
-
-                Button("Use Simulated Purchases") {
-                    Task {
-                        await purchases.setSimulatedPurchasesEnabled(true)
-                    }
-                }
-
-                Button("Use StoreKit Testing") {
-                    Task {
-                        await purchases.setSimulatedPurchasesEnabled(false)
-                    }
-                }
-
-                Button("Reset Simulated Purchases", role: .destructive) {
-                    Task {
-                        await purchases.setSimulatedPurchasesEnabled(true)
-                        await purchases.resetSimulatedPurchases()
-                    }
-                }
             }
             #endif
         }
@@ -114,7 +89,6 @@ struct MacAppFoundationDemoApp: App {
             DemoOnboardingView(onboarding: onboarding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .macAppTheme(themeStore, purchaseManager: purchases)
-                .managesAnalytics(analytics)
         }
 
         MacAppFullSizeWindow(
@@ -141,7 +115,6 @@ struct MacAppFoundationDemoApp: App {
             DemoUpsellWindow(purchaseManager: purchases)
                 .environment(demoState)
                 .macAppTheme(themeStore, purchaseManager: purchases)
-                .managesAnalytics(analytics)
         }
         .defaultSize(width: 560, height: 520)
         .windowResizability(.contentSize)
@@ -173,7 +146,6 @@ struct MacAppFoundationDemoApp: App {
             )
             .environment(demoState)
             .macAppTheme(themeStore, purchaseManager: purchases)
-            .managesAnalytics(analytics)
         }
     }
 

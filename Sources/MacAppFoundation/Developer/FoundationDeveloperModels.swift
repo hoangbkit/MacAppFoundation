@@ -175,7 +175,7 @@ public struct FoundationDeveloperConfiguration {
 public enum MacAppFoundationDeveloperTools {
     public static let windowID = "macappfoundation.developer-tools"
     public static let windowTitle = "Developer Tools"
-    public static let defaultWidth: CGFloat = 760
+    public static let defaultWidth: CGFloat = 920
     public static let defaultHeight: CGFloat = 680
 }
 #endif

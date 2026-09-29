@@ -235,6 +235,18 @@ public actor AppAnalyticsClient {
     private var stateAccessInFlight = false
     private var stateAccessWaiters: [CheckedContinuation<Void, Never>] = []
 
+    #if DEBUG
+    private var developerEnabledOverride: Bool? = nil
+    #endif
+
+    private var effectiveEnabled: Bool {
+        #if DEBUG
+        developerEnabledOverride ?? configuration.enabled
+        #else
+        configuration.enabled
+        #endif
+    }
+
     public init(
         configuration: AppAnalyticsConfiguration,
         transport: any AppAnalyticsTransport = URLSessionAppAnalyticsTransport()
@@ -288,8 +300,28 @@ public actor AppAnalyticsClient {
         dimension: String? = nil,
         count: Int = 1
     ) async throws {
-        guard configuration.enabled else { return }
-        try Self.validateEvent(name: name, dimension: dimension, count: count)
+        guard effectiveEnabled else {
+            #if DEBUG
+            developerRecord(
+                .event,
+                title: "Ignored event: \(name)",
+                detail: "Analytics disabled · dimension=\(dimension ?? "none") · count=\(count)"
+            )
+            #endif
+            return
+        }
+        do {
+            try Self.validateEvent(name: name, dimension: dimension, count: count)
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Invalid event: \(name)",
+                detail: developerErrorDetail(error)
+            )
+            #endif
+            throw error
+        }
         let timestamp = now()
         await acquireStateAccess()
         do {
@@ -329,8 +361,22 @@ public actor AppAnalyticsClient {
 
             state.days[dayKey] = day
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .event,
+                title: name,
+                detail: "dimension=\(dimension ?? "none") · count=\(count)"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Event failed: \(name)",
+                detail: developerErrorDetail(error)
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -343,12 +389,32 @@ public actor AppAnalyticsClient {
         severity: AppAnalyticsErrorSeverity = .error,
         count: Int = 1
     ) async throws {
-        guard configuration.enabled else { return }
-        try Self.validateError(
-            code: code,
-            component: component,
-            count: count
-        )
+        guard effectiveEnabled else {
+            #if DEBUG
+            developerRecord(
+                .error,
+                title: "Ignored error: \(code)",
+                detail: "Analytics disabled · component=\(component) · severity=\(severity.rawValue) · count=\(count)"
+            )
+            #endif
+            return
+        }
+        do {
+            try Self.validateError(
+                code: code,
+                component: component,
+                count: count
+            )
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Invalid error: \(code)",
+                detail: developerErrorDetail(error)
+            )
+            #endif
+            throw error
+        }
 
         let timestamp = now()
         await acquireStateAccess()
@@ -392,8 +458,22 @@ public actor AppAnalyticsClient {
             day.errors = errors
             state.days[dayKey] = day
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .error,
+                title: code,
+                detail: "component=\(component) · severity=\(severity.rawValue) · count=\(count)"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Error tracking failed: \(code)",
+                detail: developerErrorDetail(error)
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -401,7 +481,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -409,6 +489,13 @@ public actor AppAnalyticsClient {
 
             if state.session?.activeSince != nil {
                 try await saveState(state)
+                #if DEBUG
+                developerRecord(
+                    .lifecycle,
+                    title: "Application active notification",
+                    detail: "Session already active"
+                )
+                #endif
                 releaseStateAccess()
                 scheduleAutomaticFlush()
                 return
@@ -438,8 +525,22 @@ public actor AppAnalyticsClient {
             }
 
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .lifecycle,
+                title: "Application became active",
+                detail: state.session?.activeSince == nil ? "Session inactive" : "Session active"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Active lifecycle tracking failed",
+                detail: developerErrorDetail(error)
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -447,7 +548,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -461,8 +562,22 @@ public actor AppAnalyticsClient {
                 }
             }
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .lifecycle,
+                title: "Application resigned active",
+                detail: "Session checkpointed"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Resign lifecycle tracking failed",
+                detail: developerErrorDetail(error)
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -470,22 +585,55 @@ public actor AppAnalyticsClient {
     }
 
     public func flush() async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else {
+            #if DEBUG
+            developerRecord(.upload, title: "Flush ignored", detail: "Analytics disabled")
+            #endif
+            return
+        }
         if let automaticUploadTask {
             await automaticUploadTask.value
         }
 
+        #if DEBUG
+        developerRecord(.upload, title: "Explicit flush started")
+        #endif
+
         await acquireUploadSlot()
         defer { releaseUploadSlot() }
-        try await performFlush(at: now(), force: true)
+        do {
+            try await performFlush(at: now(), force: true)
+            #if DEBUG
+            developerRecord(.upload, title: "Explicit flush completed")
+            #endif
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Explicit flush failed",
+                detail: developerErrorDetail(error)
+            )
+            #endif
+            throw error
+        }
     }
 
     public func resetLocalState() async throws {
         await acquireStateAccess()
         do {
             try await stateStore.remove()
+            #if DEBUG
+            developerRecord(.reset, title: "Local analytics state reset")
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Local analytics reset failed",
+                detail: developerErrorDetail(error)
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -512,7 +660,7 @@ public actor AppAnalyticsClient {
     }
 
     private func scheduleAutomaticFlush() {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         guard automaticUploadTask == nil else { return }
 
         automaticUploadTask = Task { [weak self] in
@@ -522,8 +670,24 @@ public actor AppAnalyticsClient {
     }
 
     private func runAutomaticFlush() async {
+        #if DEBUG
+        developerRecord(.upload, title: "Automatic flush evaluated")
+        #endif
         await acquireUploadSlot()
-        try? await performFlush(at: now(), force: false)
+        do {
+            try await performFlush(at: now(), force: false)
+            #if DEBUG
+            developerRecord(.upload, title: "Automatic flush completed")
+            #endif
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Automatic flush failed",
+                detail: developerErrorDetail(error)
+            )
+            #endif
+        }
         releaseUploadSlot()
         automaticUploadTask = nil
     }
@@ -575,7 +739,7 @@ public actor AppAnalyticsClient {
     }
 
     private func performFlush(at timestamp: Date, force: Bool) async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         guard let prepared = try await prepareUpload(at: timestamp, force: force) else {
             return
         }
@@ -711,6 +875,14 @@ public actor AppAnalyticsClient {
             )
         }
 
+        #if DEBUG
+        developerRecord(
+            .upload,
+            title: "Batch sending",
+            detail: "request=\(batch.requestId) · days=\(batch.days.map(\.day).joined(separator: ",")) · bytes=\(body.count)"
+        )
+        #endif
+
         var request = URLRequest(
             url: Self.endpointURL(baseURL: configuration.baseURL, path: "/v1/analytics/batch")
         )
@@ -752,6 +924,13 @@ public actor AppAnalyticsClient {
                       decoded.acceptedDays == batch.days.map(\.day) else {
                     throw AppAnalyticsError.invalidResponse
                 }
+                #if DEBUG
+                developerRecord(
+                    .upload,
+                    title: "Batch accepted",
+                    detail: "request=\(batch.requestId) · days=\(decoded.acceptedDays.joined(separator: ","))"
+                )
+                #endif
                 return
             } catch is CancellationError {
                 throw CancellationError()
@@ -761,6 +940,13 @@ public actor AppAnalyticsClient {
                 switch error {
                 case .transport where transportAttempts < configuration.transportRetryCount:
                     transportAttempts += 1
+                    #if DEBUG
+                    developerRecord(
+                        .upload,
+                        title: "Transport retry",
+                        detail: "request=\(batch.requestId) · attempt=\(transportAttempts) · \(developerErrorDetail(error))"
+                    )
+                    #endif
                     continue
                 default:
                     throw error
@@ -768,6 +954,13 @@ public actor AppAnalyticsClient {
             } catch {
                 if transportAttempts < configuration.transportRetryCount {
                     transportAttempts += 1
+                    #if DEBUG
+                    developerRecord(
+                        .upload,
+                        title: "Transport retry",
+                        detail: "request=\(batch.requestId) · attempt=\(transportAttempts) · \(error.localizedDescription)"
+                    )
+                    #endif
                     continue
                 }
                 throw AppAnalyticsError.transport(error.localizedDescription)
@@ -1237,3 +1430,272 @@ public actor AppAnalyticsClient {
         return baseURL.appending(path: relativePath)
     }
 }
+
+
+#if DEBUG
+struct AppAnalyticsDeveloperSnapshot: Sendable {
+    struct Configuration: Sendable {
+        let configuredEnabled: Bool
+        let effectiveEnabled: Bool
+        let developerEnabledOverride: Bool?
+        let appID: String
+        let baseURL: URL
+        let endpointURL: URL
+        let appKey: String?
+        let keychainService: String
+        let stateStorageKey: String
+        let configuredAppVersion: String?
+        let resolvedAppVersion: String?
+        let uploadInterval: TimeInterval
+        let transportRetryCount: Int
+        let transportType: String
+        let stateStoreType: String
+    }
+
+    struct Limits: Sendable {
+        let maxDaysPerBatch: Int
+        let maxOfflineAgeDays: Int
+        let maxEventsPerDay: Int
+        let maxEventCountPerDay: Int
+        let maxTotalEventCountPerDay: Int
+        let maxErrorsPerDay: Int
+        let maxTotalErrorCountPerDay: Int
+        let maxSessionsPerDay: Int
+        let maxSessionSecondsPerDay: Int
+        let maxBodyBytes: Int
+        let sessionTimeout: TimeInterval
+    }
+
+    struct Runtime: Sendable {
+        let installationID: String?
+        let installationIdentityError: String?
+        let osVersion: String
+        let appBuild: String?
+        let deviceFamily: String
+        let architecture: String?
+        let activeSession: Bool
+        let sessionLastActivityAt: Date?
+        let sessionActiveSince: Date?
+        let pendingDayCount: Int
+        let lastUploadAt: Date?
+        let nextUploadAttemptAt: Date?
+        let automaticUploadScheduled: Bool
+        let uploadInFlight: Bool
+    }
+
+    struct Event: Identifiable, Sendable {
+        let id: String
+        let name: String
+        let dimension: String?
+        let count: Int
+    }
+
+    struct TrackedError: Identifiable, Sendable {
+        let id: String
+        let code: String
+        let component: String
+        let severity: AppAnalyticsErrorSeverity
+        let count: Int
+    }
+
+    struct Day: Identifiable, Sendable {
+        var id: String { day }
+
+        let day: String
+        let appVersion: String?
+        let osVersion: String?
+        let appBuild: String?
+        let deviceFamily: String?
+        let architecture: String?
+        let sessions: Int
+        let sessionSeconds: Int
+        let events: [Event]
+        let errors: [TrackedError]
+    }
+
+    let configuration: Configuration
+    let limits: Limits
+    let runtime: Runtime
+    let days: [Day]
+}
+
+extension AppAnalyticsClient {
+    func developerSetEnabledOverride(_ override: Bool?) {
+        developerEnabledOverride = override
+
+        if !effectiveEnabled {
+            automaticUploadTask?.cancel()
+            automaticUploadTask = nil
+        }
+
+        developerRecord(
+            .lifecycle,
+            title: "Analytics enabled override changed",
+            detail: "configured=\(configuration.enabled) · override=\(override.map { $0 ? "true" : "false" } ?? "configured") · effective=\(effectiveEnabled)"
+        )
+    }
+
+    func developerSnapshot() async throws -> AppAnalyticsDeveloperSnapshot {
+        let timestamp = now()
+
+        await acquireStateAccess()
+        let state: PersistedState
+        do {
+            var snapshot = try await loadState()
+            pruneExpiredDays(in: &snapshot, relativeTo: timestamp)
+            checkpointActiveSession(in: &snapshot, at: timestamp)
+            state = snapshot
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
+
+        let installationAccount = "\(configuration.appID).installation"
+        let installationID: String?
+        let installationIdentityError: String?
+        do {
+            installationID = try await secureStore.string(for: installationAccount)
+            installationIdentityError = nil
+        } catch {
+            installationID = nil
+            installationIdentityError = error.localizedDescription
+        }
+
+        let days = state.days
+            .map { dayKey, day in
+                let events = day.events
+                    .map { key, event in
+                        AppAnalyticsDeveloperSnapshot.Event(
+                            id: key,
+                            name: event.name,
+                            dimension: event.dimension,
+                            count: event.count
+                        )
+                    }
+                    .sorted {
+                        if $0.name != $1.name { return $0.name < $1.name }
+                        return ($0.dimension ?? "") < ($1.dimension ?? "")
+                    }
+
+                let errors = (day.errors ?? [:])
+                    .map { key, error in
+                        AppAnalyticsDeveloperSnapshot.TrackedError(
+                            id: key,
+                            code: error.code,
+                            component: error.component,
+                            severity: error.severity,
+                            count: error.count
+                        )
+                    }
+                    .sorted {
+                        if $0.code != $1.code { return $0.code < $1.code }
+                        if $0.component != $1.component { return $0.component < $1.component }
+                        return $0.severity.rawValue < $1.severity.rawValue
+                    }
+
+                return AppAnalyticsDeveloperSnapshot.Day(
+                    day: dayKey,
+                    appVersion: day.appVersion,
+                    osVersion: day.osVersion,
+                    appBuild: day.appBuild,
+                    deviceFamily: day.deviceFamily,
+                    architecture: day.architecture,
+                    sessions: day.sessions,
+                    sessionSeconds: day.sessionSeconds,
+                    events: events,
+                    errors: errors
+                )
+            }
+            .sorted { $0.day > $1.day }
+
+        return AppAnalyticsDeveloperSnapshot(
+            configuration: .init(
+                configuredEnabled: configuration.enabled,
+                effectiveEnabled: effectiveEnabled,
+                developerEnabledOverride: developerEnabledOverride,
+                appID: configuration.appID,
+                baseURL: configuration.baseURL,
+                endpointURL: Self.endpointURL(
+                    baseURL: configuration.baseURL,
+                    path: "/v1/analytics/batch"
+                ),
+                appKey: configuration.appKey,
+                keychainService: configuration.keychainService,
+                stateStorageKey: configuration.stateStorageKey,
+                configuredAppVersion: configuration.appVersion,
+                resolvedAppVersion: resolvedAppVersion(),
+                uploadInterval: configuration.uploadInterval,
+                transportRetryCount: configuration.transportRetryCount,
+                transportType: String(reflecting: type(of: transport)),
+                stateStoreType: String(reflecting: type(of: stateStore))
+            ),
+            limits: .init(
+                maxDaysPerBatch: Limits.maxDaysPerBatch,
+                maxOfflineAgeDays: Limits.maxOfflineAgeDays,
+                maxEventsPerDay: Limits.maxEventsPerDay,
+                maxEventCountPerDay: Limits.maxEventCountPerDay,
+                maxTotalEventCountPerDay: Limits.maxTotalEventCountPerDay,
+                maxErrorsPerDay: Limits.maxErrorsPerDay,
+                maxTotalErrorCountPerDay: Limits.maxTotalErrorCountPerDay,
+                maxSessionsPerDay: Limits.maxSessionsPerDay,
+                maxSessionSecondsPerDay: Limits.maxSessionSecondsPerDay,
+                maxBodyBytes: Limits.maxBodyBytes,
+                sessionTimeout: Limits.sessionTimeout
+            ),
+            runtime: .init(
+                installationID: installationID,
+                installationIdentityError: installationIdentityError,
+                osVersion: clientContext.osVersion,
+                appBuild: clientContext.appBuild,
+                deviceFamily: clientContext.deviceFamily,
+                architecture: clientContext.architecture,
+                activeSession: state.session?.activeSince != nil,
+                sessionLastActivityAt: state.session?.lastActivityAt,
+                sessionActiveSince: state.session?.activeSince,
+                pendingDayCount: state.days.count,
+                lastUploadAt: state.lastUploadAt,
+                nextUploadAttemptAt: state.nextUploadAttemptAt,
+                automaticUploadScheduled: automaticUploadTask != nil,
+                uploadInFlight: uploadInFlight
+            ),
+            days: days
+        )
+    }
+
+    private func developerErrorDetail(_ error: Error) -> String {
+        guard let analyticsError = error as? AppAnalyticsError else {
+            return error.localizedDescription
+        }
+
+        switch analyticsError {
+        case .server(let code, let message, let retryAfter):
+            if let retryAfter {
+                return "code=\(code) · message=\(message) · retryAfter=\(retryAfter)"
+            }
+            return "code=\(code) · message=\(message)"
+        default:
+            return analyticsError.localizedDescription
+        }
+    }
+}
+#endif
+
+
+#if DEBUG
+extension AppAnalyticsClient {
+    private func developerRecord(
+        _ kind: AppAnalyticsDeveloperActivityStore.Kind,
+        title: String,
+        detail: String? = nil
+    ) {
+        Task { @MainActor in
+            AppAnalyticsDeveloperActivityStore.shared.append(
+                kind: kind,
+                title: title,
+                detail: detail
+            )
+        }
+    }
+}
+#endif
