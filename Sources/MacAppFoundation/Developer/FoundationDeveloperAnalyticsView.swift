@@ -547,7 +547,7 @@ struct FoundationDeveloperAnalyticsView: View {
             "Analytics",
             "Configured enabled: \(snapshot.configuration.configuredEnabled)",
             "Effective enabled: \(snapshot.configuration.effectiveEnabled)",
-            "Developer override: \(snapshot.configuration.developerEnabledOverride.map(String.init) ?? "configured")",
+            "Developer override: \(snapshot.configuration.developerEnabledOverride.map { $0 ? "true" : "false" } ?? "configured")",
             "App ID: \(snapshot.configuration.appID)",
             "App key: \(snapshot.configuration.appKey ?? "Not configured")",
             "Server: \(snapshot.configuration.baseURL.absoluteString)",
