@@ -66,6 +66,12 @@ The app may use its own window identifier and title instead of the provided defa
 
 `MacAppFoundation.setup()` is a required process-wide bootstrap. Call it first in `App.init()`, before resolving services or creating loggers. It is synchronous and idempotent. MacAppFoundation owns `LoggingSystem.bootstrap`; apps adopting this setup entry point must remove any app-owned SwiftLog bootstrap.
 
+## Overview dashboard
+
+The **Overview** destination provides a compact app/runtime dashboard without duplicating the deeper tabs. It shows app name, version/build, bundle ID, Debug configuration, CPU architecture, process ID, macOS version, MAF setup state, active theme, actual App Sandbox entitlement state, UserDefaults domain, bundle/executable/home-or-container paths, analytics configured/effective/override state plus existing installation ID, and a concise commerce status summary.
+
+Paths and installation identifiers are selectable for copying. Analytics status refreshes while Overview is visible and does not create an installation identity.
+
 ## Built-in logs
 
 Debug builds capture SwiftLog output into a framework-owned bounded in-memory store in addition to normal console output. The **Logs** destination is enabled automatically under **General** and provides:
