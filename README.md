@@ -50,16 +50,17 @@ Add MacAppFoundation as a Swift Package dependency and link the `MacAppFoundatio
 )
 ```
 
-## Required app setup
+## Optional MAF logging
 
-Call the framework bootstrap first in the app's initializer:
+MacAppFoundation requires no global setup. Existing apps can adopt the package without adding an app lifecycle bootstrap.
+
+Apps that want MAF to own their SwiftLog backend can opt in explicitly before creating any `Logger` instances:
 
 ```swift
 @main
 struct MyApp: App {
     init() {
-        MacAppFoundation.setup()
-        // Resolve app services after setup.
+        MacAppFoundationLogging.bootstrap()
     }
 
     var body: some Scene {
@@ -68,9 +69,9 @@ struct MyApp: App {
 }
 ```
 
-The call is synchronous, cheap, and idempotent. It is the single process-wide setup point for MacAppFoundation and is intentionally designed to host additional framework initialization in future releases.
+The logging bootstrap is idempotent for repeated MAF calls. In Debug it multiplexes logs to console output and the bounded in-memory store shown in Developer Tools → Logs; in Release it keeps console logging without the developer log store.
 
-MacAppFoundation owns SwiftLog bootstrap. In Debug it multiplexes logs to normal console output and the bounded in-memory store shown in Developer Tools → Logs; in Release it keeps console logging without the developer log store. Apps using `MacAppFoundation.setup()` must not also call `LoggingSystem.bootstrap`.
+SwiftLog itself permits only one process-wide bootstrap. Apps that already install another SwiftLog backend should keep that backend and must not call `MacAppFoundationLogging.bootstrap()`. Developer Tools remain usable either way; only MAF's built-in log capture depends on this opt-in.
 
 ## 1. Configure commerce
 
