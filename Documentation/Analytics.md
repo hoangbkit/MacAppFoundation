@@ -51,6 +51,18 @@ ContentView()
 
 `managesAnalytics` also exposes that same client to MacAppFoundation-owned descendant views through an optional SwiftUI environment value. Apps that do not call `managesAnalytics` keep the environment empty; commerce and paywall behavior continue normally with no analytics traffic.
 
+To keep analytics integrated while disabling collection and uploads, set `enabled: false`:
+
+```swift
+AppAnalyticsConfiguration(
+    appID: "my-app",
+    baseURL: URL(string: "https://api.example.com")!,
+    enabled: false
+)
+```
+
+Disabled analytics is fully inert: event/error tracking, lifecycle accounting, automatic uploads, and explicit `flush()` calls are no-ops. No analytics state is read or written, and no installation identity is created while disabled. Previously persisted analytics state remains untouched and is not uploaded until analytics is enabled again; `resetLocalState()` remains available if the app wants to discard that state explicitly. The default is `enabled: true`.
+
 On macOS, lifecycle tracking uses `NSApplication.didBecomeActiveNotification` and `NSApplication.willResignActiveNotification`. It is application-level rather than window-level, so moving between windows inside the same app does not end a session.
 
 ## Events
