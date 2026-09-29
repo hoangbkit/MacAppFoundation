@@ -1237,3 +1237,186 @@ public actor AppAnalyticsClient {
         return baseURL.appending(path: relativePath)
     }
 }
+
+
+#if DEBUG
+struct AppAnalyticsDeveloperSnapshot: Sendable {
+    struct Configuration: Sendable {
+        let enabled: Bool
+        let appID: String
+        let baseURL: URL
+        let endpointURL: URL
+        let appKeyConfigured: Bool
+        let keychainService: String
+        let stateStorageKey: String
+        let configuredAppVersion: String?
+        let resolvedAppVersion: String?
+        let uploadInterval: TimeInterval
+        let transportRetryCount: Int
+    }
+
+    struct Runtime: Sendable {
+        let installationID: String?
+        let installationIdentityError: String?
+        let osVersion: String
+        let appBuild: String?
+        let deviceFamily: String
+        let architecture: String?
+        let activeSession: Bool
+        let sessionLastActivityAt: Date?
+        let sessionActiveSince: Date?
+        let pendingDayCount: Int
+        let lastUploadAt: Date?
+        let nextUploadAttemptAt: Date?
+        let automaticUploadScheduled: Bool
+        let uploadInFlight: Bool
+    }
+
+    struct Event: Identifiable, Sendable {
+        let id: String
+        let name: String
+        let dimension: String?
+        let count: Int
+    }
+
+    struct TrackedError: Identifiable, Sendable {
+        let id: String
+        let code: String
+        let component: String
+        let severity: AppAnalyticsErrorSeverity
+        let count: Int
+    }
+
+    struct Day: Identifiable, Sendable {
+        var id: String { day }
+
+        let day: String
+        let appVersion: String?
+        let osVersion: String?
+        let appBuild: String?
+        let deviceFamily: String?
+        let architecture: String?
+        let sessions: Int
+        let sessionSeconds: Int
+        let events: [Event]
+        let errors: [TrackedError]
+    }
+
+    let configuration: Configuration
+    let runtime: Runtime
+    let days: [Day]
+}
+
+extension AppAnalyticsClient {
+    func developerSnapshot() async throws -> AppAnalyticsDeveloperSnapshot {
+        let timestamp = now()
+
+        await acquireStateAccess()
+        let state: PersistedState
+        do {
+            var snapshot = try await loadState()
+            pruneExpiredDays(in: &snapshot, relativeTo: timestamp)
+            checkpointActiveSession(in: &snapshot, at: timestamp)
+            state = snapshot
+            releaseStateAccess()
+        } catch {
+            releaseStateAccess()
+            throw error
+        }
+
+        let installationAccount = "\(configuration.appID).installation"
+        let installationID: String?
+        let installationIdentityError: String?
+        do {
+            installationID = try await secureStore.string(for: installationAccount)
+            installationIdentityError = nil
+        } catch {
+            installationID = nil
+            installationIdentityError = error.localizedDescription
+        }
+
+        let days = state.days
+            .map { dayKey, day in
+                let events = day.events
+                    .map { key, event in
+                        AppAnalyticsDeveloperSnapshot.Event(
+                            id: key,
+                            name: event.name,
+                            dimension: event.dimension,
+                            count: event.count
+                        )
+                    }
+                    .sorted {
+                        if $0.name != $1.name { return $0.name < $1.name }
+                        return ($0.dimension ?? "") < ($1.dimension ?? "")
+                    }
+
+                let errors = (day.errors ?? [:])
+                    .map { key, error in
+                        AppAnalyticsDeveloperSnapshot.TrackedError(
+                            id: key,
+                            code: error.code,
+                            component: error.component,
+                            severity: error.severity,
+                            count: error.count
+                        )
+                    }
+                    .sorted {
+                        if $0.code != $1.code { return $0.code < $1.code }
+                        if $0.component != $1.component { return $0.component < $1.component }
+                        return $0.severity.rawValue < $1.severity.rawValue
+                    }
+
+                return AppAnalyticsDeveloperSnapshot.Day(
+                    day: dayKey,
+                    appVersion: day.appVersion,
+                    osVersion: day.osVersion,
+                    appBuild: day.appBuild,
+                    deviceFamily: day.deviceFamily,
+                    architecture: day.architecture,
+                    sessions: day.sessions,
+                    sessionSeconds: day.sessionSeconds,
+                    events: events,
+                    errors: errors
+                )
+            }
+            .sorted { $0.day > $1.day }
+
+        return AppAnalyticsDeveloperSnapshot(
+            configuration: .init(
+                enabled: configuration.enabled,
+                appID: configuration.appID,
+                baseURL: configuration.baseURL,
+                endpointURL: Self.endpointURL(
+                    baseURL: configuration.baseURL,
+                    path: "/v1/analytics/batch"
+                ),
+                appKeyConfigured: configuration.appKey != nil,
+                keychainService: configuration.keychainService,
+                stateStorageKey: configuration.stateStorageKey,
+                configuredAppVersion: configuration.appVersion,
+                resolvedAppVersion: resolvedAppVersion(),
+                uploadInterval: configuration.uploadInterval,
+                transportRetryCount: configuration.transportRetryCount
+            ),
+            runtime: .init(
+                installationID: installationID,
+                installationIdentityError: installationIdentityError,
+                osVersion: clientContext.osVersion,
+                appBuild: clientContext.appBuild,
+                deviceFamily: clientContext.deviceFamily,
+                architecture: clientContext.architecture,
+                activeSession: state.session?.activeSince != nil,
+                sessionLastActivityAt: state.session?.lastActivityAt,
+                sessionActiveSince: state.session?.activeSince,
+                pendingDayCount: state.days.count,
+                lastUploadAt: state.lastUploadAt,
+                nextUploadAttemptAt: state.nextUploadAttemptAt,
+                automaticUploadScheduled: automaticUploadTask != nil,
+                uploadInFlight: uploadInFlight
+            ),
+            days: days
+        )
+    }
+}
+#endif
