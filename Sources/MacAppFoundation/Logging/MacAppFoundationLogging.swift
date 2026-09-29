@@ -5,8 +5,20 @@ import Logging
 import Combine
 #endif
 
-enum MacAppFoundationLogging {
-    static func bootstrap() {
+public enum MacAppFoundationLogging {
+    private static let bootstrapLock = NSLock()
+    nonisolated(unsafe) private static var didBootstrap = false
+
+    /// Opts the process into MacAppFoundation's SwiftLog backend.
+    ///
+    /// Call this before creating any Logger instances. SwiftLog permits one
+    /// process-wide bootstrap, so apps using another backend must not call this.
+    public static func bootstrap() {
+        bootstrapLock.lock()
+        defer { bootstrapLock.unlock() }
+
+        guard !didBootstrap else { return }
+
         LoggingSystem.bootstrap { label in
             var console = MacAppFoundationConsoleLogHandler(label: label)
 
@@ -20,6 +32,14 @@ enum MacAppFoundationLogging {
             return console
             #endif
         }
+
+        didBootstrap = true
+    }
+
+    static var isBootstrapped: Bool {
+        bootstrapLock.lock()
+        defer { bootstrapLock.unlock() }
+        return didBootstrap
     }
 }
 
