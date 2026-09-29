@@ -235,6 +235,18 @@ public actor AppAnalyticsClient {
     private var stateAccessInFlight = false
     private var stateAccessWaiters: [CheckedContinuation<Void, Never>] = []
 
+    #if DEBUG
+    private var developerEnabledOverride: Bool?
+    #endif
+
+    private var effectiveEnabled: Bool {
+        #if DEBUG
+        developerEnabledOverride ?? configuration.enabled
+        #else
+        configuration.enabled
+        #endif
+    }
+
     public init(
         configuration: AppAnalyticsConfiguration,
         transport: any AppAnalyticsTransport = URLSessionAppAnalyticsTransport()
@@ -288,7 +300,7 @@ public actor AppAnalyticsClient {
         dimension: String? = nil,
         count: Int = 1
     ) async throws {
-        guard configuration.enabled else {
+        guard effectiveEnabled else {
             #if DEBUG
             developerRecord(
                 .event,
@@ -377,7 +389,7 @@ public actor AppAnalyticsClient {
         severity: AppAnalyticsErrorSeverity = .error,
         count: Int = 1
     ) async throws {
-        guard configuration.enabled else {
+        guard effectiveEnabled else {
             #if DEBUG
             developerRecord(
                 .error,
@@ -469,7 +481,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -536,7 +548,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -573,7 +585,7 @@ public actor AppAnalyticsClient {
     }
 
     public func flush() async throws {
-        guard configuration.enabled else {
+        guard effectiveEnabled else {
             #if DEBUG
             developerRecord(.upload, title: "Flush ignored", detail: "Analytics disabled")
             #endif
@@ -648,7 +660,7 @@ public actor AppAnalyticsClient {
     }
 
     private func scheduleAutomaticFlush() {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         guard automaticUploadTask == nil else { return }
 
         automaticUploadTask = Task { [weak self] in
@@ -727,7 +739,7 @@ public actor AppAnalyticsClient {
     }
 
     private func performFlush(at timestamp: Date, force: Bool) async throws {
-        guard configuration.enabled else { return }
+        guard effectiveEnabled else { return }
         guard let prepared = try await prepareUpload(at: timestamp, force: force) else {
             return
         }
@@ -1423,7 +1435,9 @@ public actor AppAnalyticsClient {
 #if DEBUG
 struct AppAnalyticsDeveloperSnapshot: Sendable {
     struct Configuration: Sendable {
-        let enabled: Bool
+        let configuredEnabled: Bool
+        let effectiveEnabled: Bool
+        let developerEnabledOverride: Bool?
         let appID: String
         let baseURL: URL
         let endpointURL: URL
@@ -1506,6 +1520,21 @@ struct AppAnalyticsDeveloperSnapshot: Sendable {
 }
 
 extension AppAnalyticsClient {
+    func developerSetEnabledOverride(_ override: Bool?) {
+        developerEnabledOverride = override
+
+        if !effectiveEnabled {
+            automaticUploadTask?.cancel()
+            automaticUploadTask = nil
+        }
+
+        developerRecord(
+            .lifecycle,
+            title: "Analytics enabled override changed",
+            detail: "configured=\(configuration.enabled) · override=\(override.map(String.init) ?? "configured") · effective=\(effectiveEnabled)"
+        )
+    }
+
     func developerSnapshot() async throws -> AppAnalyticsDeveloperSnapshot {
         let timestamp = now()
 
@@ -1582,7 +1611,9 @@ extension AppAnalyticsClient {
 
         return AppAnalyticsDeveloperSnapshot(
             configuration: .init(
-                enabled: configuration.enabled,
+                configuredEnabled: configuration.enabled,
+                effectiveEnabled: effectiveEnabled,
+                developerEnabledOverride: developerEnabledOverride,
                 appID: configuration.appID,
                 baseURL: configuration.baseURL,
                 endpointURL: Self.endpointURL(
