@@ -2,7 +2,7 @@
 
 MacAppFoundation's developer console is debug-only and is intended to live in a dedicated macOS window opened from a `Developer` menu. Do not embed it in the app's Settings scene.
 
-The presentation pattern follows Spokio: the consuming app owns the `Window` scene and `CommandMenu`, while MacAppFoundation supplies the reusable `FoundationDeveloperView`.
+The presentation pattern follows Spokio: the consuming app owns the `Window` scene and `CommandMenu`, while MacAppFoundation supplies the reusable `FoundationDeveloperView`. The view is a full macOS `NavigationSplitView`: stable developer destinations live in the sidebar, deeper app-defined destinations push in the detail navigation stack, and the window exposes a normal toolbar with refresh actions.
 
 ## Window and menu
 
@@ -81,6 +81,8 @@ The app may use its own window identifier and title instead of the provided defa
 - copyable commerce diagnostics
 
 All simulator changes stay isolated from the app's production `PurchaseConfiguration`.
+
+The simulated-plan destination is navigation-only until an edit begins. Adding or editing a plan opens a sheet with explicit Cancel/Save actions; text fields, pricing inputs, billing period, entitlement mapping, preferred-plan selection, and introductory-offer inputs all live in that sheet. Reordering and deletion remain list actions, while Apply commits the staged catalog to the simulator.
 
 ## Replay real app flows
 
