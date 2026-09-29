@@ -15,6 +15,10 @@ struct MyApp: App {
     @Environment(\.openWindow) private var openWindow
     private let purchases = PurchaseManager(configuration: AppPurchases.configuration)
 
+    init() {
+        MacAppFoundation.setup()
+    }
+
     var body: some Scene {
         Window("My App", id: "main") {
             ContentView()
@@ -58,6 +62,22 @@ struct MyApp: App {
 ```
 
 The app may use its own window identifier and title instead of the provided defaults.
+
+`MacAppFoundation.setup()` is a required process-wide bootstrap. Call it first in `App.init()`, before resolving services or creating loggers. It is synchronous and idempotent. MacAppFoundation owns `LoggingSystem.bootstrap`; apps adopting this setup entry point must remove any app-owned SwiftLog bootstrap.
+
+## Built-in logs
+
+Debug builds capture SwiftLog output into a framework-owned bounded in-memory store in addition to normal console output. The **Logs** destination is enabled automatically under **General** and provides:
+
+- the latest 500 entries
+- timestamp, level, label, message, and deterministic metadata formatting
+- live auto-scroll
+- selectable monospaced rows
+- whole-log copy
+- per-row copy
+- clear
+
+The in-memory store and Logs UI are Debug-only. Release builds keep the framework console handler without retaining the developer log history.
 
 ## Built-in commerce controls
 
