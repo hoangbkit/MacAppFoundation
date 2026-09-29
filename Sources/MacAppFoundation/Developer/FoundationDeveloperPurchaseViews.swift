@@ -45,7 +45,6 @@ struct FoundationDeveloperProductCatalogView: View {
         .background(theme.canvas)
         .foregroundStyle(theme.textPrimary)
         .tint(theme.accent)
-        .navigationTitle("Product Prices")
     }
 }
 
@@ -85,7 +84,6 @@ struct FoundationDeveloperEntitlementView: View {
         .background(theme.canvas)
         .foregroundStyle(theme.textPrimary)
         .tint(theme.accent)
-        .navigationTitle("Entitlement")
     }
 
     private func entitlementRow(title: String, productID: String?) -> some View {
@@ -110,14 +108,16 @@ struct FoundationDeveloperEntitlementView: View {
 
 @MainActor
 struct FoundationDeveloperPlansView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.macAppTheme) private var theme
 
     let purchaseManager: PurchaseManager
 
     @State private var plans: [DeveloperPlanDraft]
     @State private var preferredProductID: String
+    @State private var editor: DeveloperPlanEditorContext?
+    @State private var pendingDelete: DeveloperPlanDeleteContext?
     @State private var validationMessage: String?
+    @State private var applyStatus: String?
 
     init(purchaseManager: PurchaseManager) {
         self.purchaseManager = purchaseManager
@@ -141,56 +141,85 @@ struct FoundationDeveloperPlansView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             Section {
-                ForEach(Array(plans.enumerated()), id: \.element.id) { index, plan in
-                    planRow(plan, index: index)
-                }
-
-                Button("Add simulated plan", systemImage: "plus") {
-                    let index = plans.count + 1
-                    plans.append(.new(index: index))
+                if plans.isEmpty {
+                    ContentUnavailableView(
+                        "No Simulated Plans",
+                        systemImage: "list.bullet.rectangle",
+                        description: Text("Add a plan to configure the in-process purchase simulator.")
+                    )
+                } else {
+                    ForEach(Array(plans.enumerated()), id: \.element.id) { index, plan in
+                        planRow(plan, index: index)
+                    }
                 }
             } header: {
                 Text("Plans")
             } footer: {
-                Text("Only enabled products appear in simulated paywalls. Pricing and introductory-offer changes never affect App Store Connect.")
+                Text("Select a plan to edit it in a sheet. Changes stay staged until Apply.")
                     .foregroundStyle(theme.textSecondary)
             }
 
             Section("Default Selection") {
-                if enabledPlans.isEmpty {
-                    Text("Enable at least one plan")
-                        .foregroundStyle(theme.textSecondary)
-                } else {
-                    Picker("Preferred plan", selection: $preferredProductID) {
-                        ForEach(enabledPlans) { plan in
-                            Text(plan.displayName.isEmpty ? plan.productID : plan.displayName)
-                                .tag(plan.productID)
-                        }
-                    }
-                }
+                LabeledContent("Preferred plan", value: preferredPlanTitle)
             }
 
-            Section {
-                Button("Restore app defaults", role: .destructive) {
+            Section("Simulator") {
+                Button("Restore app defaults", systemImage: "arrow.counterclockwise", role: .destructive) {
                     restoreAppDefaults()
+                }
+
+                if let applyStatus {
+                    Text(applyStatus)
+                        .font(.caption)
+                        .foregroundStyle(theme.success)
                 }
             }
         }
-        .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .background(theme.canvas)
         .foregroundStyle(theme.textPrimary)
         .tint(theme.accent)
-        .navigationTitle("Simulated Plans")
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    beginAddingPlan()
+                } label: {
+                    Label("Add Plan", systemImage: "plus")
+                }
+
                 Button("Apply") {
                     apply()
                 }
                 .fontWeight(.semibold)
             }
+        }
+        .sheet(item: $editor) { context in
+            FoundationDeveloperPlanEditorSheet(
+                plan: context.plan,
+                isPreferred: context.isPreferred,
+                existingProductIDs: productIDs(excluding: context.index)
+            ) { plan, isPreferred in
+                saveEditor(context, plan: plan, isPreferred: isPreferred)
+            }
+        }
+        .confirmationDialog(
+            "Delete Simulated Plan?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { context in
+            Button("Delete \(context.title)", role: .destructive) {
+                deletePlan(at: context.index)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDelete = nil
+            }
+        } message: { _ in
+            Text("The plan is removed from this draft. Apply to update the simulator.")
         }
         .alert("Cannot Apply Plans", isPresented: Binding(
             get: { validationMessage != nil },
@@ -204,14 +233,25 @@ struct FoundationDeveloperPlansView: View {
 
     private func planRow(_ plan: DeveloperPlanDraft, index: Int) -> some View {
         HStack(spacing: 10) {
-            NavigationLink {
-                FoundationDeveloperPlanDetailView(plan: $plans[index])
+            Button {
+                beginEditingPlan(at: index)
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(plan.displayName.isEmpty ? plan.productID : plan.displayName)
+                    HStack(spacing: 6) {
+                        Text(plan.displayName.isEmpty ? plan.productID : plan.displayName)
+
+                        if preferredProductID == plan.productID {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(theme.accent)
+                                .help("Preferred plan")
+                        }
+                    }
+
                     Text("\(plan.displayPrice) · \(plan.period.title)")
                         .font(.caption)
                         .foregroundStyle(theme.textSecondary)
+
                     if let offerSummary = plan.introductoryOfferSummary {
                         Text(offerSummary)
                             .font(.caption2)
@@ -219,12 +259,20 @@ struct FoundationDeveloperPlansView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             if plan.enabled {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(theme.accent)
                     .help("Enabled")
+            }
+
+            if plan.unlocksEntitlement {
+                Image(systemName: "crown.fill")
+                    .foregroundStyle(theme.warning)
+                    .help("Unlocks Pro")
             }
 
             Button {
@@ -246,27 +294,110 @@ struct FoundationDeveloperPlansView: View {
             .help("Move down")
 
             Button(role: .destructive) {
-                plans.remove(at: index)
+                pendingDelete = DeveloperPlanDeleteContext(
+                    index: index,
+                    title: plan.displayName.isEmpty ? plan.productID : plan.displayName
+                )
             } label: {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
             .help("Delete plan")
         }
+        .padding(.vertical, 3)
     }
 
     private var enabledPlans: [DeveloperPlanDraft] {
         plans.filter(\.enabled)
     }
 
+    private var preferredPlanTitle: String {
+        guard let plan = plans.first(where: { $0.productID == preferredProductID }) else {
+            return "None"
+        }
+        return plan.displayName.isEmpty ? plan.productID : plan.displayName
+    }
+
+    private func productIDs(excluding index: Int?) -> Set<String> {
+        Set(
+            plans.enumerated().compactMap { offset, plan in
+                guard offset != index else { return nil }
+                return plan.productID.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        )
+    }
+
+    private func beginAddingPlan() {
+        var index = plans.count + 1
+        var draft = DeveloperPlanDraft.new(index: index)
+        let existing = productIDs(excluding: nil)
+
+        while existing.contains(draft.productID) {
+            index += 1
+            draft = .new(index: index)
+        }
+
+        editor = DeveloperPlanEditorContext(
+            index: nil,
+            plan: draft,
+            isPreferred: plans.isEmpty
+        )
+    }
+
+    private func beginEditingPlan(at index: Int) {
+        guard plans.indices.contains(index) else { return }
+        let plan = plans[index]
+        editor = DeveloperPlanEditorContext(
+            index: index,
+            plan: plan,
+            isPreferred: preferredProductID == plan.productID
+        )
+    }
+
+    private func saveEditor(
+        _ context: DeveloperPlanEditorContext,
+        plan: DeveloperPlanDraft,
+        isPreferred: Bool
+    ) {
+        if let index = context.index, plans.indices.contains(index) {
+            plans[index] = plan
+        } else {
+            plans.append(plan)
+        }
+
+        let enabledIDs = Set(enabledPlans.map(\.productID))
+        if isPreferred, plan.enabled {
+            preferredProductID = plan.productID
+        } else if !enabledIDs.contains(preferredProductID) {
+            preferredProductID = enabledPlans.first?.productID ?? ""
+        }
+
+        applyStatus = nil
+    }
+
+    private func deletePlan(at index: Int) {
+        guard plans.indices.contains(index) else { return }
+        let removedID = plans[index].productID
+        plans.remove(at: index)
+
+        if preferredProductID == removedID || !enabledPlans.contains(where: { $0.productID == preferredProductID }) {
+            preferredProductID = enabledPlans.first?.productID ?? ""
+        }
+
+        pendingDelete = nil
+        applyStatus = nil
+    }
+
     private func movePlanUp(_ index: Int) {
         guard index > 0 else { return }
         plans.swapAt(index, index - 1)
+        applyStatus = nil
     }
 
     private func movePlanDown(_ index: Int) {
         guard index + 1 < plans.count else { return }
         plans.swapAt(index, index + 1)
+        applyStatus = nil
     }
 
     private func restoreAppDefaults() {
@@ -282,6 +413,7 @@ struct FoundationDeveloperPlansView: View {
         preferredProductID = configuration.preferredProductID
             ?? plans.first(where: \.enabled)?.productID
             ?? ""
+        applyStatus = nil
     }
 
     private func apply() {
@@ -339,52 +471,136 @@ struct FoundationDeveloperPlansView: View {
                 configuration: configuration,
                 products: products
             )
-            dismiss()
+            preferredProductID = preferred
+            applyStatus = "Applied to simulator"
         }
     }
 }
 
+private struct DeveloperPlanEditorContext: Identifiable {
+    let id = UUID()
+    let index: Int?
+    let plan: DeveloperPlanDraft
+    let isPreferred: Bool
+}
+
+private struct DeveloperPlanDeleteContext: Identifiable {
+    let id = UUID()
+    let index: Int
+    let title: String
+}
+
 @MainActor
-struct FoundationDeveloperPlanDetailView: View {
+private struct FoundationDeveloperPlanEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.macAppTheme) private var theme
 
-    @Binding var plan: DeveloperPlanDraft
+    @State private var plan: DeveloperPlanDraft
+    @State private var isPreferred: Bool
+
+    private let existingProductIDs: Set<String>
+    private let onSave: (DeveloperPlanDraft, Bool) -> Void
+
+    init(
+        plan: DeveloperPlanDraft,
+        isPreferred: Bool,
+        existingProductIDs: Set<String>,
+        onSave: @escaping (DeveloperPlanDraft, Bool) -> Void
+    ) {
+        _plan = State(initialValue: plan)
+        _isPreferred = State(initialValue: isPreferred)
+        self.existingProductIDs = existingProductIDs
+        self.onSave = onSave
+    }
 
     var body: some View {
-        Form {
-            Section("Availability") {
-                Toggle("Enabled", isOn: $plan.enabled)
-                Toggle("Unlocks Pro", isOn: $plan.unlocksEntitlement)
-                    .disabled(!plan.enabled)
-            }
+        NavigationStack {
+            Form {
+                Section("Availability") {
+                    Toggle("Enabled", isOn: $plan.enabled)
+                        .onChange(of: plan.enabled) { _, enabled in
+                            if !enabled {
+                                isPreferred = false
+                            }
+                        }
 
-            Section("Product") {
-                TextField("Product identifier", text: $plan.productID)
-                TextField("Display name", text: $plan.displayName)
-                TextField("Description", text: $plan.productDescription, axis: .vertical)
-                    .lineLimit(2...4)
-            }
+                    Toggle("Unlocks Pro", isOn: $plan.unlocksEntitlement)
+                        .disabled(!plan.enabled)
 
-            Section("Pricing") {
-                TextField("Displayed price", text: $plan.displayPrice)
-                TextField("Numeric price", value: $plan.price, format: .number)
-                Picker("Billing period", selection: $plan.period) {
-                    ForEach(DeveloperPlanPeriod.allCases) { period in
-                        Text(period.title).tag(period)
+                    Toggle("Preferred plan", isOn: $isPreferred)
+                        .disabled(!plan.enabled)
+                }
+
+                Section("Product") {
+                    TextField("Product identifier", text: $plan.productID)
+                    TextField("Display name", text: $plan.displayName)
+                    TextField("Description", text: $plan.productDescription, axis: .vertical)
+                        .lineLimit(2...4)
+                }
+
+                Section("Pricing") {
+                    TextField("Displayed price", text: $plan.displayPrice)
+                    TextField("Numeric price", value: $plan.price, format: .number)
+                    Picker("Billing period", selection: $plan.period) {
+                        ForEach(DeveloperPlanPeriod.allCases) { period in
+                            Text(period.title).tag(period)
+                        }
+                    }
+                }
+
+                if plan.period != .lifetime {
+                    introductoryOfferSection
+                }
+
+                if let validationMessage {
+                    Section {
+                        Text(validationMessage)
+                            .font(.caption)
+                            .foregroundStyle(theme.destructive)
                     }
                 }
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .background(theme.canvas)
+            .foregroundStyle(theme.textPrimary)
+            .tint(theme.accent)
+            .navigationTitle(plan.displayName.isEmpty ? "Plan" : plan.displayName)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
 
-            if plan.period != .lifetime {
-                introductoryOfferSection
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(plan, isPreferred)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(validationMessage != nil)
+                }
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .background(theme.canvas)
-        .foregroundStyle(theme.textPrimary)
-        .tint(theme.accent)
-        .navigationTitle(plan.displayName.isEmpty ? "Plan" : plan.displayName)
+        .frame(minWidth: 520, minHeight: 620)
+    }
+
+    private var validationMessage: String? {
+        let normalizedID = plan.productID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedID.isEmpty {
+            return "Product identifier is required."
+        }
+        if existingProductIDs.contains(normalizedID) {
+            return "Product identifier must be unique."
+        }
+        if plan.price < 0 {
+            return "Plan price cannot be negative."
+        }
+        if plan.introductoryOfferPrice < 0 {
+            return "Introductory-offer price cannot be negative."
+        }
+        return nil
     }
 
     private var introductoryOfferSection: some View {
