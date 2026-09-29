@@ -2,6 +2,38 @@
 import AppKit
 import SwiftUI
 
+private enum DeveloperAnalyticsEnabledOverride: String, CaseIterable, Identifiable {
+    case configured
+    case enabled
+    case disabled
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .configured: "Configured"
+        case .enabled: "On"
+        case .disabled: "Off"
+        }
+    }
+
+    var value: Bool? {
+        switch self {
+        case .configured: nil
+        case .enabled: true
+        case .disabled: false
+        }
+    }
+
+    init(_ value: Bool?) {
+        switch value {
+        case true: self = .enabled
+        case false: self = .disabled
+        case nil: self = .configured
+        }
+    }
+}
+
 @MainActor
 struct FoundationDeveloperAnalyticsView: View {
     @Environment(\.macAppTheme) private var theme
@@ -119,7 +151,46 @@ struct FoundationDeveloperAnalyticsView: View {
         _ configuration: AppAnalyticsDeveloperSnapshot.Configuration
     ) -> some View {
         Section("Configuration") {
-            LabeledContent("Enabled", value: configuration.enabled ? "Yes" : "No")
+            LabeledContent(
+                "Configured enabled",
+                value: configuration.configuredEnabled ? "Yes" : "No"
+            )
+            LabeledContent(
+                "Effective enabled",
+                value: configuration.effectiveEnabled ? "Yes" : "No"
+            )
+
+            if let analytics {
+                LabeledContent("Developer override") {
+                    Picker(
+                        "Developer override",
+                        selection: Binding(
+                            get: {
+                                DeveloperAnalyticsEnabledOverride(
+                                    configuration.developerEnabledOverride
+                                )
+                            },
+                            set: { selection in
+                                Task {
+                                    await setEnabledOverride(
+                                        selection.value,
+                                        configuration: configuration,
+                                        analytics: analytics
+                                    )
+                                }
+                            }
+                        )
+                    ) {
+                        ForEach(DeveloperAnalyticsEnabledOverride.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 260)
+                }
+            }
+
             copyableValue("App ID", configuration.appID)
             copyableValue("App key", configuration.appKey ?? "Not configured")
             copyableValue("Server", configuration.baseURL.absoluteString)
@@ -347,6 +418,30 @@ struct FoundationDeveloperAnalyticsView: View {
         }
     }
 
+    private func setEnabledOverride(
+        _ override: Bool?,
+        configuration: AppAnalyticsDeveloperSnapshot.Configuration,
+        analytics: AppAnalyticsClient
+    ) async {
+        let nextEffective = override ?? configuration.configuredEnabled
+
+        if configuration.effectiveEnabled && !nextEffective {
+            try? await analytics.applicationWillResignActive()
+        }
+
+        await analytics.developerSetEnabledOverride(override)
+
+        if !configuration.effectiveEnabled,
+           nextEffective,
+           NSApplication.shared.isActive {
+            try? await analytics.applicationDidBecomeActive()
+        }
+
+        await refresh(analytics, updateStatus: false)
+        actionStatus = "Analytics \(nextEffective ? "enabled" : "disabled") for this Debug run."
+        actionStatusIsError = false
+    }
+
     private func refresh(
         _ analytics: AppAnalyticsClient,
         updateStatus: Bool = true
@@ -450,7 +545,9 @@ struct FoundationDeveloperAnalyticsView: View {
 
         var lines = [
             "Analytics",
-            "Enabled: \(snapshot.configuration.enabled)",
+            "Configured enabled: \(snapshot.configuration.configuredEnabled)",
+            "Effective enabled: \(snapshot.configuration.effectiveEnabled)",
+            "Developer override: \(snapshot.configuration.developerEnabledOverride.map(String.init) ?? "configured")",
             "App ID: \(snapshot.configuration.appID)",
             "App key: \(snapshot.configuration.appKey ?? "Not configured")",
             "Server: \(snapshot.configuration.baseURL.absoluteString)",
