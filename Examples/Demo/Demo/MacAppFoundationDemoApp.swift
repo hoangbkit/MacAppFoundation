@@ -22,6 +22,8 @@ struct MacAppFoundationDemoApp: App {
     private let analytics: AppAnalyticsClient
 
     init() {
+        MacAppFoundation.setup()
+
         _demoState = State(initialValue: DemoState())
         _themeStore = State(initialValue: MacAppThemeStore(configuration: DemoTheme.configuration))
         _settingsRouter = State(initialValue: MacAppSettingsRouter())
