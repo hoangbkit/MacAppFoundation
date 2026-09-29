@@ -218,6 +218,8 @@ Review each shipping app's App Privacy answers and privacy policy based on the e
 
 Debug builds include a first-class **Developer Tools → Analytics** inspector when the Developer Tools scene receives the app-scoped analytics client through `.managesAnalytics(analytics)`.
 
-It exposes the actual configured app key along with app/server/storage configuration, installation identity, runtime/session/upload state, retry/backoff timestamps, client limits, and the persisted cumulative UTC-day snapshots. It also captures a bounded live activity feed from the real analytics client so event/error calls and upload behavior can be observed as they happen.
+It exposes the actual configured app key along with app/server/storage configuration, configured vs effective enablement, installation identity, runtime/session/upload state, retry/backoff timestamps, client limits, and the persisted cumulative UTC-day snapshots. It also captures a bounded live activity feed from the real analytics client so event/error calls and upload behavior can be observed as they happen.
+
+Developer Tools can override analytics enablement at runtime with **Configured / On / Off**. This override is Debug-only and process-local. Force On runs the same real analytics pipeline, including identity creation and uploads, even if `AppAnalyticsConfiguration.enabled` is false; Force Off makes tracking/lifecycle/upload calls inert until the override is cleared or changed.
 
 The inspector never creates an installation identity merely by opening the tab; it reads an existing Keychain identity when present. **Reset Local State** clears cumulative counters/session state but continues to preserve the installation identity.
