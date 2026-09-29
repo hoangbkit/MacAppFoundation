@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import Combine
+import CoreFoundation
 import Foundation
 import SwiftUI
 
