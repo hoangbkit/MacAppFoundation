@@ -120,13 +120,6 @@ private struct OverviewView: View {
                         value: "\(purchaseManager.products.count)",
                         systemImage: "cart"
                     )
-                    #if DEBUG
-                    statusCard(
-                        title: "Purchase Mode",
-                        value: purchaseManager.isUsingSimulatedPurchases ? "Simulated" : "StoreKit",
-                        systemImage: purchaseManager.isUsingSimulatedPurchases ? "testtube.2" : "apple.logo"
-                    )
-                    #endif
                 }
 
                 GroupBox("Reusable plan button") {
