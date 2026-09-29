@@ -86,7 +86,7 @@ The **Analytics** destination is enabled automatically under **General**. Give t
 
 The inspector shows the real client configuration and runtime state directly, including:
 
-- enabled state, app ID, actual app key, server and batch endpoint
+- configured enabled state, effective enabled state, app ID, actual app key, server and batch endpoint
 - configured/resolved app version, upload interval, retry count
 - concrete transport and state-store implementation types
 - UserDefaults storage key and Keychain service
@@ -99,6 +99,8 @@ The inspector shows the real client configuration and runtime state directly, in
 - every locally persisted UTC-day event/error/session cumulative counter
 
 The view refreshes its state every second while visible. It also owns a Debug-only bounded live activity stream (latest 500 entries) hooked into the real `AppAnalyticsClient` path for event calls, error calls, lifecycle transitions, batch sends/acceptance, retries, explicit/automatic flushes, resets, and failures. Structured server failures include server error code/message and Retry-After when available.
+
+The Configuration section also provides a Debug-only **Configured / On / Off** runtime override for analytics enablement. **Configured** follows the app's `AppAnalyticsConfiguration.enabled`; **On** and **Off** force the real client pipeline for the current process only. The override is not persisted. Force-enabling analytics intentionally allows tracking, lifecycle state, installation identity creation, and network uploads even when the shipping configuration is disabled.
 
 Toolbar actions provide **Refresh**, **Flush**, and **Copy Snapshot**. Developer actions can clear only the live activity stream or reset local cumulative analytics state; reset preserves the installation identity.
 
