@@ -22,7 +22,7 @@ struct MacAppFoundationDemoApp: App {
     private let analytics: AppAnalyticsClient
 
     init() {
-        MacAppFoundation.setup()
+        MacAppFoundationLogging.bootstrap()
 
         _demoState = State(initialValue: DemoState())
         _themeStore = State(initialValue: MacAppThemeStore(configuration: DemoTheme.configuration))
