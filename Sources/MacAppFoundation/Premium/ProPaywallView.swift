@@ -172,6 +172,7 @@ public struct ProPaywallView: View {
                 productContent
 
                 purchaseButton
+                    .padding(.top, 28)
 
                 if let disclosure = selectedProduct?.introductoryOfferDisclosure {
                     Text(disclosure)
@@ -194,6 +195,7 @@ public struct ProPaywallView: View {
             maxHeight: .infinity,
             alignment: .topLeading
         )
+        .padding(.top, 20)
     }
 
     @ViewBuilder
