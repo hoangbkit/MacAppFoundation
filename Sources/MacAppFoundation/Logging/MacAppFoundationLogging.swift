@@ -1,6 +1,10 @@
 import Foundation
 import Logging
 
+#if DEBUG
+import Combine
+#endif
+
 enum MacAppFoundationLogging {
     static func bootstrap() {
         LoggingSystem.bootstrap { label in
