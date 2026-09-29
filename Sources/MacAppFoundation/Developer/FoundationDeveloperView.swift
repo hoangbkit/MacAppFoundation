@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import Security
 import SwiftUI
 
 /// Debug-only developer controls shared by MacAppFoundation apps.
@@ -24,6 +25,7 @@ public struct FoundationDeveloperView: View {
     @State private var replay: FoundationDeveloperReplay?
     @State private var actionError: String?
     @State private var diagnosticsStatus: String?
+    @State private var overviewAnalyticsSnapshot: AppAnalyticsDeveloperSnapshot?
 
     public init(
         purchaseManager: PurchaseManager,
@@ -167,6 +169,8 @@ public struct FoundationDeveloperView: View {
     private var overviewView: some View {
         Form {
             appSection
+            runtimeSection
+            analyticsOverviewSection
 
             Section("Commerce") {
                 LabeledContent("Purchase mode", value: purchaseModeTitle)
@@ -177,6 +181,12 @@ public struct FoundationDeveloperView: View {
             }
         }
         .developerFormStyle(theme: theme)
+        .task {
+            while !Task.isCancelled {
+                await refreshOverviewAnalytics()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     private var purchasesView: some View {
@@ -377,9 +387,79 @@ public struct FoundationDeveloperView: View {
             LabeledContent("App", value: info.displayName)
             LabeledContent("Version", value: info.versionAndBuild)
             LabeledContent("Bundle ID", value: info.bundleIdentifier)
-            LabeledContent("Build", value: "Debug")
-            LabeledContent("System", value: ProcessInfo.processInfo.operatingSystemVersionString)
+            LabeledContent("Build configuration", value: "Debug")
+            LabeledContent("Architecture", value: info.architecture)
+            LabeledContent("Process ID", value: "\(info.processID)")
+            LabeledContent("macOS", value: ProcessInfo.processInfo.operatingSystemVersionString)
         }
+    }
+
+    private var runtimeSection: some View {
+        let info = DeveloperAppInfo.current
+        return Section("Runtime") {
+            LabeledContent("MAF setup", value: MacAppFoundation.isSetup ? "Ready" : "Not setup")
+            LabeledContent("Theme", value: "\(theme.name) · \(theme.id.rawValue)")
+            LabeledContent("Sandbox", value: info.isSandboxed ? "Enabled" : "Disabled")
+            LabeledContent("UserDefaults domain", value: info.bundleIdentifier)
+
+            LabeledContent("Bundle path") {
+                Text(info.bundlePath)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
+
+            LabeledContent("Executable path") {
+                Text(info.executablePath)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
+
+            LabeledContent(info.isSandboxed ? "Container home" : "Home directory") {
+                Text(info.homeDirectory)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private var analyticsOverviewSection: some View {
+        Section("Analytics") {
+            if analytics == nil {
+                LabeledContent("Client", value: "Not connected")
+            } else if let snapshot = overviewAnalyticsSnapshot {
+                LabeledContent(
+                    "Configured",
+                    value: snapshot.configuration.configuredEnabled ? "On" : "Off"
+                )
+                LabeledContent(
+                    "Effective",
+                    value: snapshot.configuration.effectiveEnabled ? "On" : "Off"
+                )
+                LabeledContent(
+                    "Override",
+                    value: snapshot.configuration.developerEnabledOverride.map {
+                        $0 ? "On" : "Off"
+                    } ?? "Configured"
+                )
+
+                LabeledContent("Installation ID") {
+                    Text(snapshot.runtime.installationID ?? "Not created")
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+            } else {
+                LabeledContent("Client", value: "Loading…")
+            }
+        }
+    }
+
+    private func refreshOverviewAnalytics() async {
+        guard let analytics else {
+            overviewAnalyticsSnapshot = nil
+            return
+        }
+
+        overviewAnalyticsSnapshot = try? await analytics.developerSnapshot()
     }
 
     @ViewBuilder
@@ -588,6 +668,12 @@ private struct DeveloperAppInfo {
     let version: String
     let build: String
     let bundleIdentifier: String
+    let architecture: String
+    let processID: Int32
+    let isSandboxed: Bool
+    let bundlePath: String
+    let executablePath: String
+    let homeDirectory: String
 
     var versionAndBuild: String {
         guard build != "—" else { return version }
@@ -607,8 +693,36 @@ private struct DeveloperAppInfo {
             displayName: displayName,
             version: version,
             build: build,
-            bundleIdentifier: bundle.bundleIdentifier ?? "—"
+            bundleIdentifier: bundle.bundleIdentifier ?? "—",
+            architecture: currentArchitecture,
+            processID: ProcessInfo.processInfo.processIdentifier,
+            isSandboxed: sandboxEnabled,
+            bundlePath: bundle.bundleURL.path,
+            executablePath: bundle.executableURL?.path ?? "—",
+            homeDirectory: NSHomeDirectory()
         )
+    }
+
+    private static var currentArchitecture: String {
+        #if arch(arm64)
+        "arm64"
+        #elseif arch(x86_64)
+        "x86_64"
+        #else
+        "unknown"
+        #endif
+    }
+
+    private static var sandboxEnabled: Bool {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let value = SecTaskCopyValueForEntitlement(
+                task,
+                "com.apple.security.app-sandbox" as CFString,
+                nil
+              ) else {
+            return false
+        }
+        return (value as? Bool) == true
     }
 }
 #endif
