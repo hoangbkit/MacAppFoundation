@@ -1531,7 +1531,7 @@ extension AppAnalyticsClient {
         developerRecord(
             .lifecycle,
             title: "Analytics enabled override changed",
-            detail: "configured=\(configuration.enabled) · override=\(override.map(String.init) ?? "configured") · effective=\(effectiveEnabled)"
+            detail: "configured=\(configuration.enabled) · override=\(override.map { $0 ? "true" : "false" } ?? "configured") · effective=\(effectiveEnabled)"
         )
     }
 
