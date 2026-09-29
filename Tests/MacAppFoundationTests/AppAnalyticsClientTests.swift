@@ -8,6 +8,7 @@ private actor MemoryAnalyticsStateStore: AppAnalyticsStateStoring {
     func load() async throws -> Data? { data }
     func save(_ data: Data) async throws { self.data = data }
     func remove() async throws { data = nil }
+    func containsData() -> Bool { data != nil }
 }
 
 private actor MockAnalyticsTransport: AppAnalyticsTransport {
@@ -41,12 +42,14 @@ private actor MockAnalyticsTransport: AppAnalyticsTransport {
 
 private func analyticsConfiguration(
     appKey: String? = "test-key-123456789",
+    enabled: Bool = true,
     uploadInterval: TimeInterval = 21_600
 ) -> AppAnalyticsConfiguration {
     AppAnalyticsConfiguration(
         appID: "analytics-test",
         appKey: appKey,
         baseURL: URL(string: "https://example.com")!,
+        enabled: enabled,
         keychainService: "com.hoangbkit.MacAppFoundationTests.\(UUID().uuidString)",
         stateStorageKey: "analytics-state-\(UUID().uuidString)",
         appVersion: "1.2.3",
@@ -83,7 +86,30 @@ private func requestBody(_ request: URLRequest) throws -> [String: Any] {
         baseURL: URL(string: "https://example.com")!
     )
 
+    #expect(configuration.enabled)
     #expect(configuration.uploadInterval == 5 * 60)
+}
+
+@Test func disabledAnalyticsIsCompletelyInert() async throws {
+    let transport = MockAnalyticsTransport()
+    let store = MemoryAnalyticsStateStore()
+    let client = AppAnalyticsClient(
+        configuration: analyticsConfiguration(enabled: false),
+        transport: transport,
+        stateStore: store,
+        now: { isoDate("2026-09-05T10:00:00Z") },
+        clientContext: analyticsContext()
+    )
+
+    try await client.track("Not Valid")
+    try await client.trackError("NotValid", component: "Not Valid")
+    try await client.applicationDidBecomeActive()
+    try await client.applicationWillResignActive()
+    try await client.flush()
+    await client.waitForAutomaticUpload()
+
+    #expect(await transport.capturedRequests().isEmpty)
+    #expect(await store.containsData() == false)
 }
 
 @Test func analyticsFlushMatchesNativeServerContract() async throws {
