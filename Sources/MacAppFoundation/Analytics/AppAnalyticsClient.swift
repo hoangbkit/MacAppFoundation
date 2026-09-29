@@ -288,7 +288,16 @@ public actor AppAnalyticsClient {
         dimension: String? = nil,
         count: Int = 1
     ) async throws {
-        guard configuration.enabled else { return }
+        guard configuration.enabled else {
+            #if DEBUG
+            developerRecord(
+                .event,
+                title: "Ignored event: \(name)",
+                detail: "Analytics disabled · dimension=\(dimension ?? "none") · count=\(count)"
+            )
+            #endif
+            return
+        }
         try Self.validateEvent(name: name, dimension: dimension, count: count)
         let timestamp = now()
         await acquireStateAccess()
@@ -329,8 +338,22 @@ public actor AppAnalyticsClient {
 
             state.days[dayKey] = day
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .event,
+                title: name,
+                detail: "dimension=\(dimension ?? "none") · count=\(count)"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Event failed: \(name)",
+                detail: error.localizedDescription
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -343,7 +366,16 @@ public actor AppAnalyticsClient {
         severity: AppAnalyticsErrorSeverity = .error,
         count: Int = 1
     ) async throws {
-        guard configuration.enabled else { return }
+        guard configuration.enabled else {
+            #if DEBUG
+            developerRecord(
+                .error,
+                title: "Ignored error: \(code)",
+                detail: "Analytics disabled · component=\(component) · severity=\(severity.rawValue) · count=\(count)"
+            )
+            #endif
+            return
+        }
         try Self.validateError(
             code: code,
             component: component,
@@ -392,8 +424,22 @@ public actor AppAnalyticsClient {
             day.errors = errors
             state.days[dayKey] = day
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .error,
+                title: code,
+                detail: "component=\(component) · severity=\(severity.rawValue) · count=\(count)"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Error tracking failed: \(code)",
+                detail: error.localizedDescription
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -438,8 +484,22 @@ public actor AppAnalyticsClient {
             }
 
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .lifecycle,
+                title: "Application became active",
+                detail: state.session?.activeSince == nil ? "Session inactive" : "Session active"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Active lifecycle tracking failed",
+                detail: error.localizedDescription
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -461,8 +521,22 @@ public actor AppAnalyticsClient {
                 }
             }
             try await saveState(state)
+            #if DEBUG
+            developerRecord(
+                .lifecycle,
+                title: "Application resigned active",
+                detail: "Session checkpointed"
+            )
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Resign lifecycle tracking failed",
+                detail: error.localizedDescription
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -470,22 +544,55 @@ public actor AppAnalyticsClient {
     }
 
     public func flush() async throws {
-        guard configuration.enabled else { return }
+        guard configuration.enabled else {
+            #if DEBUG
+            developerRecord(.upload, title: "Flush ignored", detail: "Analytics disabled")
+            #endif
+            return
+        }
         if let automaticUploadTask {
             await automaticUploadTask.value
         }
 
+        #if DEBUG
+        developerRecord(.upload, title: "Explicit flush started")
+        #endif
+
         await acquireUploadSlot()
         defer { releaseUploadSlot() }
-        try await performFlush(at: now(), force: true)
+        do {
+            try await performFlush(at: now(), force: true)
+            #if DEBUG
+            developerRecord(.upload, title: "Explicit flush completed")
+            #endif
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Explicit flush failed",
+                detail: error.localizedDescription
+            )
+            #endif
+            throw error
+        }
     }
 
     public func resetLocalState() async throws {
         await acquireStateAccess()
         do {
             try await stateStore.remove()
+            #if DEBUG
+            developerRecord(.reset, title: "Local analytics state reset")
+            #endif
             releaseStateAccess()
         } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Local analytics reset failed",
+                detail: error.localizedDescription
+            )
+            #endif
             releaseStateAccess()
             throw error
         }
@@ -522,8 +629,24 @@ public actor AppAnalyticsClient {
     }
 
     private func runAutomaticFlush() async {
+        #if DEBUG
+        developerRecord(.upload, title: "Automatic flush evaluated")
+        #endif
         await acquireUploadSlot()
-        try? await performFlush(at: now(), force: false)
+        do {
+            try await performFlush(at: now(), force: false)
+            #if DEBUG
+            developerRecord(.upload, title: "Automatic flush completed")
+            #endif
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Automatic flush failed",
+                detail: error.localizedDescription
+            )
+            #endif
+        }
         releaseUploadSlot()
         automaticUploadTask = nil
     }
@@ -752,6 +875,13 @@ public actor AppAnalyticsClient {
                       decoded.acceptedDays == batch.days.map(\.day) else {
                     throw AppAnalyticsError.invalidResponse
                 }
+                #if DEBUG
+                developerRecord(
+                    .upload,
+                    title: "Batch accepted",
+                    detail: "request=\(batch.requestId) · days=\(decoded.acceptedDays.joined(separator: ","))"
+                )
+                #endif
                 return
             } catch is CancellationError {
                 throw CancellationError()
@@ -1417,6 +1547,25 @@ extension AppAnalyticsClient {
             ),
             days: days
         )
+    }
+}
+#endif
+
+
+#if DEBUG
+extension AppAnalyticsClient {
+    private func developerRecord(
+        _ kind: AppAnalyticsDeveloperActivityStore.Kind,
+        title: String,
+        detail: String? = nil
+    ) {
+        Task { @MainActor in
+            AppAnalyticsDeveloperActivityStore.shared.append(
+                kind: kind,
+                title: title,
+                detail: detail
+            )
+        }
     }
 }
 #endif
