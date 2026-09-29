@@ -46,6 +46,72 @@ final class AppAnalyticsDeveloperToolsTests: XCTestCase {
         XCTAssertEqual(event.count, 2)
     }
 
+    func testDeveloperOverrideCanEnableConfiguredDisabledAnalytics() async throws {
+        let transport = DeveloperAnalyticsTransport()
+        let store = DeveloperAnalyticsMemoryStore()
+        let client = AppAnalyticsClient(
+            configuration: AppAnalyticsConfiguration(
+                appID: "developer-disabled-test",
+                appKey: "com.example.disabledoverride",
+                baseURL: URL(string: "https://analytics.example.com")!,
+                enabled: false,
+                uploadInterval: 300
+            ),
+            transport: transport,
+            stateStore: store
+        )
+
+        try await client.track("Not Valid")
+        var snapshot = try await client.developerSnapshot()
+        XCTAssertFalse(snapshot.configuration.configuredEnabled)
+        XCTAssertFalse(snapshot.configuration.effectiveEnabled)
+        XCTAssertNil(snapshot.configuration.developerEnabledOverride)
+        XCTAssertTrue(snapshot.days.isEmpty)
+
+        await client.developerSetEnabledOverride(true)
+        try await client.track("generation_completed", dimension: "local")
+        await client.waitForAutomaticUpload()
+
+        snapshot = try await client.developerSnapshot()
+        XCTAssertFalse(snapshot.configuration.configuredEnabled)
+        XCTAssertTrue(snapshot.configuration.effectiveEnabled)
+        XCTAssertEqual(snapshot.configuration.developerEnabledOverride, true)
+        XCTAssertTrue(
+            snapshot.days.flatMap(\.events).contains {
+                $0.name == "generation_completed" && $0.dimension == "local"
+            }
+        )
+    }
+
+    func testDeveloperOverrideCanDisableConfiguredEnabledAnalytics() async throws {
+        let client = AppAnalyticsClient(
+            configuration: AppAnalyticsConfiguration(
+                appID: "developer-enabled-test",
+                appKey: "com.example.enabledoverride",
+                baseURL: URL(string: "https://analytics.example.com")!,
+                enabled: true,
+                uploadInterval: 300
+            ),
+            transport: DeveloperAnalyticsTransport(),
+            stateStore: DeveloperAnalyticsMemoryStore()
+        )
+
+        await client.developerSetEnabledOverride(false)
+        try await client.track("Not Valid")
+
+        var snapshot = try await client.developerSnapshot()
+        XCTAssertTrue(snapshot.configuration.configuredEnabled)
+        XCTAssertFalse(snapshot.configuration.effectiveEnabled)
+        XCTAssertEqual(snapshot.configuration.developerEnabledOverride, false)
+        XCTAssertTrue(snapshot.days.isEmpty)
+
+        await client.developerSetEnabledOverride(nil)
+        snapshot = try await client.developerSnapshot()
+        XCTAssertTrue(snapshot.configuration.configuredEnabled)
+        XCTAssertTrue(snapshot.configuration.effectiveEnabled)
+        XCTAssertNil(snapshot.configuration.developerEnabledOverride)
+    }
+
     @MainActor
     func testTrackedEventAppearsInLiveDeveloperActivity() async throws {
         AppAnalyticsDeveloperActivityStore.shared.clear()
