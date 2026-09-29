@@ -11,6 +11,7 @@ import SwiftUI
 @MainActor
 public struct FoundationDeveloperView: View {
     @Environment(\.macAppTheme) private var theme
+    @Environment(\.appAnalytics) private var analytics
 
     private let purchaseManager: PurchaseManager
     private let configuration: FoundationDeveloperConfiguration
@@ -47,13 +48,15 @@ public struct FoundationDeveloperView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .navigationTitle(navigationTitle)
                     .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                refreshCommerce()
-                            } label: {
-                                Label("Refresh", systemImage: "arrow.clockwise")
+                        if showsCommerceRefresh {
+                            ToolbarItem(placement: .primaryAction) {
+                                Button {
+                                    refreshCommerce()
+                                } label: {
+                                    Label("Refresh", systemImage: "arrow.clockwise")
+                                }
+                                .help("Refresh entitlement and products")
                             }
-                            .help("Refresh entitlement and products")
                         }
                     }
             }
@@ -86,6 +89,7 @@ public struct FoundationDeveloperView: View {
             Section("General") {
                 sidebarRow(.overview, title: "Overview", systemImage: "square.grid.2x2")
                 sidebarRow(.diagnostics, title: "Diagnostics", systemImage: "stethoscope")
+                sidebarRow(.analytics, title: "Analytics", systemImage: "chart.bar.xaxis")
                 sidebarRow(.logs, title: "Logs", systemImage: "text.alignleft")
             }
 
@@ -148,6 +152,8 @@ public struct FoundationDeveloperView: View {
             replayView
         case .diagnostics:
             diagnosticsView
+        case .analytics:
+            FoundationDeveloperAnalyticsView(analytics: analytics)
         case .logs:
             MacAppFoundationLogInspectorView(store: MacAppFoundationLogStore.shared)
         case .customSection(let sectionID):
@@ -432,12 +438,23 @@ public struct FoundationDeveloperView: View {
             "Replay"
         case .diagnostics:
             "Diagnostics"
+        case .analytics:
+            "Analytics"
         case .logs:
             "Logs"
         case .customSection(let sectionID):
             configuration.additionalSections
                 .first(where: { $0.id == sectionID })?
                 .title ?? MacAppFoundationDeveloperTools.windowTitle
+        }
+    }
+
+    private var showsCommerceRefresh: Bool {
+        switch selection ?? .overview {
+        case .overview, .purchases, .products, .entitlement, .plans, .failures:
+            true
+        case .replays, .diagnostics, .analytics, .logs, .customSection:
+            false
         }
     }
 
@@ -547,6 +564,7 @@ private enum DeveloperDestination: Hashable {
     case failures
     case replays
     case diagnostics
+    case analytics
     case logs
     case customSection(String)
 }
