@@ -236,7 +236,7 @@ public actor AppAnalyticsClient {
     private var stateAccessWaiters: [CheckedContinuation<Void, Never>] = []
 
     #if DEBUG
-    private var developerEnabledOverride: Bool?
+    private var developerEnabledOverride: Bool? = nil
     #endif
 
     private var effectiveEnabled: Bool {
