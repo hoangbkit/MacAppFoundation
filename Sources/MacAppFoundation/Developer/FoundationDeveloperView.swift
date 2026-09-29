@@ -28,6 +28,10 @@ public struct FoundationDeveloperView: View {
         purchaseManager: PurchaseManager,
         configuration: FoundationDeveloperConfiguration = .init()
     ) {
+        precondition(
+            MacAppFoundation.isSetup,
+            "Call MacAppFoundation.setup() at the beginning of App.init() before using Developer Tools."
+        )
         self.purchaseManager = purchaseManager
         self.configuration = configuration
     }
@@ -82,6 +86,7 @@ public struct FoundationDeveloperView: View {
             Section("General") {
                 sidebarRow(.overview, title: "Overview", systemImage: "square.grid.2x2")
                 sidebarRow(.diagnostics, title: "Diagnostics", systemImage: "stethoscope")
+                sidebarRow(.logs, title: "Logs", systemImage: "text.alignleft")
             }
 
             Section("Commerce") {
@@ -143,6 +148,8 @@ public struct FoundationDeveloperView: View {
             replayView
         case .diagnostics:
             diagnosticsView
+        case .logs:
+            MacAppFoundationLogInspectorView(store: MacAppFoundationLogStore.shared)
         case .customSection(let sectionID):
             customSectionView(sectionID: sectionID)
         }
@@ -425,6 +432,8 @@ public struct FoundationDeveloperView: View {
             "Replay"
         case .diagnostics:
             "Diagnostics"
+        case .logs:
+            "Logs"
         case .customSection(let sectionID):
             configuration.additionalSections
                 .first(where: { $0.id == sectionID })?
@@ -538,6 +547,7 @@ private enum DeveloperDestination: Hashable {
     case failures
     case replays
     case diagnostics
+    case logs
     case customSection(String)
 }
 
