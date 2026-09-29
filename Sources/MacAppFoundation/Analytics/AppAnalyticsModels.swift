@@ -4,6 +4,7 @@ public struct AppAnalyticsConfiguration: Sendable {
     public var appID: String
     public var appKey: String?
     public var baseURL: URL
+    public var enabled: Bool
     public var keychainService: String
     public var stateStorageKey: String
     public var appVersion: String?
@@ -14,6 +15,7 @@ public struct AppAnalyticsConfiguration: Sendable {
         appID: String,
         appKey: String? = nil,
         baseURL: URL,
+        enabled: Bool = true,
         keychainService: String = "com.hoangbkit.MacAppFoundation.AppAnalytics",
         stateStorageKey: String? = nil,
         appVersion: String? = nil,
@@ -22,6 +24,7 @@ public struct AppAnalyticsConfiguration: Sendable {
     ) {
         self.appID = appID
         self.appKey = appKey
+        self.enabled = enabled
         self.baseURL = ProcessInfo.processInfo.environment["CI"] == nil
             ? baseURL
             : URL(string: "http://localhost:1")!
