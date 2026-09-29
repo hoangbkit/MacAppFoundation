@@ -52,7 +52,7 @@ The release has three pillars:
 - local-package dependency on MacAppFoundation
 - StoreKit Testing configuration matching the simulator: Monthly paid introductory pricing, Yearly + 7-day free trial, and Lifetime
 - Debug simulator enabled by default
-- showcase navigation for commerce, paywall, gating, upsells, Settings/Plan, and Developer Tools
+- showcase navigation for production-facing commerce, paywall, gating, upsells, and Settings/Plan
 - real app-owned paywall and upsell windows
 - app-owned General / Plan / About Settings scene
 - dedicated Debug Developer Tools window and `CommandMenu("Developer")`
