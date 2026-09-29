@@ -89,7 +89,6 @@ struct MacAppFoundationDemoApp: App {
             DemoOnboardingView(onboarding: onboarding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .macAppTheme(themeStore, purchaseManager: purchases)
-                .managesAnalytics(analytics)
         }
 
         MacAppFullSizeWindow(
@@ -116,7 +115,6 @@ struct MacAppFoundationDemoApp: App {
             DemoUpsellWindow(purchaseManager: purchases)
                 .environment(demoState)
                 .macAppTheme(themeStore, purchaseManager: purchases)
-                .managesAnalytics(analytics)
         }
         .defaultSize(width: 560, height: 520)
         .windowResizability(.contentSize)
@@ -148,7 +146,6 @@ struct MacAppFoundationDemoApp: App {
             )
             .environment(demoState)
             .macAppTheme(themeStore, purchaseManager: purchases)
-            .managesAnalytics(analytics)
         }
     }
 
