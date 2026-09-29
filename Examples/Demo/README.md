@@ -27,7 +27,7 @@ XcodeGen 2.45.4+ is required.
 - live StoreKit path using `Configuration.storekit`
 - Debug in-process purchase simulator
 - Monthly with three months of paid introductory pricing, Yearly + 7-day free trial, and Lifetime products
-- product loading, purchase outcomes, restore, entitlement refresh, and foreground lifecycle refresh
+- production-facing product presentation, purchase, and restore in the main Commerce showcase
 - `ProPaywallView` including trial/intro copy, restore, legal links, and Redeem Code
 - `ProBadge`, `ProGate`, `ProLockedOverlay`, `ProGateButton`, and `ProLockPopover`
 - existing-content premium access policy
@@ -38,10 +38,10 @@ XcodeGen 2.45.4+ is required.
 - full simulated-plan editor, entitlement forcing, failures, latency, trials, and introductory offers through Developer Tools
 - one shared app-scoped `AppAnalyticsClient` reused across Demo scenes through `.managesAnalytics`
 - Demo analytics configured for app ID `maf` at `analytics.133043.xyz`, using `Bundle.main.bundleIdentifier` (`com.hoangbkit.maf`) as the native app key
-- dedicated Analytics section for custom event, custom error, flush, and local-state testing against that same shared client
+- built-in Developer Tools Analytics inspector for configuration, live activity, persisted counters, flush, and reset
 - automatic `ProPaywallView` commerce funnel events through the shared analytics environment
 
-The Demo deliberately applies the same `MacAppThemeStore` and shared analytics client to the main window, onboarding, paywall, upsell, Developer Tools, and Settings roots. This demonstrates the required multi-scene integration pattern: SwiftUI scene environments do not automatically cross scene boundaries, so each scene root receives the same shared dependencies.
+The Demo deliberately keeps production-facing examples in the main window and centralizes debug-only behavior in the separate Developer Tools window. The same `MacAppThemeStore` and shared analytics client are injected into scene roots that need them.
 
 The Theme pane exposes every built-in in catalog order:
 
@@ -73,4 +73,4 @@ About        (Demo)
 
 Apps with larger Settings surfaces can opt into `MacAppSettingsSection` and the `sections:` initializer to add labeled groups.
 
-The app launches in simulated purchase mode in Debug so every purchase flow works without an App Store account. Turn simulation off in Developer Tools or Commerce to exercise the matching StoreKit-testing catalog instead.
+The app launches in simulated purchase mode in Debug so every purchase flow works without an App Store account. Use Developer Tools to switch to StoreKit Testing, edit simulated plans, force entitlements, inject failures, inspect analytics/logs, and reset debug state.
