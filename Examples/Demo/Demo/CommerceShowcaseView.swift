@@ -79,59 +79,6 @@ struct CommerceShowcaseView: View {
                     .padding(6)
                 }
 
-                #if DEBUG
-                GroupBox("Debug simulator API") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle(
-                            "Use in-process simulator",
-                            isOn: Binding(
-                                get: { purchaseManager.isUsingSimulatedPurchases },
-                                set: { enabled in
-                                    Task {
-                                        await purchaseManager.setSimulatedPurchasesEnabled(enabled)
-                                        message = enabled ? "Simulator enabled" : "StoreKit Testing enabled"
-                                    }
-                                }
-                            )
-                        )
-
-                        HStack(spacing: 8) {
-                            Button("Free") {
-                                forceEntitlement(nil)
-                            }
-                            ForEach(purchaseManager.products) { product in
-                                Button(product.planLabel) {
-                                    forceEntitlement(product.id)
-                                }
-                            }
-                        }
-                        .disabled(!purchaseManager.isUsingSimulatedPurchases)
-
-                        HStack(spacing: 8) {
-                            Button("Reset Simulator", role: .destructive) {
-                                Task {
-                                    await purchaseManager.resetSimulatedPurchases()
-                                    message = "Simulator reset"
-                                }
-                            }
-
-                            Button("Reset Failures") {
-                                Task {
-                                    await purchaseManager.resetSimulatedFailures()
-                                    message = "Failure simulation reset"
-                                }
-                            }
-                        }
-                        .disabled(!purchaseManager.isUsingSimulatedPurchases)
-
-                        Text("The Developer Tools window exposes the complete catalog editor, introductory offers, latency, purchase outcomes, loading failures, and restore failures.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(6)
-                }
-                #endif
-
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -198,20 +145,7 @@ struct CommerceShowcaseView: View {
         .padding(.vertical, 10)
     }
 
-    #if DEBUG
-    private func forceEntitlement(_ productID: String?) {
-        Task {
-            if let productID {
-                await purchaseManager.setSimulatedPurchasedProductIDs([productID])
-                message = "Forced entitlement: \(productID)"
-            } else {
-                await purchaseManager.setSimulatedPurchasedProductIDs([])
-                message = "Forced Free entitlement"
-            }
-            demoState.record(message)
-        }
-    }
-    #endif
+
 
     private var entitlementTitle: String {
         switch purchaseManager.entitlementState {
