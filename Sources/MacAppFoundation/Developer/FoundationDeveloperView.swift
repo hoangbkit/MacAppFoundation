@@ -15,7 +15,7 @@ public struct FoundationDeveloperView: View {
     private let purchaseManager: PurchaseManager
     private let configuration: FoundationDeveloperConfiguration
 
-    @State private var selection: DeveloperDestination = .overview
+    @State private var selection: DeveloperDestination? = .overview
     @State private var purchaseOutcome: DeveloperPurchaseOutcome = .success
     @State private var catalogFailureEnabled = false
     @State private var restoreFailureEnabled = false
@@ -126,7 +126,7 @@ public struct FoundationDeveloperView: View {
 
     @ViewBuilder
     private var detailView: some View {
-        switch selection {
+        switch selection ?? .overview {
         case .overview:
             overviewView
         case .purchases:
@@ -408,7 +408,7 @@ public struct FoundationDeveloperView: View {
     }
 
     private var navigationTitle: String {
-        switch selection {
+        switch selection ?? .overview {
         case .overview:
             "Overview"
         case .purchases:
