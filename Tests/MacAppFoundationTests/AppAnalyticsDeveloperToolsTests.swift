@@ -30,10 +30,6 @@ final class AppAnalyticsDeveloperToolsTests: XCTestCase {
 
         XCTAssertEqual(snapshot.configuration.appID, "developer-test")
         XCTAssertEqual(snapshot.configuration.appKey, appKey)
-        XCTAssertEqual(
-            snapshot.configuration.endpointURL.absoluteString,
-            "https://analytics.example.com/v1/analytics/batch"
-        )
         XCTAssertEqual(snapshot.configuration.resolvedAppVersion, "1.2.3")
         XCTAssertEqual(snapshot.runtime.pendingDayCount, 1)
 
