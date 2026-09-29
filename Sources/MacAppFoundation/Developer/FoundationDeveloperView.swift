@@ -91,6 +91,7 @@ public struct FoundationDeveloperView: View {
                 sidebarRow(.diagnostics, title: "Diagnostics", systemImage: "stethoscope")
                 sidebarRow(.analytics, title: "Analytics", systemImage: "chart.bar.xaxis")
                 sidebarRow(.logs, title: "Logs", systemImage: "text.alignleft")
+                sidebarRow(.userDefaults, title: "User Defaults", systemImage: "slider.horizontal.3")
             }
 
             Section("Commerce") {
@@ -156,6 +157,8 @@ public struct FoundationDeveloperView: View {
             FoundationDeveloperAnalyticsView(analytics: analytics)
         case .logs:
             MacAppFoundationLogInspectorView(store: MacAppFoundationLogStore.shared)
+        case .userDefaults:
+            FoundationDeveloperUserDefaultsView()
         case .customSection(let sectionID):
             customSectionView(sectionID: sectionID)
         }
@@ -442,6 +445,8 @@ public struct FoundationDeveloperView: View {
             "Analytics"
         case .logs:
             "Logs"
+        case .userDefaults:
+            "User Defaults"
         case .customSection(let sectionID):
             configuration.additionalSections
                 .first(where: { $0.id == sectionID })?
@@ -453,7 +458,7 @@ public struct FoundationDeveloperView: View {
         switch selection ?? .overview {
         case .overview, .purchases, .products, .entitlement, .plans, .failures:
             true
-        case .replays, .diagnostics, .analytics, .logs, .customSection(_:):
+        case .replays, .diagnostics, .analytics, .logs, .userDefaults, .customSection(_:):
             false
         }
     }
@@ -566,6 +571,7 @@ private enum DeveloperDestination: Hashable {
     case diagnostics
     case analytics
     case logs
+    case userDefaults
     case customSection(String)
 }
 
