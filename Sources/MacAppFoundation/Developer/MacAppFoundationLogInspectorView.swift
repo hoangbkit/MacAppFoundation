@@ -35,9 +35,13 @@ struct MacAppFoundationLogInspectorView: View {
 
             if store.entries.isEmpty {
                 ContentUnavailableView(
-                    "No Logs Yet",
+                    MacAppFoundationLogging.isBootstrapped ? "No Logs Yet" : "MAF Logging Not Enabled",
                     systemImage: "text.alignleft",
-                    description: Text("SwiftLog entries captured after MacAppFoundation.setup() appear here.")
+                    description: Text(
+                        MacAppFoundationLogging.isBootstrapped
+                            ? "SwiftLog entries captured after bootstrap appear here."
+                            : "Call MacAppFoundationLogging.bootstrap() before creating Logger instances to enable MAF log capture."
+                    )
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
