@@ -31,10 +31,6 @@ public struct FoundationDeveloperView: View {
         purchaseManager: PurchaseManager,
         configuration: FoundationDeveloperConfiguration = .init()
     ) {
-        precondition(
-            MacAppFoundation.isSetup,
-            "Call MacAppFoundation.setup() at the beginning of App.init() before using Developer Tools."
-        )
         self.purchaseManager = purchaseManager
         self.configuration = configuration
     }
@@ -397,7 +393,10 @@ public struct FoundationDeveloperView: View {
     private var runtimeSection: some View {
         let info = DeveloperAppInfo.current
         return Section("Runtime") {
-            LabeledContent("MAF setup", value: MacAppFoundation.isSetup ? "Ready" : "Not setup")
+            LabeledContent(
+                "MAF logging",
+                value: MacAppFoundationLogging.isBootstrapped ? "Enabled" : "Not enabled"
+            )
             LabeledContent("Theme", value: "\(theme.name) · \(theme.id.rawValue)")
             LabeledContent("Sandbox", value: info.isSandboxed ? "Enabled" : "Disabled")
             LabeledContent("UserDefaults domain", value: info.bundleIdentifier)
