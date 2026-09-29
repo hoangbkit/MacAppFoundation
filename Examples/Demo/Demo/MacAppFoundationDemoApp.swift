@@ -47,8 +47,7 @@ struct MacAppFoundationDemoApp: App {
         Window("MacAppFoundation Demo", id: DemoWindowID.main) {
             ContentView(
                 purchaseManager: purchases,
-                settingsRouter: settingsRouter,
-                analytics: analytics
+                settingsRouter: settingsRouter
             )
             .environment(demoState)
             .macAppTheme(themeStore, purchaseManager: purchases)
@@ -76,32 +75,6 @@ struct MacAppFoundationDemoApp: App {
                     openWindow(id: MacAppFoundationDeveloperTools.windowID)
                 }
                 .keyboardShortcut("d", modifiers: [.command, .option])
-
-                Button("Replay Onboarding") {
-                    replayOnboarding()
-                }
-                .keyboardShortcut("o", modifiers: [.command, .option])
-
-                Divider()
-
-                Button("Use Simulated Purchases") {
-                    Task {
-                        await purchases.setSimulatedPurchasesEnabled(true)
-                    }
-                }
-
-                Button("Use StoreKit Testing") {
-                    Task {
-                        await purchases.setSimulatedPurchasesEnabled(false)
-                    }
-                }
-
-                Button("Reset Simulated Purchases", role: .destructive) {
-                    Task {
-                        await purchases.setSimulatedPurchasesEnabled(true)
-                        await purchases.resetSimulatedPurchases()
-                    }
-                }
             }
             #endif
         }
