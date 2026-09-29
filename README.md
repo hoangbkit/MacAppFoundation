@@ -34,7 +34,7 @@ MacAppFoundation now has six main areas:
 2. **Pro experience** — theme-aware paywall, trials/introductory offers, Pro gates, badges, locked-feature UI, compact plan control, and reusable upsells.
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
 4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Theme/Plan panes, and selection routing.
-5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, replays, analytics actions, and app-defined developer actions.
+5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, live SwiftLog inspection, replays, analytics actions, and app-defined developer actions.
 6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, stable Keychain installation identity, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
 
 Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation never persists a bare `hasPro` flag. Apps may opt into an account-scoped, versioned Keychain cache of previously verified entitlement records for offline continuity.
@@ -49,6 +49,28 @@ Add MacAppFoundation as a Swift Package dependency and link the `MacAppFoundatio
     from: "1.0.0"
 )
 ```
+
+## Required app setup
+
+Call the framework bootstrap first in the app's initializer:
+
+```swift
+@main
+struct MyApp: App {
+    init() {
+        MacAppFoundation.setup()
+        // Resolve app services after setup.
+    }
+
+    var body: some Scene {
+        // ...
+    }
+}
+```
+
+The call is synchronous, cheap, and idempotent. It is the single process-wide setup point for MacAppFoundation and is intentionally designed to host additional framework initialization in future releases.
+
+MacAppFoundation owns SwiftLog bootstrap. In Debug it multiplexes logs to normal console output and the bounded in-memory store shown in Developer Tools → Logs; in Release it keeps console logging without the developer log store. Apps using `MacAppFoundation.setup()` must not also call `LoggingSystem.bootstrap`.
 
 ## 1. Configure commerce
 
