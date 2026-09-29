@@ -15,10 +15,6 @@ struct MyApp: App {
     @Environment(\.openWindow) private var openWindow
     private let purchases = PurchaseManager(configuration: AppPurchases.configuration)
 
-    init() {
-        MacAppFoundation.setup()
-    }
-
     var body: some Scene {
         Window("My App", id: "main") {
             ContentView()
@@ -62,19 +58,17 @@ struct MyApp: App {
 }
 ```
 
-The app may use its own window identifier and title instead of the provided defaults.
-
-`MacAppFoundation.setup()` is a required process-wide bootstrap. Call it first in `App.init()`, before resolving services or creating loggers. It is synchronous and idempotent. MacAppFoundation owns `LoggingSystem.bootstrap`; apps adopting this setup entry point must remove any app-owned SwiftLog bootstrap.
+The app may use its own window identifier and title instead of the provided defaults. MacAppFoundation requires no global setup to use Developer Tools.
 
 ## Overview dashboard
 
-The **Overview** destination provides a compact app/runtime dashboard without duplicating the deeper tabs. It shows app name, version/build, bundle ID, Debug configuration, CPU architecture, process ID, macOS version, MAF setup state, active theme, actual App Sandbox entitlement state, UserDefaults domain, bundle/executable/home-or-container paths, analytics configured/effective/override state plus existing installation ID, and a concise commerce status summary.
+The **Overview** destination provides a compact app/runtime dashboard without duplicating the deeper tabs. It shows app name, version/build, bundle ID, Debug configuration, CPU architecture, process ID, macOS version, MAF logging opt-in state, active theme, actual App Sandbox entitlement state, UserDefaults domain, bundle/executable/home-or-container paths, analytics configured/effective/override state plus existing installation ID, and a concise commerce status summary.
 
 Paths and installation identifiers are selectable for copying. Analytics status refreshes while Overview is visible and does not create an installation identity.
 
 ## Built-in logs
 
-Debug builds capture SwiftLog output into a framework-owned bounded in-memory store in addition to normal console output. The **Logs** destination is enabled automatically under **General** and provides:
+The **Logs** destination is always available under **General**, but MAF log capture is opt-in. Apps that want MAF to own SwiftLog should call `MacAppFoundationLogging.bootstrap()` before creating any `Logger` instances. Debug builds then capture SwiftLog output into a framework-owned bounded in-memory store in addition to normal console output. The inspector provides:
 
 - the latest 500 entries
 - timestamp, level, label, message, and deterministic metadata formatting
@@ -84,7 +78,7 @@ Debug builds capture SwiftLog output into a framework-owned bounded in-memory st
 - per-row copy
 - clear
 
-The in-memory store and Logs UI are Debug-only. Release builds keep the framework console handler without retaining the developer log history.
+The in-memory store and Logs UI are Debug-only. Release builds that opt into MAF logging keep the framework console handler without retaining developer log history. Apps that already bootstrap another SwiftLog backend should not call the MAF logging bootstrap, because SwiftLog supports only one process-wide bootstrap. Developer Tools otherwise remain fully usable without MAF logging.
 
 ## Built-in analytics inspector
 
