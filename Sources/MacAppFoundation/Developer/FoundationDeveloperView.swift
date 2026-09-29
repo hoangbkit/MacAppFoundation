@@ -453,7 +453,7 @@ public struct FoundationDeveloperView: View {
         switch selection ?? .overview {
         case .overview, .purchases, .products, .entitlement, .plans, .failures:
             true
-        case .replays, .diagnostics, .analytics, .logs, .customSection:
+        case .replays, .diagnostics, .analytics, .logs, .customSection(_:):
             false
         }
     }
