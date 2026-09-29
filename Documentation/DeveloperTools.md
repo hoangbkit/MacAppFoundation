@@ -104,6 +104,25 @@ The Configuration section also provides a Debug-only **Configured / On / Off** r
 
 Toolbar actions provide **Refresh**, **Flush**, and **Copy Snapshot**. Developer actions can clear only the live activity stream or reset local cumulative analytics state; reset preserves the installation identity.
 
+## Built-in User Defaults inspector
+
+The **User Defaults** destination under **General** inspects the running app's real `UserDefaults.standard` search result and its app persistent domain. It shows each key, detected type, current effective value, and whether that value is actually **Stored** in the app domain or only **Effective** through registration/inheritance.
+
+Developer Tools supports:
+
+- live refresh plus search by key, value, or type
+- String, Bool, Integer, Double, Date, Data, Array, and Dictionary values
+- click-to-edit sheets with explicit Cancel/Save
+- adding new values with an explicit type
+- app-domain overrides for registered/inherited values
+- Base64 editing for Data
+- XML property-list editing for arrays and dictionaries
+- copy key/value actions
+- delete of stored values with fallback visibility after deletion
+- confirmed reset of the app's entire persistent UserDefaults domain
+
+All mutations operate on the real running app defaults. A view using `@AppStorage` or otherwise observing UserDefaults can therefore react immediately. Reset removes only the app persistent domain; registered or inherited fallback values can remain visible.
+
 ## Built-in commerce controls
 
 `FoundationDeveloperView` exposes the MacAppFoundation purchase simulator without requiring App Store Connect:
