@@ -288,6 +288,7 @@ public actor AppAnalyticsClient {
         dimension: String? = nil,
         count: Int = 1
     ) async throws {
+        guard configuration.enabled else { return }
         try Self.validateEvent(name: name, dimension: dimension, count: count)
         let timestamp = now()
         await acquireStateAccess()
@@ -342,6 +343,7 @@ public actor AppAnalyticsClient {
         severity: AppAnalyticsErrorSeverity = .error,
         count: Int = 1
     ) async throws {
+        guard configuration.enabled else { return }
         try Self.validateError(
             code: code,
             component: component,
@@ -399,6 +401,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
+        guard configuration.enabled else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -444,6 +447,7 @@ public actor AppAnalyticsClient {
     }
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
+        guard configuration.enabled else { return }
         await acquireStateAccess()
         do {
             var state = try await loadState()
@@ -466,6 +470,7 @@ public actor AppAnalyticsClient {
     }
 
     public func flush() async throws {
+        guard configuration.enabled else { return }
         if let automaticUploadTask {
             await automaticUploadTask.value
         }
@@ -507,6 +512,7 @@ public actor AppAnalyticsClient {
     }
 
     private func scheduleAutomaticFlush() {
+        guard configuration.enabled else { return }
         guard automaticUploadTask == nil else { return }
 
         automaticUploadTask = Task { [weak self] in
@@ -569,6 +575,7 @@ public actor AppAnalyticsClient {
     }
 
     private func performFlush(at timestamp: Date, force: Bool) async throws {
+        guard configuration.enabled else { return }
         guard let prepared = try await prepareUpload(at: timestamp, force: force) else {
             return
         }
