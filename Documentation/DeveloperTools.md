@@ -37,6 +37,7 @@ struct MyApp: App {
                 purchaseManager: purchases,
                 configuration: developerConfiguration
             )
+            .managesAnalytics(analytics)
         }
         .defaultSize(
             width: MacAppFoundationDeveloperTools.defaultWidth,
@@ -78,6 +79,28 @@ Debug builds capture SwiftLog output into a framework-owned bounded in-memory st
 - clear
 
 The in-memory store and Logs UI are Debug-only. Release builds keep the framework console handler without retaining the developer log history.
+
+## Built-in analytics inspector
+
+The **Analytics** destination is enabled automatically under **General**. Give the Developer Tools scene the same app-scoped client with `.managesAnalytics(analytics)`; if no client is attached, the destination explains that analytics is not connected.
+
+The inspector shows the real client configuration and runtime state directly, including:
+
+- enabled state, app ID, actual app key, server and batch endpoint
+- configured/resolved app version, upload interval, retry count
+- concrete transport and state-store implementation types
+- UserDefaults storage key and Keychain service
+- current installation ID when one already exists
+- OS/build/device-family/architecture context
+- active-session state and timestamps
+- stored UTC-day count, last upload, next retry/backoff time
+- automatic-upload task and in-flight state
+- client limits for batching, retention, events, errors, sessions, body size, and session timeout
+- every locally persisted UTC-day event/error/session cumulative counter
+
+The view refreshes its state every second while visible. It also owns a Debug-only bounded live activity stream (latest 500 entries) hooked into the real `AppAnalyticsClient` path for event calls, error calls, lifecycle transitions, batch sends/acceptance, retries, explicit/automatic flushes, resets, and failures. Structured server failures include server error code/message and Retry-After when available.
+
+Toolbar actions provide **Refresh**, **Flush**, and **Copy Snapshot**. Developer actions can clear only the live activity stream or reset local cumulative analytics state; reset preserves the installation identity.
 
 ## Built-in commerce controls
 
