@@ -92,6 +92,7 @@ struct FoundationDeveloperAnalyticsView: View {
         if let snapshot {
             List {
                 configurationSection(snapshot.configuration)
+                limitsSection(snapshot.limits)
                 runtimeSection(snapshot.runtime)
                 liveActivitySection
                 storedDaysSection(snapshot.days)
@@ -136,8 +137,28 @@ struct FoundationDeveloperAnalyticsView: View {
                 value: durationLabel(configuration.uploadInterval)
             )
             LabeledContent("Transport retries", value: "\(configuration.transportRetryCount)")
+            copyableValue("Transport type", configuration.transportType)
+            copyableValue("State store type", configuration.stateStoreType)
             copyableValue("State storage key", configuration.stateStorageKey)
             copyableValue("Keychain service", configuration.keychainService)
+        }
+    }
+
+    private func limitsSection(
+        _ limits: AppAnalyticsDeveloperSnapshot.Limits
+    ) -> some View {
+        Section("Client Limits") {
+            LabeledContent("Days per batch", value: "\(limits.maxDaysPerBatch)")
+            LabeledContent("Offline age", value: "\(limits.maxOfflineAgeDays) days")
+            LabeledContent("Event counters / day", value: "\(limits.maxEventsPerDay)")
+            LabeledContent("Occurrences / event / day", value: "\(limits.maxEventCountPerDay)")
+            LabeledContent("Total event occurrences / day", value: "\(limits.maxTotalEventCountPerDay)")
+            LabeledContent("Error counters / day", value: "\(limits.maxErrorsPerDay)")
+            LabeledContent("Total errors / day", value: "\(limits.maxTotalErrorCountPerDay)")
+            LabeledContent("Sessions / day", value: "\(limits.maxSessionsPerDay)")
+            LabeledContent("Session seconds / day", value: "\(limits.maxSessionSecondsPerDay)")
+            LabeledContent("Request body", value: byteCountLabel(limits.maxBodyBytes))
+            LabeledContent("Session resume timeout", value: durationLabel(limits.sessionTimeout))
         }
     }
 
@@ -415,6 +436,10 @@ struct FoundationDeveloperAnalyticsView: View {
         return "\(Int(interval)) sec"
     }
 
+    private func byteCountLabel(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)
+    }
+
     private func dateLabel(_ date: Date?) -> String {
         guard let date else { return "None" }
         return timestampFormatter.string(from: date)
@@ -430,6 +455,8 @@ struct FoundationDeveloperAnalyticsView: View {
             "App key: \(snapshot.configuration.appKey ?? "Not configured")",
             "Server: \(snapshot.configuration.baseURL.absoluteString)",
             "Endpoint: \(snapshot.configuration.endpointURL.absoluteString)",
+            "Transport: \(snapshot.configuration.transportType)",
+            "State store: \(snapshot.configuration.stateStoreType)",
             "State storage key: \(snapshot.configuration.stateStorageKey)",
             "Keychain service: \(snapshot.configuration.keychainService)",
             "Installation ID: \(snapshot.runtime.installationID ?? "Not created")",
