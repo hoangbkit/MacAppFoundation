@@ -1246,7 +1246,7 @@ struct AppAnalyticsDeveloperSnapshot: Sendable {
         let appID: String
         let baseURL: URL
         let endpointURL: URL
-        let appKeyConfigured: Bool
+        let appKey: String?
         let keychainService: String
         let stateStorageKey: String
         let configuredAppVersion: String?
@@ -1391,7 +1391,7 @@ extension AppAnalyticsClient {
                     baseURL: configuration.baseURL,
                     path: "/v1/analytics/batch"
                 ),
-                appKeyConfigured: configuration.appKey != nil,
+                appKey: configuration.appKey,
                 keychainService: configuration.keychainService,
                 stateStorageKey: configuration.stateStorageKey,
                 configuredAppVersion: configuration.appVersion,
