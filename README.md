@@ -277,11 +277,12 @@ Window(
         configuration: developerConfiguration
     )
     .macAppTheme(themeStore)
+    .managesAnalytics(analytics)
 }
 #endif
 ```
 
-The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, replays, and app-defined developer sections. The Demo uses an app-defined section to exercise analytics track/flush/reset actions without contacting production infrastructure.
+The developer console includes simulator/live switching, entitlement selection, editable plans/prices/order, entitlement mapping, preferred plan, free-trial/introductory-offer configuration, failures, latency, reset/reload/refresh, diagnostics, live SwiftLog inspection, a first-class live Analytics inspector, replays, and app-defined developer sections. The Analytics destination shows the real client configuration (including app key), installation/session/upload state, persisted UTC-day counters, retry/backoff state, implementation details, and a bounded live stream of analytics events/errors/uploads.
 
 See `Documentation/DeveloperTools.md` for app-specific actions/toggles/values and replay examples.
 
