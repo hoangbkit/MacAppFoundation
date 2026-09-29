@@ -1,4 +1,5 @@
 import Foundation
+import Logging
 
 /// Process-wide bootstrap for MacAppFoundation.
 ///
@@ -20,6 +21,8 @@ public enum MacAppFoundation {
         guard !didSetup else { return }
         MacAppFoundationLogging.bootstrap()
         didSetup = true
+
+        Logger(label: "MacAppFoundation").debug("MacAppFoundation setup complete")
     }
 
     static var isSetup: Bool {
