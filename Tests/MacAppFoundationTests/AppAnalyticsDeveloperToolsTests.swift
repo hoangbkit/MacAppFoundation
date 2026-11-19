@@ -136,6 +136,35 @@ final class AppAnalyticsDeveloperToolsTests: XCTestCase {
 
         AppAnalyticsDeveloperActivityStore.shared.clear()
     }
+
+    func testDeveloperSnapshotReflectsInMemoryStorageModeWithoutTouchingKeychain() async throws {
+        let keychainService = "com.hoangbkit.MacAppFoundationTests.DeveloperInMemory.\(UUID().uuidString)"
+        let secureStore = AppAnalyticsSecureStore(service: keychainService)
+        let client = AppAnalyticsClient(
+            configuration: AppAnalyticsConfiguration(
+                appID: "developer-in-memory",
+                baseURL: URL(string: "https://analytics.example.com")!,
+                keychainService: keychainService,
+                uploadInterval: 300,
+                storageMode: .inMemory
+            ),
+            transport: DeveloperAnalyticsTransport()
+        )
+
+        let initialSnapshot = try await client.developerSnapshot()
+        XCTAssertEqual(initialSnapshot.configuration.storageMode, .inMemory)
+        XCTAssertTrue(initialSnapshot.configuration.stateStoreType.contains("InMemoryAppAnalyticsStateStore"))
+        XCTAssertNil(initialSnapshot.runtime.installationID)
+
+        try await client.track("generation_completed", dimension: "memory")
+        await client.waitForAutomaticUpload()
+
+        let uploadedSnapshot = try await client.developerSnapshot()
+        XCTAssertEqual(uploadedSnapshot.configuration.storageMode, .inMemory)
+        XCTAssertNotNil(uploadedSnapshot.runtime.installationID)
+        let storedInKeychain = try await secureStore.string(for: "developer-in-memory.installation")
+        XCTAssertNil(storedInKeychain)
+    }
 }
 
 private actor DeveloperAnalyticsMemoryStore: AppAnalyticsStateStoring {

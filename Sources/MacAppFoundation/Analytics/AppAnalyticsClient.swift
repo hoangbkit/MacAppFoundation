@@ -221,7 +221,7 @@ public actor AppAnalyticsClient {
         let error: Detail
     }
 
-    private let configuration: AppAnalyticsConfiguration
+    private var configuration: AppAnalyticsConfiguration
     private let transport: any AppAnalyticsTransport
     private let stateStore: any AppAnalyticsStateStoring
     private let secureStore: AppAnalyticsSecureStore
@@ -234,6 +234,13 @@ public actor AppAnalyticsClient {
     private var uploadWaiters: [CheckedContinuation<Void, Never>] = []
     private var stateAccessInFlight = false
     private var stateAccessWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Installation identity used by `AppAnalyticsStorageMode.inMemory`. It lives only as
+    /// long as this client and is never written to the Keychain.
+    private var inMemoryInstallationID: String?
+    /// Incremented whenever analytics transitions to disabled. Work captures the value
+    /// when it starts and refuses to write or upload once it no longer matches, so a
+    /// disable (even one immediately followed by a re-enable) fences off in-flight work.
+    private var enablementGeneration: UInt64 = 0
 
     #if DEBUG
     private var developerEnabledOverride: Bool? = nil
@@ -247,15 +254,15 @@ public actor AppAnalyticsClient {
         #endif
     }
 
+    /// Creates a client whose local state follows `configuration.storageMode`:
+    /// `UserDefaults` for `.persisted` (the default) or an in-memory store for `.inMemory`.
     public init(
         configuration: AppAnalyticsConfiguration,
         transport: any AppAnalyticsTransport = URLSessionAppAnalyticsTransport()
     ) {
         self.configuration = configuration
         self.transport = transport
-        self.stateStore = UserDefaultsAppAnalyticsStateStore(
-            storageKey: configuration.stateStorageKey
-        )
+        self.stateStore = Self.makeStateStore(for: configuration)
         self.secureStore = AppAnalyticsSecureStore(service: configuration.keychainService)
         self.encoder = Self.makeEncoder()
         self.decoder = Self.makeDecoder()
@@ -263,6 +270,11 @@ public actor AppAnalyticsClient {
         self.clientContext = .current()
     }
 
+    /// Creates a client that keeps daily counters in `stateStore`.
+    ///
+    /// The injected store is always used, regardless of `configuration.storageMode`.
+    /// The storage mode still decides whether the installation identity lives in the
+    /// Keychain (`.persisted`) or only in this client's memory (`.inMemory`).
     public init(
         configuration: AppAnalyticsConfiguration,
         transport: any AppAnalyticsTransport,
@@ -323,7 +335,12 @@ public actor AppAnalyticsClient {
             throw error
         }
         let timestamp = now()
+        let generation = enablementGeneration
         await acquireStateAccess()
+        guard isCurrent(generation) else {
+            releaseStateAccess()
+            return
+        }
         do {
             var state = try await loadState()
             pruneExpiredDays(in: &state, relativeTo: timestamp)
@@ -360,7 +377,7 @@ public actor AppAnalyticsClient {
             }
 
             state.days[dayKey] = day
-            try await saveState(state)
+            try await saveState(state, generation: generation)
             #if DEBUG
             developerRecord(
                 .event,
@@ -417,7 +434,12 @@ public actor AppAnalyticsClient {
         }
 
         let timestamp = now()
+        let generation = enablementGeneration
         await acquireStateAccess()
+        guard isCurrent(generation) else {
+            releaseStateAccess()
+            return
+        }
         do {
             var state = try await loadState()
             pruneExpiredDays(in: &state, relativeTo: timestamp)
@@ -457,7 +479,7 @@ public actor AppAnalyticsClient {
 
             day.errors = errors
             state.days[dayKey] = day
-            try await saveState(state)
+            try await saveState(state, generation: generation)
             #if DEBUG
             developerRecord(
                 .error,
@@ -482,13 +504,18 @@ public actor AppAnalyticsClient {
 
     public func applicationDidBecomeActive(at timestamp: Date = Date()) async throws {
         guard effectiveEnabled else { return }
+        let generation = enablementGeneration
         await acquireStateAccess()
+        guard isCurrent(generation) else {
+            releaseStateAccess()
+            return
+        }
         do {
             var state = try await loadState()
             pruneExpiredDays(in: &state, relativeTo: timestamp)
 
             if state.session?.activeSince != nil {
-                try await saveState(state)
+                try await saveState(state, generation: generation)
                 #if DEBUG
                 developerRecord(
                     .lifecycle,
@@ -524,7 +551,7 @@ public actor AppAnalyticsClient {
                 )
             }
 
-            try await saveState(state)
+            try await saveState(state, generation: generation)
             #if DEBUG
             developerRecord(
                 .lifecycle,
@@ -549,7 +576,12 @@ public actor AppAnalyticsClient {
 
     public func applicationWillResignActive(at timestamp: Date = Date()) async throws {
         guard effectiveEnabled else { return }
+        let generation = enablementGeneration
         await acquireStateAccess()
+        guard isCurrent(generation) else {
+            releaseStateAccess()
+            return
+        }
         do {
             var state = try await loadState()
             pruneExpiredDays(in: &state, relativeTo: timestamp)
@@ -561,7 +593,7 @@ public actor AppAnalyticsClient {
                     state.session = session
                 }
             }
-            try await saveState(state)
+            try await saveState(state, generation: generation)
             #if DEBUG
             developerRecord(
                 .lifecycle,
@@ -591,6 +623,7 @@ public actor AppAnalyticsClient {
             #endif
             return
         }
+        let generation = enablementGeneration
         if let automaticUploadTask {
             await automaticUploadTask.value
         }
@@ -602,7 +635,7 @@ public actor AppAnalyticsClient {
         await acquireUploadSlot()
         defer { releaseUploadSlot() }
         do {
-            try await performFlush(at: now(), force: true)
+            try await performFlush(at: now(), force: true, generation: generation)
             #if DEBUG
             developerRecord(.upload, title: "Explicit flush completed")
             #endif
@@ -616,6 +649,69 @@ public actor AppAnalyticsClient {
             #endif
             throw error
         }
+    }
+
+    /// Whether analytics is currently enabled for this client.
+    ///
+    /// Reflects the most recent `setEnabled(_:)` call, or `configuration.enabled` when
+    /// it has never been called.
+    public var isEnabled: Bool {
+        configuration.enabled
+    }
+
+    /// Enables or disables analytics at runtime, for example from a settings toggle.
+    ///
+    /// The client and any `.managesAnalytics(_:)` modifiers observing it keep working;
+    /// there is no need to create or reinstall a client.
+    ///
+    /// Disabling takes effect immediately: later tracking, lifecycle, and flush calls are
+    /// no-ops, the pending automatic upload is cancelled, work that was already in flight
+    /// can no longer write local state or send further batches, and locally pending
+    /// analytics state is cleared. No final upload is performed and the installation
+    /// identity is left unchanged. Re-enabling resumes collection from a clean local slate.
+    ///
+    /// Calling this with the current value does nothing. In particular, a client created
+    /// with `enabled: false` keeps any previously stored state until it is enabled and
+    /// then disabled again, or until `resetLocalState()` is called.
+    public func setEnabled(_ enabled: Bool) async {
+        guard configuration.enabled != enabled else { return }
+        configuration.enabled = enabled
+
+        guard !enabled else {
+            #if DEBUG
+            developerRecord(
+                .lifecycle,
+                title: "Analytics enabled",
+                detail: "Runtime setEnabled(true) · effective=\(effectiveEnabled)"
+            )
+            #endif
+            return
+        }
+
+        invalidateInFlightWork()
+
+        // Wait for any in-progress read-modify-write to finish (it can no longer save),
+        // then discard local state. Errors are ignored: disabling must always succeed.
+        await acquireStateAccess()
+        do {
+            try await stateStore.remove()
+            #if DEBUG
+            developerRecord(
+                .lifecycle,
+                title: "Analytics disabled",
+                detail: "Runtime setEnabled(false) · pending local state cleared · installation identity kept"
+            )
+            #endif
+        } catch {
+            #if DEBUG
+            developerRecord(
+                .failure,
+                title: "Analytics disabled; local state clear failed",
+                detail: developerErrorDetail(error)
+            )
+            #endif
+        }
+        releaseStateAccess()
     }
 
     public func resetLocalState() async throws {
@@ -663,21 +759,26 @@ public actor AppAnalyticsClient {
         guard effectiveEnabled else { return }
         guard automaticUploadTask == nil else { return }
 
+        let generation = enablementGeneration
         automaticUploadTask = Task { [weak self] in
             guard let self else { return }
-            await self.runAutomaticFlush()
+            await self.runAutomaticFlush(generation: generation)
         }
     }
 
-    private func runAutomaticFlush() async {
+    private func runAutomaticFlush(generation: UInt64) async {
         #if DEBUG
         developerRecord(.upload, title: "Automatic flush evaluated")
         #endif
         await acquireUploadSlot()
         do {
-            try await performFlush(at: now(), force: false)
+            try await performFlush(at: now(), force: false, generation: generation)
             #if DEBUG
-            developerRecord(.upload, title: "Automatic flush completed")
+            if isCurrent(generation) {
+                developerRecord(.upload, title: "Automatic flush completed")
+            } else {
+                developerRecord(.upload, title: "Automatic flush abandoned", detail: "Analytics disabled")
+            }
             #endif
         } catch {
             #if DEBUG
@@ -690,6 +791,24 @@ public actor AppAnalyticsClient {
         }
         releaseUploadSlot()
         automaticUploadTask = nil
+
+        // A disable cancels this task but leaves it registered until it unwinds, which
+        // suppresses scheduling. If analytics was re-enabled meanwhile, schedule the
+        // upload that newer activity would otherwise have triggered.
+        if generation != enablementGeneration {
+            scheduleAutomaticFlush()
+        }
+    }
+
+    /// Fences off all work started before this call. Callers must already have updated
+    /// the enabled state so that `effectiveEnabled` is `false`.
+    private func invalidateInFlightWork() {
+        enablementGeneration &+= 1
+        automaticUploadTask?.cancel()
+    }
+
+    private func isCurrent(_ generation: UInt64) -> Bool {
+        generation == enablementGeneration && effectiveEnabled
     }
 
     private func acquireStateAccess() async {
@@ -738,20 +857,29 @@ public actor AppAnalyticsClient {
         next.resume()
     }
 
-    private func performFlush(at timestamp: Date, force: Bool) async throws {
-        guard effectiveEnabled else { return }
-        guard let prepared = try await prepareUpload(at: timestamp, force: force) else {
+    private func performFlush(at timestamp: Date, force: Bool, generation: UInt64) async throws {
+        guard isCurrent(generation) else { return }
+        guard let prepared = try await prepareUpload(
+            at: timestamp,
+            force: force,
+            generation: generation
+        ) else {
             return
         }
 
         let currentDay = prepared.currentDay
         let batches = prepared.batches
+        // Never create or read an installation identity on behalf of disabled analytics.
+        guard isCurrent(generation) else { return }
         let installationID = try await installationID()
         var acceptedHistoricalDays: Set<String> = []
 
         do {
             for batch in batches {
                 try Task.checkCancellation()
+                // A disable while a previous batch (or the identity lookup) was suspended
+                // stops the upload here: no further batches and no state merge.
+                guard isCurrent(generation) else { return }
                 try await send(batch, installationID: installationID)
                 acceptedHistoricalDays.formUnion(
                     batch.days.lazy.map(\.day).filter { $0 != currentDay }
@@ -767,7 +895,8 @@ public actor AppAnalyticsClient {
                 acceptedHistoricalDays: acceptedHistoricalDays,
                 completedAt: completionTimestamp,
                 retryDate: retryDate,
-                succeeded: false
+                succeeded: false,
+                generation: generation
             )
             throw error
         }
@@ -776,15 +905,21 @@ public actor AppAnalyticsClient {
             acceptedHistoricalDays: acceptedHistoricalDays,
             completedAt: now(),
             retryDate: nil,
-            succeeded: true
+            succeeded: true,
+            generation: generation
         )
     }
 
     private func prepareUpload(
         at timestamp: Date,
-        force: Bool
+        force: Bool,
+        generation: UInt64
     ) async throws -> (batches: [Batch], currentDay: String)? {
         await acquireStateAccess()
+        guard isCurrent(generation) else {
+            releaseStateAccess()
+            return nil
+        }
         do {
             var snapshot = try await loadState()
             pruneExpiredDays(in: &snapshot, relativeTo: timestamp)
@@ -792,7 +927,7 @@ public actor AppAnalyticsClient {
 
             guard !snapshot.days.isEmpty else {
                 snapshot.nextUploadAttemptAt = nil
-                try await saveState(snapshot)
+                try await saveState(snapshot, generation: generation)
                 releaseStateAccess()
                 return nil
             }
@@ -800,13 +935,13 @@ public actor AppAnalyticsClient {
             if !force {
                 if let nextUploadAttemptAt = snapshot.nextUploadAttemptAt,
                    timestamp < nextUploadAttemptAt {
-                    try await saveState(snapshot)
+                    try await saveState(snapshot, generation: generation)
                     releaseStateAccess()
                     return nil
                 }
                 if let lastUploadAt = snapshot.lastUploadAt,
                    timestamp.timeIntervalSince(lastUploadAt) < configuration.uploadInterval {
-                    try await saveState(snapshot)
+                    try await saveState(snapshot, generation: generation)
                     releaseStateAccess()
                     return nil
                 }
@@ -820,14 +955,14 @@ public actor AppAnalyticsClient {
 
             let batches = try makeBatches(from: snapshot)
             guard !batches.isEmpty else {
-                try await saveState(snapshot)
+                try await saveState(snapshot, generation: generation)
                 releaseStateAccess()
                 return nil
             }
 
             // Persist checkpoint/prune mutations before any network suspension. The returned
             // batches are immutable upload input and the local-state gate is released here.
-            try await saveState(snapshot)
+            try await saveState(snapshot, generation: generation)
             releaseStateAccess()
             return (batches, currentDay)
         } catch {
@@ -840,9 +975,16 @@ public actor AppAnalyticsClient {
         acceptedHistoricalDays: Set<String>,
         completedAt timestamp: Date,
         retryDate: Date?,
-        succeeded: Bool
+        succeeded: Bool,
+        generation: UInt64
     ) async throws {
         await acquireStateAccess()
+        // Local state was cleared by a disable while the request was in flight. Merging
+        // now would resurrect upload bookkeeping, so the result is dropped.
+        guard isCurrent(generation) else {
+            releaseStateAccess()
+            return
+        }
         do {
             var latest = try await loadState()
             pruneExpiredDays(in: &latest, relativeTo: timestamp)
@@ -859,7 +1001,7 @@ public actor AppAnalyticsClient {
                 latest.nextUploadAttemptAt = retryDate
             }
 
-            try await saveState(latest)
+            try await saveState(latest, generation: generation)
             releaseStateAccess()
         } catch {
             releaseStateAccess()
@@ -969,6 +1111,26 @@ public actor AppAnalyticsClient {
     }
 
     private func installationID() async throws -> String {
+        switch configuration.storageMode {
+        case .inMemory:
+            return try inMemoryInstallationIdentity()
+        case .persisted:
+            return try await persistedInstallationID()
+        }
+    }
+
+    /// Returns the client-scoped identity for `.inMemory` storage, creating it on first
+    /// use. Actor isolation makes the check-and-create atomic, and the Keychain is never
+    /// consulted, so every client instance gets its own random identifier.
+    private func inMemoryInstallationIdentity() throws -> String {
+        if let inMemoryInstallationID { return inMemoryInstallationID }
+        try Task.checkCancellation()
+        let generated = UUID().uuidString.lowercased()
+        inMemoryInstallationID = generated
+        return generated
+    }
+
+    private func persistedInstallationID() async throws -> String {
         let account = "\(configuration.appID).installation"
         let gateKey = "installation|\(configuration.keychainService)|\(configuration.appID)"
         await AppAnalyticsInstallationGate.shared.acquire(gateKey)
@@ -1011,7 +1173,11 @@ public actor AppAnalyticsClient {
         }
     }
 
-    private func saveState(_ state: PersistedState) async throws {
+    /// Writes local state unless the work that produced it was started before analytics
+    /// was disabled. Stale writes are dropped silently: disabling must win over any
+    /// read-modify-write that was suspended when it happened.
+    private func saveState(_ state: PersistedState, generation: UInt64) async throws {
+        guard isCurrent(generation) else { return }
         do {
             try await stateStore.save(encoder.encode(state))
         } catch let error as AppAnalyticsError {
@@ -1292,6 +1458,17 @@ public actor AppAnalyticsClient {
         )
     }
 
+    private static func makeStateStore(
+        for configuration: AppAnalyticsConfiguration
+    ) -> any AppAnalyticsStateStoring {
+        switch configuration.storageMode {
+        case .persisted:
+            return UserDefaultsAppAnalyticsStateStore(storageKey: configuration.stateStorageKey)
+        case .inMemory:
+            return InMemoryAppAnalyticsStateStore()
+        }
+    }
+
     private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -1438,6 +1615,7 @@ struct AppAnalyticsDeveloperSnapshot: Sendable {
         let configuredEnabled: Bool
         let effectiveEnabled: Bool
         let developerEnabledOverride: Bool?
+        let storageMode: AppAnalyticsStorageMode
         let appID: String
         let baseURL: URL
         let endpointURL: URL
@@ -1521,11 +1699,13 @@ struct AppAnalyticsDeveloperSnapshot: Sendable {
 
 extension AppAnalyticsClient {
     func developerSetEnabledOverride(_ override: Bool?) {
+        let wasEnabled = effectiveEnabled
         developerEnabledOverride = override
 
-        if !effectiveEnabled {
-            automaticUploadTask?.cancel()
-            automaticUploadTask = nil
+        if wasEnabled, !effectiveEnabled {
+            // Same fencing as a runtime disable, but local state is left untouched so a
+            // Debug-only override can be flipped back without losing counters.
+            invalidateInFlightWork()
         }
 
         developerRecord(
@@ -1551,15 +1731,22 @@ extension AppAnalyticsClient {
             throw error
         }
 
-        let installationAccount = "\(configuration.appID).installation"
         let installationID: String?
         let installationIdentityError: String?
-        do {
-            installationID = try await secureStore.string(for: installationAccount)
+        switch configuration.storageMode {
+        case .inMemory:
+            // Never consult the Keychain for in-memory clients.
+            installationID = inMemoryInstallationID
             installationIdentityError = nil
-        } catch {
-            installationID = nil
-            installationIdentityError = error.localizedDescription
+        case .persisted:
+            let installationAccount = "\(configuration.appID).installation"
+            do {
+                installationID = try await secureStore.string(for: installationAccount)
+                installationIdentityError = nil
+            } catch {
+                installationID = nil
+                installationIdentityError = error.localizedDescription
+            }
         }
 
         let days = state.days
@@ -1614,6 +1801,7 @@ extension AppAnalyticsClient {
                 configuredEnabled: configuration.enabled,
                 effectiveEnabled: effectiveEnabled,
                 developerEnabledOverride: developerEnabledOverride,
+                storageMode: configuration.storageMode,
                 appID: configuration.appID,
                 baseURL: configuration.baseURL,
                 endpointURL: Self.endpointURL(

@@ -152,7 +152,10 @@ public struct FoundationDeveloperView: View {
         case .diagnostics:
             diagnosticsView
         case .analytics:
-            FoundationDeveloperAnalyticsView(analytics: analytics)
+            FoundationDeveloperAnalyticsView(
+                analytics: analytics,
+                onStorageModeChange: configuration.onAnalyticsStorageModeChange
+            )
         case .logs:
             MacAppFoundationLogInspectorView(store: MacAppFoundationLogStore.shared)
         case .userDefaults:
@@ -177,7 +180,7 @@ public struct FoundationDeveloperView: View {
             }
         }
         .developerFormStyle(theme: theme)
-        .task {
+        .task(id: analytics.map(ObjectIdentifier.init)) {
             while !Task.isCancelled {
                 await refreshOverviewAnalytics()
                 try? await Task.sleep(for: .seconds(1))
@@ -439,6 +442,10 @@ public struct FoundationDeveloperView: View {
                     value: snapshot.configuration.developerEnabledOverride.map {
                         $0 ? "On" : "Off"
                     } ?? "Configured"
+                )
+                LabeledContent(
+                    "Storage mode",
+                    value: snapshot.configuration.storageMode == .inMemory ? "In Memory" : "Persisted"
                 )
 
                 LabeledContent("Installation ID") {

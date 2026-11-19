@@ -1,6 +1,20 @@
 import Foundation
 
+/// Where an `AppAnalyticsClient` keeps its installation identity and daily counters.
+public enum AppAnalyticsStorageMode: String, CaseIterable, Equatable, Hashable, Sendable {
+    /// Persists the installation ID in the Keychain and daily counters in `UserDefaults`.
+    /// This is the default.
+    case persisted
+    /// Keeps the installation ID and daily counters in memory for the lifetime of the
+    /// client instance only. Neither the Keychain nor `UserDefaults` is read or written,
+    /// and every new client starts with a fresh installation ID and empty counters.
+    case inMemory
+}
+
 public struct AppAnalyticsConfiguration: Sendable {
+    /// Default automatic upload interval, in seconds.
+    public static let defaultUploadInterval: TimeInterval = 20
+
     public var appID: String
     public var appKey: String?
     public var baseURL: URL
@@ -10,6 +24,10 @@ public struct AppAnalyticsConfiguration: Sendable {
     public var appVersion: String?
     public var uploadInterval: TimeInterval
     public var transportRetryCount: Int
+    /// Storage used by the convenience initializer. A state store injected through
+    /// `AppAnalyticsClient.init(configuration:transport:stateStore:)` always wins for
+    /// daily counters; the storage mode still controls the installation identity.
+    public var storageMode: AppAnalyticsStorageMode
 
     public init(
         appID: String,
@@ -19,8 +37,9 @@ public struct AppAnalyticsConfiguration: Sendable {
         keychainService: String = "com.hoangbkit.MacAppFoundation.AppAnalytics",
         stateStorageKey: String? = nil,
         appVersion: String? = nil,
-        uploadInterval: TimeInterval = 5 * 60,
-        transportRetryCount: Int = 1
+        uploadInterval: TimeInterval = AppAnalyticsConfiguration.defaultUploadInterval,
+        transportRetryCount: Int = 1,
+        storageMode: AppAnalyticsStorageMode = .persisted
     ) {
         self.appID = appID
         self.appKey = appKey
@@ -34,6 +53,7 @@ public struct AppAnalyticsConfiguration: Sendable {
         self.appVersion = appVersion
         self.uploadInterval = max(0, uploadInterval)
         self.transportRetryCount = max(0, transportRetryCount)
+        self.storageMode = storageMode
     }
 }
 
@@ -107,5 +127,27 @@ public actor UserDefaultsAppAnalyticsStateStore: AppAnalyticsStateStoring {
 
     public func remove() async throws {
         UserDefaults.standard.removeObject(forKey: storageKey)
+    }
+}
+
+/// A process-local state store used by `AppAnalyticsStorageMode.inMemory`.
+///
+/// Nothing it holds survives the lifetime of the store instance, and it never touches
+/// `UserDefaults` or any other persistent storage.
+public actor InMemoryAppAnalyticsStateStore: AppAnalyticsStateStoring {
+    private var data: Data?
+
+    public init() {}
+
+    public func load() async throws -> Data? {
+        data
+    }
+
+    public func save(_ data: Data) async throws {
+        self.data = data
+    }
+
+    public func remove() async throws {
+        data = nil
     }
 }

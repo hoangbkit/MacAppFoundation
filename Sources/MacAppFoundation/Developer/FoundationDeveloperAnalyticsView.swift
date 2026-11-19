@@ -39,6 +39,7 @@ struct FoundationDeveloperAnalyticsView: View {
     @Environment(\.macAppTheme) private var theme
 
     let analytics: AppAnalyticsClient?
+    var onStorageModeChange: ((AppAnalyticsStorageMode) -> Void)? = nil
 
     @ObservedObject private var activityStore = AppAnalyticsDeveloperActivityStore.shared
     @State private var snapshot: AppAnalyticsDeveloperSnapshot?
@@ -58,7 +59,7 @@ struct FoundationDeveloperAnalyticsView: View {
         Group {
             if let analytics {
                 configuredView
-                    .task {
+                    .task(id: ObjectIdentifier(analytics)) {
                         await refreshLoop(analytics)
                     }
             } else {
@@ -150,7 +151,7 @@ struct FoundationDeveloperAnalyticsView: View {
     private func configurationSection(
         _ configuration: AppAnalyticsDeveloperSnapshot.Configuration
     ) -> some View {
-        Section("Configuration") {
+        Section {
             LabeledContent(
                 "Configured enabled",
                 value: configuration.configuredEnabled ? "Yes" : "No"
@@ -189,6 +190,28 @@ struct FoundationDeveloperAnalyticsView: View {
                     .pickerStyle(.segmented)
                     .frame(width: 260)
                 }
+
+                LabeledContent("Storage Mode") {
+                    Picker(
+                        "Storage Mode",
+                        selection: Binding(
+                            get: { configuration.storageMode },
+                            set: { selection in
+                                setStorageMode(
+                                    selection,
+                                    current: configuration.storageMode
+                                )
+                            }
+                        )
+                    ) {
+                        Text("Persisted").tag(AppAnalyticsStorageMode.persisted)
+                        Text("In Memory").tag(AppAnalyticsStorageMode.inMemory)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 260)
+                    .disabled(onStorageModeChange == nil)
+                }
             }
 
             copyableValue("App ID", configuration.appID)
@@ -212,6 +235,11 @@ struct FoundationDeveloperAnalyticsView: View {
             copyableValue("State store type", configuration.stateStoreType)
             copyableValue("State storage key", configuration.stateStorageKey)
             copyableValue("Keychain service", configuration.keychainService)
+        } header: {
+            Text("Configuration")
+        } footer: {
+            Text("Persisted mode stores the installation ID in Keychain and daily counters in UserDefaults. In-memory mode keeps the installation ID and daily counters in memory for the lifetime of the current AppAnalyticsClient instance only—switching storage modes or restarting creates a new client with a fresh ID and empty counters.")
+                .foregroundStyle(theme.textSecondary)
         }
     }
 
@@ -386,6 +414,20 @@ struct FoundationDeveloperAnalyticsView: View {
 
     private var developerActionsSection: some View {
         Section("Developer Actions") {
+            Button("Send Test Event", systemImage: "paperplane") {
+                if let analytics {
+                    Task { await sendTestEvent(analytics) }
+                }
+            }
+            .disabled(analytics == nil || isFlushing)
+
+            Button("Flush Now", systemImage: "arrow.up.circle") {
+                if let analytics {
+                    Task { await flush(analytics) }
+                }
+            }
+            .disabled(analytics == nil || isFlushing)
+
             Button("Clear Live Activity", systemImage: "eraser") {
                 activityStore.clear()
                 actionStatus = "Live analytics activity cleared."
@@ -459,6 +501,32 @@ struct FoundationDeveloperAnalyticsView: View {
                 actionStatus = error.localizedDescription
                 actionStatusIsError = true
             }
+        }
+    }
+
+    private func setStorageMode(
+        _ storageMode: AppAnalyticsStorageMode,
+        current: AppAnalyticsStorageMode
+    ) {
+        guard storageMode != current else { return }
+        onStorageModeChange?(storageMode)
+        actionStatus = "Switched storage mode to \(storageModeTitle(storageMode)) with a new analytics client."
+        actionStatusIsError = false
+    }
+
+    private func sendTestEvent(_ analytics: AppAnalyticsClient) async {
+        actionStatus = nil
+        let dimension = snapshot?.configuration.storageMode.rawValue
+
+        do {
+            try await analytics.track("developer_test_event", dimension: dimension)
+            await refresh(analytics, updateStatus: false)
+            actionStatus = "Test event recorded (developer_test_event)."
+            actionStatusIsError = false
+        } catch {
+            await refresh(analytics, updateStatus: false)
+            actionStatus = error.localizedDescription
+            actionStatusIsError = true
         }
     }
 
@@ -540,6 +608,13 @@ struct FoundationDeveloperAnalyticsView: View {
         return timestampFormatter.string(from: date)
     }
 
+    private func storageModeTitle(_ storageMode: AppAnalyticsStorageMode) -> String {
+        switch storageMode {
+        case .persisted: "Persisted"
+        case .inMemory: "In Memory"
+        }
+    }
+
     private func copySnapshot() {
         guard let snapshot else { return }
 
@@ -548,6 +623,7 @@ struct FoundationDeveloperAnalyticsView: View {
             "Configured enabled: \(snapshot.configuration.configuredEnabled)",
             "Effective enabled: \(snapshot.configuration.effectiveEnabled)",
             "Developer override: \(snapshot.configuration.developerEnabledOverride.map { $0 ? "true" : "false" } ?? "configured")",
+            "Storage mode: \(storageModeTitle(snapshot.configuration.storageMode))",
             "App ID: \(snapshot.configuration.appID)",
             "App key: \(snapshot.configuration.appKey ?? "Not configured")",
             "Server: \(snapshot.configuration.baseURL.absoluteString)",

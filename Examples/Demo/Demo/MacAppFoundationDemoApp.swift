@@ -17,9 +17,9 @@ struct MacAppFoundationDemoApp: App {
     @State private var themeStore: MacAppThemeStore
     @State private var settingsRouter: MacAppSettingsRouter
     @State private var onboarding: OnboardingState
+    @State private var analytics: AppAnalyticsClient
 
     private let purchases: PurchaseManager
-    private let analytics: AppAnalyticsClient
 
     init() {
         MacAppFoundationLogging.bootstrap()
@@ -34,11 +34,25 @@ struct MacAppFoundationDemoApp: App {
             )
         )
         purchases = DemoCommerce.manager
-        analytics = AppAnalyticsClient(
+        _analytics = State(
+            initialValue: Self.makeAnalyticsClient(
+                enabled: true,
+                storageMode: .persisted
+            )
+        )
+    }
+
+    private static func makeAnalyticsClient(
+        enabled: Bool,
+        storageMode: AppAnalyticsStorageMode
+    ) -> AppAnalyticsClient {
+        AppAnalyticsClient(
             configuration: AppAnalyticsConfiguration(
                 appID: "maf",
                 appKey: Bundle.main.bundleIdentifier ?? "com.hoangbkit.maf",
-                baseURL: URL(string: "https://analytics.133043.xyz")!
+                baseURL: URL(string: "https://analytics.133043.xyz")!,
+                enabled: enabled,
+                storageMode: storageMode
             )
         )
     }
@@ -142,7 +156,8 @@ struct MacAppFoundationDemoApp: App {
             DemoSettingsView(
                 purchaseManager: purchases,
                 themeStore: themeStore,
-                settingsRouter: settingsRouter
+                settingsRouter: settingsRouter,
+                analytics: analytics
             )
             .environment(demoState)
             .macAppTheme(themeStore, purchaseManager: purchases)
@@ -229,12 +244,34 @@ struct MacAppFoundationDemoApp: App {
                                 role: .destructive
                             ) {
                                 demoState.reset()
+                                replaceAnalyticsClient(storageMode: demoState.analyticsStorageMode, force: true)
                             }
                         )
                     ]
                 )
-            ]
+            ],
+            onAnalyticsStorageModeChange: { storageMode in
+                replaceAnalyticsClient(storageMode: storageMode)
+            }
         )
+    }
+
+    private func replaceAnalyticsClient(
+        storageMode: AppAnalyticsStorageMode,
+        force: Bool = false
+    ) {
+        guard force || demoState.analyticsStorageMode != storageMode else { return }
+        let previousAnalytics = analytics
+        demoState.analyticsStorageMode = storageMode
+        analytics = Self.makeAnalyticsClient(
+            enabled: demoState.analyticsEnabled,
+            storageMode: storageMode
+        )
+        let modeTitle = storageMode == .inMemory ? "In Memory" : "Persisted"
+        demoState.record("Analytics storage mode: \(modeTitle)")
+        Task {
+            try? await previousAnalytics.applicationWillResignActive()
+        }
     }
 
     private func replayOnboarding() {

@@ -724,3 +724,77 @@ private func analyticsReliabilityDays(_ request: URLRequest) throws -> [[String:
     #expect(names.contains("before_midnight"))
     #expect(names.contains("after_midnight"))
 }
+
+@Test func disablingMidFlightStopsRemainingBatchesAndDoesNotMergeState() async throws {
+    let clock = AnalyticsReliabilityClock(analyticsReliabilityDate("2026-09-03T10:00:00Z"))
+    let transport = BlockingAnalyticsTransport(
+        firstOutcome: .success,
+        blockedRequestIndex: 2
+    )
+    let store = ReliabilityMemoryAnalyticsStateStore()
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 10 * 24 * 60 * 60),
+        transport: transport,
+        stateStore: store,
+        now: { clock.now() }
+    )
+
+    for index in 0..<40 {
+        try await client.track("day_one_\(index)")
+    }
+    await client.waitForAutomaticUpload()
+    clock.set(analyticsReliabilityDate("2026-09-04T10:00:00Z"))
+    for index in 0..<40 {
+        try await client.track("day_two_\(index)")
+    }
+    await client.waitForAutomaticUpload()
+    clock.set(analyticsReliabilityDate("2026-09-05T10:00:00Z"))
+    for index in 0..<40 {
+        try await client.track("day_three_\(index)")
+    }
+    await client.waitForAutomaticUpload()
+    #expect(await transport.requestCount() == 1)
+
+    // Start a multi-batch explicit flush and block on its first batch (request #2).
+    let flushTask = Task {
+        try? await client.flush()
+    }
+    await transport.waitForRequestCount(2)
+
+    // Disable analytics while the first batch of the flush is suspended in flight.
+    await client.setEnabled(false)
+    await transport.releaseFirstRequest()
+    await flushTask.value
+
+    // The second batch must not be sent and local state must remain cleared.
+    #expect(await transport.requestCount() == 2)
+    #expect(try await store.load() == nil)
+    #expect(try await client.pendingDayCount() == 0)
+}
+
+@Test func disablingAndReEnablingDuringInFlightUploadFencesStaleUploadAndFlushesNewGeneration() async throws {
+    let transport = BlockingAnalyticsTransport(firstOutcome: .success)
+    let client = AppAnalyticsClient(
+        configuration: analyticsReliabilityConfiguration(uploadInterval: 0),
+        transport: transport,
+        stateStore: ReliabilityMemoryAnalyticsStateStore(),
+        now: { analyticsReliabilityDate("2026-09-05T10:00:00Z") }
+    )
+
+    try await client.track("before_disable")
+    await transport.waitForRequestCount(1)
+
+    await client.setEnabled(false)
+    await client.setEnabled(true)
+    try await client.track("after_reenable")
+
+    await transport.releaseFirstRequest()
+    await client.waitForAutomaticUpload()
+
+    let requests = await transport.capturedRequests()
+    #expect(requests.count == 2)
+
+    let latestEvents = try #require(analyticsReliabilityDays(requests[1])[0]["events"] as? [[String: Any]])
+    let names = Set(latestEvents.compactMap { $0["name"] as? String })
+    #expect(names == ["after_reenable"])
+}

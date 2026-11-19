@@ -11,6 +11,7 @@ struct DemoSettingsView: View {
     let purchaseManager: PurchaseManager
     let themeStore: MacAppThemeStore
     let settingsRouter: MacAppSettingsRouter
+    let analytics: AppAnalyticsClient
 
     @Environment(\.openWindow) private var openWindow
     @Environment(DemoState.self) private var demoState
@@ -18,7 +19,10 @@ struct DemoSettingsView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            DemoGeneralSettingsPane(demoState: demoState)
+            DemoGeneralSettingsPane(
+                demoState: demoState,
+                analytics: analytics
+            )
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
@@ -105,6 +109,7 @@ private struct DemoThemeSettingsPane: View {
 @MainActor
 private struct DemoGeneralSettingsPane: View {
     @Bindable var demoState: DemoState
+    let analytics: AppAnalyticsClient
     @Environment(\.macAppTheme) private var theme
 
     var body: some View {
@@ -127,6 +132,32 @@ private struct DemoGeneralSettingsPane: View {
                                 .labelsHidden()
                                 .toggleStyle(.switch)
                         }
+                    }
+                }
+
+                GroupBox("Analytics") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        settingRow("Share anonymous usage analytics") {
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { demoState.analyticsEnabled },
+                                    set: { isEnabled in
+                                        demoState.analyticsEnabled = isEnabled
+                                        demoState.record("Analytics \(isEnabled ? "enabled" : "disabled")")
+                                        Task {
+                                            await analytics.setEnabled(isEnabled)
+                                        }
+                                    }
+                                )
+                            )
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                        }
+
+                        Text("Uses AppAnalyticsClient.setEnabled(_:) at runtime without reinstalling .managesAnalytics. Turning analytics off takes effect immediately, performs no final upload, and clears locally pending analytics counters while preserving the installation identity.")
+                            .font(.caption)
+                            .foregroundStyle(theme.textSecondary)
                     }
                 }
 

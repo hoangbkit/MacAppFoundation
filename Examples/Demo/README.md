@@ -36,9 +36,10 @@ XcodeGen 2.45.4+ is required.
 - separate Developer Tools window opened from `CommandMenu("Developer")`
 - developer replays, actions, toggles, values, and custom destinations
 - full simulated-plan editor, entitlement forcing, failures, latency, trials, and introductory offers through Developer Tools
-- one shared app-scoped `AppAnalyticsClient` reused across Demo scenes through `.managesAnalytics`
+- one shared app-scoped `AppAnalyticsClient` reused across Demo scenes through `.managesAnalytics` (and replaceable at runtime when switching storage modes)
 - Demo analytics configured for app ID `maf` at `analytics.133043.xyz`, using `Bundle.main.bundleIdentifier` (`com.hoangbkit.maf`) as the native app key
-- built-in Developer Tools Analytics inspector for configuration, live activity, persisted counters, flush, and reset
+- user-facing analytics On/Off toggle in `DemoSettingsView` (General tab) powered by `await analytics.setEnabled(_:)`
+- built-in Developer Tools Analytics inspector for configuration, storage mode switching (`Persisted` / `In Memory`), sending test events, immediate flush (`Flush Now`), live activity, persisted counters, and reset
 - automatic `ProPaywallView` commerce funnel events through the shared analytics environment
 
 The Demo deliberately keeps production-facing examples in the main window and centralizes debug-only behavior in the separate Developer Tools window. The same `MacAppThemeStore` and shared analytics client are injected into scene roots that need them.

@@ -161,13 +161,16 @@ public struct FoundationDeveloperSection: Identifiable {
 public struct FoundationDeveloperConfiguration {
     public var replays: [FoundationDeveloperReplay]
     public var additionalSections: [FoundationDeveloperSection]
+    public var onAnalyticsStorageModeChange: ((AppAnalyticsStorageMode) -> Void)?
 
     public init(
         replays: [FoundationDeveloperReplay] = [],
-        additionalSections: [FoundationDeveloperSection] = []
+        additionalSections: [FoundationDeveloperSection] = [],
+        onAnalyticsStorageModeChange: ((AppAnalyticsStorageMode) -> Void)? = nil
     ) {
         self.replays = replays
         self.additionalSections = additionalSections
+        self.onAnalyticsStorageModeChange = onAnalyticsStorageModeChange
     }
 }
 

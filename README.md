@@ -35,7 +35,7 @@ MacAppFoundation now has six main areas:
 3. **Theme foundation** — semantic macOS palettes, 13 built-in themes, app-selected subsets, custom themes, persistence, root environment injection, and reusable theme preview/picker UI.
 4. **Settings foundation** — a reusable BYOKchat-inspired custom Settings shell with open pane/section IDs, flat panes by default, optional grouped sections, app-injected content, built-in Theme/Plan panes, and selection routing.
 5. **Developer Tools** — a separate Debug-only developer console for StoreKit simulation, diagnostics, live SwiftLog inspection, analytics inspection/override, editable UserDefaults, replays, and app-defined developer actions.
-6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, stable Keychain installation identity, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
+6. **First-party analytics** — application-level session accounting, bounded cumulative UTC-day event counters, runtime on/off (`setEnabled(_:)`), persisted or opt-in in-memory storage modes (`AppAnalyticsStorageMode`), 20-second default automatic upload interval, retry-safe batching, rate-limit backoff, and an injectable transport/state layer for deterministic tests.
 
 Verified StoreKit transactions remain the production authorization source of truth. MacAppFoundation never persists a bare `hasPro` flag. Apps may opt into an account-scoped, versioned Keychain cache of previously verified entitlement records for offline continuity.
 
@@ -315,7 +315,30 @@ try await analytics.track("export_completed")
 try await analytics.trackError("model_load_failed", component: "generation")
 ```
 
-The client keeps cumulative UTC-day snapshots compatible with the retry-safe `analytics-server` contract. It automatically includes macOS version, app build, `mac` device family, and CPU architecture, and handles foreground session accounting, retention, batching, stable installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics.
+The client keeps cumulative UTC-day snapshots compatible with the retry-safe `analytics-server` contract (with a 20-second default automatic upload interval). It automatically includes macOS version, app build, `mac` device family, and CPU architecture, and handles foreground session accounting, retention, batching, installation identity, transient transport retries, and `429 Retry-After` backoff. App Attest is intentionally out of scope for analytics.
+
+To enable or disable analytics at runtime—for example from a user-facing Settings toggle—call `setEnabled(_:)` on the existing client:
+
+```swift
+await analytics.setEnabled(false)  // user opted out
+await analytics.setEnabled(true)   // user opted back in
+```
+
+Disabling takes effect immediately without reinstalling `.managesAnalytics(...)`: in-flight writes and uploads are fenced off, no final upload is performed, and locally pending analytics counters are cleared while the installation identity remains unchanged.
+
+By default, `storageMode` is `.persisted` (installation ID in Keychain and daily counters in `UserDefaults`). To keep both the installation ID and daily counters entirely in memory for the lifetime of a client instance—without reading or writing Keychain or `UserDefaults`—opt into `.inMemory`:
+
+```swift
+let analytics = AppAnalyticsClient(
+    configuration: AppAnalyticsConfiguration(
+        appID: "my-app",
+        baseURL: URL(string: "https://api.example.com")!,
+        storageMode: .inMemory
+    )
+)
+```
+
+An explicitly injected `AppAnalyticsStateStoring` passed to `AppAnalyticsClient(configuration:transport:stateStore:)` always wins for daily counter storage regardless of `storageMode`.
 
 See `Documentation/Analytics.md` for server setup, limits, upload behavior, privacy boundaries, reset behavior, and testing/injection points.
 

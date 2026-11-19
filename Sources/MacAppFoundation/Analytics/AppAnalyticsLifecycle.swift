@@ -27,7 +27,7 @@ private struct AppAnalyticsLifecycleModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.appAnalytics, analytics)
-            .task {
+            .task(id: ObjectIdentifier(analytics)) {
                 if NSApplication.shared.isActive {
                     try? await analytics.applicationDidBecomeActive()
                 }

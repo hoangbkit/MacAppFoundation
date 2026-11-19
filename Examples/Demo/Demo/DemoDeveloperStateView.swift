@@ -10,6 +10,11 @@ struct DemoDeveloperStateView: View {
                 LabeledContent("Use Mock Data", value: demoState.useMockData ? "On" : "Off")
                 LabeledContent("Show Tips", value: demoState.showTips ? "On" : "Off")
                 LabeledContent("Compact Cards", value: demoState.compactCards ? "On" : "Off")
+                LabeledContent("Analytics", value: demoState.analyticsEnabled ? "On" : "Off")
+                LabeledContent(
+                    "Analytics Storage",
+                    value: demoState.analyticsStorageMode == .inMemory ? "In Memory" : "Persisted"
+                )
                 LabeledContent("Action Count", value: "\(demoState.actionCount)")
                 LabeledContent("Last Action", value: demoState.lastAction)
             }

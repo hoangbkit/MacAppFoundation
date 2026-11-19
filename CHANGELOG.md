@@ -6,6 +6,9 @@ All notable changes to MacAppFoundation will be documented in this file.
 
 ### Added
 
+- Added `AppAnalyticsClient.setEnabled(_:)` and `AppAnalyticsClient.isEnabled` for runtime analytics opt-in/opt-out without recreating or reinstalling the client. Disabling takes effect immediately, fences off in-flight writes and uploads, performs no final upload, clears pending local analytics state, and preserves the installation identity.
+- Added `AppAnalyticsStorageMode` (`.persisted` default and `.inMemory`) and `InMemoryAppAnalyticsStateStore` so apps can keep the installation ID and daily counters entirely in memory for the lifetime of a single `AppAnalyticsClient` instance without touching Keychain or `UserDefaults`.
+- Added a user-facing analytics On/Off toggle in `DemoSettingsView` and Developer Tools Analytics inspector controls for switching storage modes (`Persisted` / `In Memory`), sending a test event, and flushing immediately.
 - `.managesAnalytics` now shares its optional app-scoped analytics client with MacAppFoundation-owned descendant views.
 - `ProPaywallView` automatically records bounded paywall, purchase, restore, and offer-code funnel events when analytics is available, while remaining fully functional and silent when analytics is not configured.
 - Added opt-in offline-safe entitlement persistence with `PurchaseConfiguration.offlineEntitlements`.
@@ -17,6 +20,7 @@ All notable changes to MacAppFoundation will be documented in this file.
 
 ### Changed
 
+- Shortened `AppAnalyticsConfiguration` default `uploadInterval` from 5 minutes to 20 seconds (`AppAnalyticsConfiguration.defaultUploadInterval`).
 - `hasPro` now follows effective access when offline entitlement persistence is enabled, while `entitlementState` continues to expose the live StoreKit result.
 - Product catalog availability and entitlement authorization are handled independently, so pricing/catalog failures do not revoke previously verified access.
 - Effective purchase access is now binary Free/Pro; Pro gates, the Plan pane, and compact Pro controls use Free as the safe placeholder while verification continues.
